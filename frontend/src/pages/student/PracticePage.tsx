@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Lightbulb, Check, ChevronRight, Home, AlertCircle, Eraser, Loader2, RefreshCw } from 'lucide-react';
 import { ProblemGrid, FeedbackDetallado } from '@/components/problems';
+import { VirtualKeyboard } from '@/components/problems/VirtualKeyboard';
 import { HintModal } from '@/components/problems/HintModal';
 import { HintDisplay } from '@/components/problems/HintDisplay';
 import { SessionResults } from '@/components/practice';
@@ -132,6 +133,10 @@ export function PracticePage() {
 
   // ── Tiempo de resolución ──────────────────────────────────────────────────
   const tiempoInicioProblema = useRef<number>(Date.now());
+
+  // ── Teclado numérico virtual ──────────────────────────────────────────────
+  /** Último input de dígito enfocado — para que el teclado virtual sepa dónde escribir */
+  const lastFocusedInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Enunciados temáticos ──────────────────────────────────────────────────
   const [enunciadosMap, setEnunciadosMap] = useState<Record<number, string>>({});
@@ -345,6 +350,16 @@ export function PracticePage() {
     tiempoInicioProblema.current = Date.now();
   }, [indiceProblemActual]);
 
+  // Rastrear el último input de dígito enfocado (para el teclado virtual)
+  useEffect(() => {
+    const handler = (e: FocusEvent) => {
+      const el = e.target as HTMLInputElement;
+      if (el.tagName === 'INPUT') lastFocusedInputRef.current = el;
+    };
+    document.addEventListener('focusin', handler);
+    return () => document.removeEventListener('focusin', handler);
+  }, []);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleVerificar = useCallback(() => {
@@ -388,6 +403,33 @@ export function PracticePage() {
   const handleLimpiar = useCallback(() => {
     setRespuestaEstudiante('');
     setLimpiarKey((prev) => prev + 1);
+  }, []);
+
+  // ── Teclado virtual ────────────────────────────────────────────────────────
+
+  const handleVirtualKeyPress = useCallback((key: string) => {
+    const el = lastFocusedInputRef.current;
+    if (!el) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (setter) {
+      setter.call(el, key);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, []);
+
+  const handleVirtualDelete = useCallback(() => {
+    const el = lastFocusedInputRef.current;
+    if (!el) return;
+    if (el.value !== '') {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      if (setter) {
+        setter.call(el, '');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } else {
+      // Input vacío → simular Backspace para navegar al anterior
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    }
   }, []);
 
   const handleSolicitarPista = useCallback(
@@ -510,7 +552,7 @@ export function PracticePage() {
       )}
 
       {/* Header con progreso */}
-      <Card>
+      <Card className="bg-blue-50 border-blue-100">
         <CardContent className="pt-3 pb-3">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-sm font-bold text-gray-600">
@@ -533,7 +575,7 @@ export function PracticePage() {
       {enunciadosMap[problemaActual.id] && (
         <Card className="border-indigo-200 bg-indigo-50">
           <CardContent className="pt-4 pb-4">
-            <p className="text-gray-800 text-sm leading-relaxed font-bold">
+            <p className="text-gray-800 text-base leading-relaxed font-semibold">
               {enunciadosMap[problemaActual.id]}
             </p>
           </CardContent>
@@ -551,28 +593,42 @@ export function PracticePage() {
         </Alert>
       )}
 
-      {/* Problema */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-center">{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex justify-center">
-          <ProblemGrid
-            key={`problem-${indiceProblemActual}-${limpiarKey}`}
-            operacion={problemaActual.operacion}
-            numero1={problemaActual.numero1}
-            numero2={problemaActual.numero2}
-            resultado={
-              problemaActual.operacion === 'DIVISION'
-                ? parseFloat((problemaActual.numero1 / problemaActual.numero2).toFixed(2))
-                : 0
-            }
-            onAnswerChange={setRespuestaEstudiante}
-            showFeedback={mostrarFeedback}
-            clearIncorrectTrigger={clearIncorrectTrigger}
-          />
-        </CardContent>
-      </Card>
+      {/* Teclado + Problema en fila — teclado izquierda, problema derecha */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start">
+        {/* Teclado virtual — izquierda en pantallas sm+, abajo en móvil */}
+        {!mostrarFeedback && (
+          <div className="w-full sm:w-44 flex-shrink-0 order-last sm:order-first">
+            <VirtualKeyboard
+              onKeyPress={handleVirtualKeyPress}
+              onDelete={handleVirtualDelete}
+              onClear={handleLimpiar}
+            />
+          </div>
+        )}
+
+        {/* Problema */}
+        <Card className="flex-1 min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-center">{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <ProblemGrid
+              key={`problem-${indiceProblemActual}-${limpiarKey}`}
+              operacion={problemaActual.operacion}
+              numero1={problemaActual.numero1}
+              numero2={problemaActual.numero2}
+              resultado={
+                problemaActual.operacion === 'DIVISION'
+                  ? parseFloat((problemaActual.numero1 / problemaActual.numero2).toFixed(2))
+                  : 0
+              }
+              onAnswerChange={setRespuestaEstudiante}
+              showFeedback={mostrarFeedback}
+              clearIncorrectTrigger={clearIncorrectTrigger}
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Acciones */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

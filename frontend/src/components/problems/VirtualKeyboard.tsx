@@ -1,5 +1,8 @@
 /**
  * Teclado numérico virtual.
+ *
+ * onMouseDown con preventDefault en cada botón evita que el botón robe el foco
+ * del DigitInput activo, permitiendo que el input siga recibiendo los cambios.
  */
 
 import { Button } from '@/components/ui/button';
@@ -12,6 +15,9 @@ interface VirtualKeyboardProps {
   onClear: () => void;
 }
 
+/** Previene que el click en el teclado virtual robe el foco del input activo. */
+const noFocusSteal = (e: React.MouseEvent) => e.preventDefault();
+
 export function VirtualKeyboard({ onKeyPress, onDelete, onClear }: VirtualKeyboardProps) {
   const keys = [
     ['7', '8', '9'],
@@ -21,19 +27,20 @@ export function VirtualKeyboard({ onKeyPress, onDelete, onClear }: VirtualKeyboa
   ];
 
   return (
-    <Card className="p-4 bg-gray-50">
-      <div className="grid grid-cols-3 gap-2">
+    <Card className="p-2.5 bg-indigo-50 border-indigo-200">
+      <div className="grid grid-cols-3 gap-1.5">
         {keys.flat().map((key) => {
           if (key === 'C') {
             return (
               <Button
                 key={key}
                 variant="destructive"
-                size="lg"
+                size="sm"
                 onClick={onClear}
-                className="h-16 text-2xl"
+                onMouseDown={noFocusSteal}
+                className="h-10 text-base"
               >
-                {key}
+                C
               </Button>
             );
           }
@@ -42,23 +49,25 @@ export function VirtualKeyboard({ onKeyPress, onDelete, onClear }: VirtualKeyboa
             <Button
               key={key}
               variant="outline"
-              size="lg"
+              size="sm"
               onClick={() => onKeyPress(key)}
-              className="h-16 text-2xl font-bold hover:bg-blue-100"
+              onMouseDown={noFocusSteal}
+              className="h-10 text-base font-bold bg-white hover:bg-blue-100 border-indigo-200"
             >
               {key}
             </Button>
           );
         })}
-        
-        {/* Botón de borrar (ocupa espacio completo abajo) */}
+
+        {/* Botón de borrar */}
         <Button
           variant="secondary"
-          size="lg"
+          size="sm"
           onClick={onDelete}
-          className="col-span-3 h-16 text-xl"
+          onMouseDown={noFocusSteal}
+          className="col-span-3 h-9 text-sm"
         >
-          <Delete className="h-6 w-6 mr-2" />
+          <Delete className="h-4 w-4 mr-1.5" />
           Borrar
         </Button>
       </div>
