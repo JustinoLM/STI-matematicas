@@ -19,6 +19,12 @@ class TipoUsuario(str, enum.Enum):
     PROFESOR = "profesor"
 
 
+class Genero(str, enum.Enum):
+    """Género del estudiante — usado para conjugación en mensajes LLM."""
+    MASCULINO = "masculino"
+    FEMENINO = "femenino"
+
+
 class Usuario(Base):
     """
     Clase base para todos los usuarios del sistema.
@@ -58,6 +64,11 @@ class Estudiante(Usuario):
     id = Column(Integer, ForeignKey("usuario.id"), primary_key=True)
     codigo_estudiante = Column(String(50), unique=True, nullable=False, index=True)
     nombre_completo = Column(String(255), nullable=False)
+    genero = Column(
+        Enum(Genero, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        server_default=Genero.MASCULINO.value,
+    )
     narrativa_seleccionada_id = Column(Integer, ForeignKey("narrativa.id"), nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
     puntos_totales = Column(Integer, default=0, nullable=False, server_default="0")

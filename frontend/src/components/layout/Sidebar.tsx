@@ -17,6 +17,8 @@ import {
   Settings,
   AlertTriangle,
   GraduationCap,
+  Clapperboard,
+  BarChart2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -33,12 +35,15 @@ const studentNav: NavItem[] = [
   { title: 'Tienda', href: '/student/shop', icon: ShoppingBag },
   { title: 'Medallero', href: '/student/badges', icon: Trophy },
   { title: 'Progreso', href: '/student/progress', icon: TrendingUp },
+  { title: 'Animaciones', href: '/student/animaciones', icon: Clapperboard },
+  { title: 'Configuración', href: '/student/settings', icon: Settings },
 ];
 
 const teacherNav: NavItem[] = [
   { title: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
   { title: 'Grupos', href: '/teacher/groups', icon: Users },
   { title: 'Estudiantes', href: '/teacher/students', icon: GraduationCap },
+  { title: 'Estadísticas', href: '/teacher/stats', icon: BarChart2 },
   { title: 'Desafíos', href: '/teacher/challenges', icon: Target },
   { title: 'Alertas', href: '/teacher/alerts', icon: AlertTriangle },
   { title: 'Configuración', href: '/teacher/configuration', icon: Settings },
@@ -74,7 +79,9 @@ export function Sidebar({ userRole, isOpen = true, onClose }: SidebarProps) {
         <nav className="space-y-2 p-4">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.href;
+            const isActive =
+              location.pathname === item.href ||
+              location.pathname.startsWith(item.href + '/');
 
             return (
               <Link

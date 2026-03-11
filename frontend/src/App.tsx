@@ -25,6 +25,7 @@ import { InventoryPage } from '@/pages/student/InventoryPage';
 import { BadgesPage } from '@/pages/student/BadgesPage';
 import { ProgressPage } from '@/pages/student/ProgressPage';
 import { VideosPage } from '@/pages/student/VideosPage';
+import { AnimacionesPage } from '@/pages/student/AnimacionesPage';
 import { ChallengesPage as StudentChallengesPage } from '@/pages/student/ChallengesPage';
 import { GroupChallengePage } from '@/pages/student/GroupChallengePage';
 import { SettingsPage } from '@/pages/student/SettingsPage';
@@ -39,6 +40,7 @@ import AlertsPage from '@/pages/teacher/AlertsPage';
 import { ChallengesPage as TeacherChallengesPage } from '@/pages/teacher/ChallengesPage';
 import CreateChallengePage from '@/pages/teacher/CreateChallengePage';
 import { ConfigurationPage } from '@/pages/teacher/ConfigurationPage';
+import GroupStatsPage from '@/pages/teacher/GroupStatsPage';
 
 function App() {
   const { isAuthenticated, getUserRole, getUserName, login, logout } = useAuthStore();
@@ -140,6 +142,7 @@ function App() {
                   <Route path="badges" element={<BadgesPage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="videos" element={<VideosPage />} />
+                  <Route path="animaciones" element={<AnimacionesPage />} />
                   <Route path="challenges" element={<StudentChallengesPage />} />
                   <Route path="group-challenge" element={<GroupChallengePage />} />
                   <Route path="settings" element={<SettingsPage />} />
@@ -174,6 +177,7 @@ function App() {
                   <Route path="challenges/new" element={<CreateChallengePage />} />
                   <Route path="alerts" element={<AlertsPage />} />
                   <Route path="configuration" element={<ConfigurationPage />} />
+                  <Route path="stats" element={<GroupStatsPage />} />
                   <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
                 </Routes>
               </MainLayout>

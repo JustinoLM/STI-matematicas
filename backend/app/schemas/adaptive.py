@@ -191,6 +191,17 @@ class EstadisticasGrupo(BaseModel):
 # Schemas de Sesión de Práctica
 # ============================================
 
+class SesionActivaResponse(BaseModel):
+    """Response para sesión activa (en progreso) del estudiante."""
+    sesion_id: int
+    problemas_completados: int
+    cantidad_problemas: int
+    operaciones_incluidas: Dict[str, int]
+    nivel_actual: int
+    minutos_transcurridos: int
+    fecha_inicio: datetime
+
+
 class SesionStart(BaseModel):
     """Request para iniciar sesión de práctica."""
     pass  # Sistema decide todo automáticamente

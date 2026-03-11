@@ -335,7 +335,18 @@ export function ConfigurationPage() {
             </Card>
 
             {/* Botones de Acción */}
-            <div className="flex gap-3 justify-end">
+            <div className="flex items-center gap-3 justify-end">
+              {/* Feedback inline junto al botón */}
+              {crearConfiguracionMutation.isSuccess && (
+                <span className="text-sm text-green-600 font-medium flex items-center gap-1">
+                  ✓ Configuración guardada exitosamente
+                </span>
+              )}
+              {crearConfiguracionMutation.isError && (
+                <span className="text-sm text-red-500 font-medium flex items-center gap-1">
+                  ✗ Error al guardar. Intenta nuevamente.
+                </span>
+              )}
               <Button
                 type="submit"
                 disabled={
@@ -353,27 +364,6 @@ export function ConfigurationPage() {
                   : 'Guardar Configuración'}
               </Button>
             </div>
-
-            {/* Success/Error Messages */}
-            {crearConfiguracionMutation.isSuccess && (
-              <Card className="border-green-500">
-                <CardContent className="p-4">
-                  <p className="text-sm text-green-600">
-                    ✓ Configuración guardada exitosamente
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {crearConfiguracionMutation.isError && (
-              <Card className="border-red-500">
-                <CardContent className="p-4">
-                  <p className="text-sm text-red-500">
-                    Error al guardar la configuración. Por favor intenta nuevamente.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </form>
       )}

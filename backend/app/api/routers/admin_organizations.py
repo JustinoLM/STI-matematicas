@@ -9,15 +9,23 @@ Endpoints (todos bajo /admin/organizations — sin auth por ahora):
 - PUT    /admin/organizations/{id}/students/{est_id}      Asignar/quitar org a estudiante
 """
 
+import asyncio
+from datetime import datetime, date, timedelta
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete as sa_delete, update as sa_update
+from sqlalchemy import select, func, delete as sa_delete, update as sa_update, cast, Date
 from sqlalchemy.orm import selectinload
+
+from pydantic import BaseModel
 
 from app.api.dependencies import DBSession
 from app.models.organization import Organizacion
 from app.models.user import Profesor, Estudiante
 from app.models.group import Grupo, EstudianteGrupo
+from app.models.adaptive import PerfilEstudiante, SesionPractica, EstadoSesion
+from app.repositories.gamification_repository import GamificationRepository
+from app.services.ml_service import ml_service
 from app.schemas.organization import (
     CreateOrganizacionRequest,
     OrganizacionResponse,
@@ -318,7 +326,178 @@ async def listar_todos_usuarios(db: DBSession):
                 "activo": bool(e.activo),
                 "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
                 "ultimo_acceso": e.ultimo_acceso.isoformat() if e.ultimo_acceso else None,
+                "puntos_totales": e.puntos_totales,
             }
             for e in estudiantes
         ],
+    }
+
+
+# ─── Admin: agregar puntos ────────────────────────────────────────────────────
+
+class AgregarPuntosRequest(BaseModel):
+    estudiante_id: int
+    puntos: int
+
+
+@router.post("/admin/gamification/add-points", response_model=dict)
+async def admin_agregar_puntos(payload: AgregarPuntosRequest, db: DBSession):
+    """Agrega puntos a un estudiante sin autenticación (solo para testing/admin)."""
+    if payload.puntos <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser positiva")
+
+    result = await db.execute(select(Estudiante).where(Estudiante.id == payload.estudiante_id))
+    est = result.scalar_one_or_none()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    repo = GamificationRepository(db)
+    nuevo_saldo = await repo.agregar_puntos(
+        estudiante_id=payload.estudiante_id,
+        cantidad=payload.puntos,
+        concepto="Ajuste manual (admin)",
+    )
+    return {
+        "success": True,
+        "nombre": est.nombre_completo,
+        "puntos_agregados": payload.puntos,
+        "nuevo_saldo": nuevo_saldo,
+    }
+
+
+# ─── Admin: Machine Learning ───────────────────────────────────────────────────
+
+@router.get("/admin/ml/estado", response_model=dict)
+async def estado_ml():
+    """
+    Devuelve el estado actual de los modelos de Machine Learning.
+    """
+    return {
+        "clustering_entrenado": ml_service.clustering_model is not None,
+        "prediccion_entrenado": ml_service.prediccion_model is not None,
+        "scaler_disponible": ml_service.scaler is not None,
+        "umbrales_por_perfil": {
+            perfil.value: umbral
+            for perfil, umbral in ml_service.UMBRALES_POR_PERFIL.items()
+        },
+    }
+
+
+@router.post("/admin/ml/entrenar", response_model=dict)
+async def entrenar_modelos_ml(db: DBSession):
+    """
+    Entrena (o re-entrena) el modelo de clustering K-Means con todos los
+    perfiles de estudiantes que tienen datos suficientes (≥3 sesiones).
+
+    Tras entrenar, reclasifica a TODOS los estudiantes con el nuevo modelo
+    y actualiza perfil_aprendizaje + confianza_perfil en la BD.
+
+    Requiere mínimo 10 estudiantes con datos suficientes.
+    """
+    # 1. Cargar todos los perfiles
+    result = await db.execute(select(PerfilEstudiante))
+    perfiles: list[PerfilEstudiante] = list(result.scalars().all())
+
+    total_perfiles = len(perfiles)
+
+    # 2. Entrenar en un thread (sklearn es síncrono)
+    await asyncio.to_thread(ml_service.entrenar_clustering, perfiles)
+
+    entrenado = ml_service.clustering_model is not None
+
+    if not entrenado:
+        # No había suficientes datos; devolver info sin error fatal
+        perfiles_validos = sum(
+            1 for p in perfiles if ml_service._tiene_datos_suficientes(p)
+        )
+        return {
+            "success": False,
+            "mensaje": (
+                f"No hay suficientes perfiles con datos para entrenar. "
+                f"Se necesitan ≥10 y solo hay {perfiles_validos} válidos de {total_perfiles} totales."
+            ),
+            "total_perfiles": total_perfiles,
+            "perfiles_validos": perfiles_validos,
+        }
+
+    # 3. Reclasificar todos los estudiantes con el modelo recién entrenado
+    reclasificados = 0
+    ahora = datetime.utcnow()
+
+    for perfil in perfiles:
+        perfil_ml, confianza = ml_service.predecir_perfil(perfil)
+        perfil.perfil_aprendizaje = perfil_ml
+        perfil.confianza_perfil = round(confianza, 2)
+        perfil.fecha_ultima_clasificacion = ahora
+        perfil.umbral_promocion_personalizado = ml_service.ajustar_umbral_segun_perfil(perfil)
+        reclasificados += 1
+
+    await db.commit()
+
+    perfiles_validos = sum(
+        1 for p in perfiles if ml_service._tiene_datos_suficientes(p)
+    )
+
+    return {
+        "success": True,
+        "mensaje": (
+            f"Modelo K-Means entrenado con {perfiles_validos} perfiles válidos. "
+            f"{reclasificados} estudiantes reclasificados."
+        ),
+        "total_perfiles": total_perfiles,
+        "perfiles_validos": perfiles_validos,
+        "reclasificados": reclasificados,
+    }
+
+
+# ─── Admin: Estadísticas del sistema ──────────────────────────────────────────
+
+@router.get("/admin/sistema/stats", response_model=dict)
+async def sistema_stats(db: DBSession):
+    """
+    Estadísticas globales del sistema para el tab de Sistema en el panel admin.
+    """
+    today = date.today()
+    hace_7_dias = today - timedelta(days=7)
+
+    # Totales de usuarios y estructura
+    total_est = await db.scalar(select(func.count()).select_from(Estudiante))
+    total_prof = await db.scalar(select(func.count()).select_from(Profesor))
+    total_grupos = await db.scalar(select(func.count()).select_from(Grupo))
+    total_orgs = await db.scalar(select(func.count()).select_from(Organizacion))
+
+    # Sesiones de práctica
+    sesiones_hoy = await db.scalar(
+        select(func.count()).select_from(SesionPractica)
+        .where(cast(SesionPractica.fecha_inicio, Date) == today)
+    )
+    sesiones_semana = await db.scalar(
+        select(func.count()).select_from(SesionPractica)
+        .where(cast(SesionPractica.fecha_inicio, Date) >= hace_7_dias)
+    )
+    sesiones_activas = await db.scalar(
+        select(func.count()).select_from(SesionPractica)
+        .where(SesionPractica.estado == EstadoSesion.EN_PROGRESO)
+    )
+    total_sesiones = await db.scalar(
+        select(func.count()).select_from(SesionPractica)
+    )
+
+    # Perfiles ML clasificados (no NO_CLASIFICADO)
+    from app.models.adaptive import PerfilAprendizaje
+    perfiles_clasificados = await db.scalar(
+        select(func.count()).select_from(PerfilEstudiante)
+        .where(PerfilEstudiante.perfil_aprendizaje != PerfilAprendizaje.NO_CLASIFICADO)
+    )
+
+    return {
+        "total_estudiantes": total_est or 0,
+        "total_profesores": total_prof or 0,
+        "total_grupos": total_grupos or 0,
+        "total_organizaciones": total_orgs or 0,
+        "sesiones_hoy": sesiones_hoy or 0,
+        "sesiones_semana": sesiones_semana or 0,
+        "sesiones_activas": sesiones_activas or 0,
+        "total_sesiones": total_sesiones or 0,
+        "perfiles_clasificados": perfiles_clasificados or 0,
     }

@@ -23,7 +23,7 @@ const FADE_DURATION_MS = 1200;
 // Frecuencia de actualización del fade (cada N ms)
 const FADE_STEP_MS = 30;
 
-export function useAudioPlayer() {
+export function useAudioPlayer(enabled: boolean = true) {
   const audioRef   = useRef<HTMLAudioElement | null>(null);
   // Guardamos el id del intervalo de fade activo para poder cancelarlo
   const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -98,21 +98,32 @@ export function useAudioPlayer() {
 
   // ── Efecto principal: cambio de canción o activación/desactivación ──
   useEffect(() => {
-    // Crear elemento <audio> la primera vez
+    // Crear elemento <audio> la primera vez.
+    // NO usamos audio.loop = true porque introduce un silencio entre iteraciones
+    // en Firefox y Safari. En su lugar usamos el evento "ended" para reiniciar
+    // manualmente desde currentTime=0, lo que da un loop sin interrupciones.
     if (!audioRef.current) {
       audioRef.current = new Audio();
-      audioRef.current.loop = true;
     }
 
     const audio = audioRef.current;
     const targetVol = volumen / 100;
 
-    if (!audioActivado || !urlMusica) {
-      // Desactivar: fade out → pausa
+    // Handler de loop sin gap: al terminar la pista, reiniciar desde el inicio
+    const handleEnded = () => {
+      audio.currentTime = 0;
+      audio.play().catch(() => { /* autoplay bloqueado */ });
+    };
+    audio.addEventListener('ended', handleEnded);
+
+    if (!enabled || !audioActivado || !urlMusica) {
+      // Desactivar o rol sin música: fade out → pausa
       fadeOut(audio, audio.volume, () => {
         audio.pause();
       });
-      return;
+      return () => {
+        audio.removeEventListener('ended', handleEnded);
+      };
     }
 
     const currentSrc = audio.src
@@ -122,7 +133,9 @@ export function useAudioPlayer() {
 
     if (currentSrc === newSrc && !audio.paused) {
       // Misma canción ya reproduciendo — no hacer nada
-      return;
+      return () => {
+        audio.removeEventListener('ended', handleEnded);
+      };
     }
 
     if (!audio.paused && currentSrc !== newSrc) {
@@ -146,11 +159,12 @@ export function useAudioPlayer() {
     }
 
     return () => {
+      audio.removeEventListener('ended', handleEnded);
       // Al desmontar el layout: fade out rápido → pausa
       fadeOut(audio, audio.volume, () => audio.pause());
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioActivado, urlMusica]);
+  }, [audioActivado, urlMusica, enabled]);
 
   // ── Efecto separado: cambio de volumen (respeta fade en curso) ──
   useEffect(() => {

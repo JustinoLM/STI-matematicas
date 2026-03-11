@@ -134,7 +134,9 @@ function calcularPasosDivision(
   decimalesDividendo: number = 0
 ): DivisionStep[] {
   const dividendoStr = dividendoN.toString();
-  const cocienteStr = cocienteEsperado.toString().replace('.', ''); // Sin punto
+  // Redondear a 6 decimales para evitar strings como "5.999999999999999" por float
+  const cocienteRedondeado = parseFloat(cocienteEsperado.toFixed(6));
+  const cocienteStr = cocienteRedondeado.toString().replace('.', ''); // Sin punto
   const pasos: DivisionStep[] = [];
 
   let residuoActual = 0;
@@ -171,14 +173,16 @@ function calcularPasosDivision(
       ? posicionDividendo > digitosEnteros
       : false;
 
-    // Calcular offset: el producto se alinea según el número de dígitos bajados
-    // Los productos/residuos se alinean a la derecha del número que formamos
-    const offsetProducto = Math.max(0, posicionDividendo - producto.toString().length);
-    const offsetResiduo = Math.max(0, posicionDividendo - nuevoResiduo.toString().length);
+    // Calcular offset: el producto se alinea según el número de dígitos bajados.
+    // Cuando "bajamos un 0 virtual" posicionDividendo puede superar dividendoStr.length
+    // en 1 — lo capamos para que los offsets no se desfasen.
+    const posEfectiva = Math.min(posicionDividendo, dividendoStr.length);
+    const offsetProducto = Math.max(0, posEfectiva - producto.toString().length);
+    const offsetResiduo = Math.max(0, posEfectiva - nuevoResiduo.toString().length);
 
     // El dividendo parcial es el número que formamos antes de dividir (residuoActual)
     const dividendoParcialStr = residuoActual.toString();
-    const offsetDividendoParcial = Math.max(0, posicionDividendo - dividendoParcialStr.length);
+    const offsetDividendoParcial = Math.max(0, posEfectiva - dividendoParcialStr.length);
 
     pasos.push({
       productoStr: producto.toString(),
@@ -253,8 +257,11 @@ export function useDivisionCalculator(
     // el dividendo normalizado explícitamente y todos los pasos se alinean con él
     // Los offsets calculados en calcularPasosDivision ya son correctos respecto al dividendo normalizado
 
+    // Redondear el cociente para evitar representaciones float como "5.999999999999999"
+    const cocienteDisplay = parseFloat(cocienteEsperado.toFixed(6)).toString();
+
     const result: DivisionResult = {
-      cocienteStr: cocienteEsperado.toString(),
+      cocienteStr: cocienteDisplay,
       pasos,
       dividendoNormalizado: dividendoN,
       divisorNormalizado: divisorN,

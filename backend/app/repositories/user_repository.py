@@ -80,6 +80,7 @@ class UserRepository:
         codigo_estudiante: str,
         password_hash: str,
         nombre_completo: str,
+        genero: str = "masculino",
         password_plain: Optional[str] = None,
         organizacion_id: Optional[int] = None,
     ) -> Estudiante:
@@ -95,6 +96,7 @@ class UserRepository:
             password_plain=password_plain,
             tipo_usuario=TipoUsuario.ESTUDIANTE,
             nombre_completo=nombre_completo,
+            genero=genero,
             organizacion_id=organizacion_id,
             activo=True
         )

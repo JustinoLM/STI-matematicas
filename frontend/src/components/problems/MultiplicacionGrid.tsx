@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
 import { useProblemInput, useMultiplicationCalculator } from '@/hooks';
+
+/** Ancho de N celdas + gaps como valor CSS rem */
+const cw = (n: number) => `calc(${n} * 2.75rem)`;
 import { DigitRow, OperatorSymbol, HorizontalLine, CarrySpaces } from './atoms';
 
 interface MultiplicacionGridProps {
@@ -72,7 +75,7 @@ export function MultiplicacionGrid({
   return (
     <div className="flex flex-col items-end gap-2 font-mono text-xl">
       {/* Espacio para llevadas arriba del multiplicando */}
-      <CarrySpaces count={resultadoStr.length} width={resultadoStr.length * 44} />
+      <CarrySpaces count={resultadoStr.length} width={cw(resultadoStr.length)} />
 
       {/* Multiplicando */}
       <div className="flex gap-1 justify-end">
@@ -96,7 +99,7 @@ export function MultiplicacionGrid({
       </div>
 
       {/* Línea separadora */}
-      <HorizontalLine width={multiplicandoStr.length * 44} />
+      <HorizontalLine width={cw(multiplicandoStr.length)} />
 
       {/* Productos parciales */}
       <div className="flex flex-col items-end space-y-1">
@@ -119,7 +122,7 @@ export function MultiplicacionGrid({
       </div>
 
       {/* Línea separadora final */}
-      <HorizontalLine width={(resultadoStr.length + Math.max(...productosParciales.map(p => p.espacios))) * 44} />
+      <HorizontalLine width={cw(resultadoStr.length + Math.max(...productosParciales.map(p => p.espacios)))} />
 
       {/* Resultado final */}
       <DigitRow

@@ -85,6 +85,9 @@ from app.models.error import (
     EstudianteError,
 )
 
+# System configuration
+from app.models.config import ConfiguracionSistema
+
 __all__ = [
     # Organization
     "Organizacion",

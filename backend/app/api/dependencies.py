@@ -16,11 +16,16 @@ from app.services.practice_service import PracticeService
 from app.repositories.gamification_repository import GamificationRepository
 from app.services.gamification_service import GamificationService
 from app.repositories.hints_videos_repository import HintsVideosRepository
-from app.services.ollama_service import OllamaService
+from app.repositories.enunciados_repository import EnunciadoTematicoRepository
+from app.repositories.mensajes_repository import MensajesRepository
+from app.services.llm_service import LLMService
 from app.services.hints_service import HintsService
 from app.services.enunciados_service import EnunciadosService
+from app.services.mensajes_service import MensajesService
 from app.services.videos_service import VideosService
 from app.services.deteccion_errores_service import DeteccionErroresService
+from app.services.analisis_service import AnalisisService
+from app.repositories.animaciones_repository import AnimacionesRepository
 
 
 
@@ -259,28 +264,49 @@ async def get_hints_videos_repository(
     return HintsVideosRepository(db)
 
 
-async def get_ollama_service() -> OllamaService:
-    """Dependency para obtener OllamaService."""
-    return OllamaService()
+async def get_llm_service() -> LLMService:
+    """Dependency para obtener LLMService (DeepSeek API)."""
+    return LLMService()
 
 
 async def get_hints_service(
     hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository),
     gamification_repo: GamificationRepository = Depends(get_gamification_repository),
     adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
-    ollama_service: OllamaService = Depends(get_ollama_service)
+    llm_service: LLMService = Depends(get_llm_service)
 ) -> HintsService:
     """Dependency para obtener HintsService."""
-    return HintsService(hints_videos_repo, gamification_repo, adaptive_repo, ollama_service)
+    return HintsService(hints_videos_repo, gamification_repo, adaptive_repo, llm_service)
+
+
+async def get_enunciados_repository(
+    db: AsyncSession = Depends(get_db)
+) -> EnunciadoTematicoRepository:
+    """Dependency para obtener EnunciadoTematicoRepository."""
+    return EnunciadoTematicoRepository(db)
 
 
 async def get_enunciados_service(
-    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository),
-    adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
-    ollama_service: OllamaService = Depends(get_ollama_service)
+    enunciados_repo: EnunciadoTematicoRepository = Depends(get_enunciados_repository),
+    llm_service: LLMService = Depends(get_llm_service)
 ) -> EnunciadosService:
     """Dependency para obtener EnunciadosService."""
-    return EnunciadosService(hints_videos_repo, adaptive_repo, ollama_service)
+    return EnunciadosService(enunciados_repo, llm_service)
+
+
+async def get_mensajes_repository(
+    db: AsyncSession = Depends(get_db)
+) -> MensajesRepository:
+    """Dependency para obtener MensajesRepository."""
+    return MensajesRepository(db)
+
+
+async def get_mensajes_service(
+    mensajes_repo: MensajesRepository = Depends(get_mensajes_repository),
+    llm_service: LLMService = Depends(get_llm_service)
+) -> MensajesService:
+    """Dependency para obtener MensajesService."""
+    return MensajesService(mensajes_repo, llm_service)
 
 
 async def get_videos_service(
@@ -295,8 +321,18 @@ async def get_deteccion_errores_service() -> DeteccionErroresService:
     return DeteccionErroresService()
 
 
+async def get_analisis_service(
+    db: AsyncSession = Depends(get_db),
+    llm_service: LLMService = Depends(get_llm_service),
+) -> AnalisisService:
+    """Dependency para obtener AnalisisService."""
+    return AnalisisService(db, llm_service)
+
+
 # Type aliases
 HintsServiceDep = Annotated[HintsService, Depends(get_hints_service)]
 EnunciadosServiceDep = Annotated[EnunciadosService, Depends(get_enunciados_service)]
+MensajesServiceDep = Annotated[MensajesService, Depends(get_mensajes_service)]
 VideosServiceDep = Annotated[VideosService, Depends(get_videos_service)]
 DeteccionErroresServiceDep = Annotated[DeteccionErroresService, Depends(get_deteccion_errores_service)]
+AnalisisServiceDep = Annotated[AnalisisService, Depends(get_analisis_service)]

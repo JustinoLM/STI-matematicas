@@ -347,11 +347,11 @@ class PracticeService:
         
         if debe_avanzar:
             await self.practice_repo.incrementar_progreso(sesion)
-            
+
             if sesion.progreso_actual >= sesion.cantidad_problemas:
                 sesion_completada = True
                 mensaje += " ¡Sesión completada!"
-                
+
                 sesion.estado = EstadoSesion.COMPLETADA
                 sesion.fecha_fin = datetime.utcnow()
                 await self.practice_repo.update_sesion(sesion)
@@ -370,7 +370,7 @@ class PracticeService:
     # ============================================
     # Historial y Resumen
     # ============================================
-    
+
     async def get_practice_history(
         self,
         estudiante_id: int,
@@ -575,30 +575,36 @@ class PracticeService:
         )
     
     async def _calcular_stats_por_operacion(self, estudiante_id: int, perfil) -> List[StatsPerOperation]:
-        """Calcula estadísticas por operación."""
-        stats = []
-        
+        """Calcula estadísticas reales por operación consultando la BD."""
         if not perfil:
-            return stats
-        
+            return []
+
         operaciones = [
-            ("suma", perfil.nivel_suma, "+"),
-            ("resta", perfil.nivel_resta, "-"),
+            ("suma",           perfil.nivel_suma,           "+"),
+            ("resta",          perfil.nivel_resta,          "-"),
             ("multiplicacion", perfil.nivel_multiplicacion, "×"),
-            ("division", perfil.nivel_division, "÷")
+            ("division",       perfil.nivel_division,       "÷"),
         ]
-        
+
+        # Consulta real agrupada por operación
+        raw = await self.practice_repo.get_stats_por_operacion(estudiante_id)
+
+        stats = []
         for nombre, nivel, simbolo in operaciones:
+            op_data = raw.get(simbolo, {})
+            total_intentos  = op_data.get('total_intentos', 0)
+            total_correctos = op_data.get('total_correctos', 0)
+            precision = (total_correctos / total_intentos) if total_intentos > 0 else 0.0
             stats.append(StatsPerOperation(
                 operacion=nombre,
                 nivel_actual=nivel,
-                total_intentos=0,
-                total_correctos=0,
-                precision=0.0,
-                velocidad_promedio=0.0,
-                problemas_resueltos=0
+                total_intentos=total_intentos,
+                total_correctos=total_correctos,
+                precision=round(precision, 4),
+                velocidad_promedio=op_data.get('velocidad_promedio', 0.0),
+                problemas_resueltos=op_data.get('problemas_resueltos', 0),
             ))
-        
+
         return stats
     
     def _calcular_precision_por_dia(self, sesiones: List[SesionPractica]) -> List[float]:

@@ -5,12 +5,12 @@ Gestiona sesiones, progreso, historial y estadísticas.
 """
 
 from typing import Optional, List, Dict
-from sqlalchemy import select, func, and_, or_, desc
+from sqlalchemy import select, func, and_, or_, desc, case, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
 from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante
-from app.models.problem import Intento
+from app.models.problem import Intento, Problema
 
 
 class PracticeRepository:
@@ -338,6 +338,35 @@ class PracticeRepository:
         # Por ahora retorna lista vacía
         return []
     
+    async def get_stats_por_operacion(self, estudiante_id: int) -> Dict:
+        """
+        Estadísticas de intentos agrupadas por operación.
+
+        Retorna dict con símbolo del enum como clave (+, -, ×, ÷) y dict de métricas.
+        """
+        result = await self.db.execute(
+            select(
+                Problema.operacion,
+                func.count(Intento.id).label('total_intentos'),
+                func.sum(case((Intento.es_correcto == True, 1), else_=0)).label('total_correctos'),
+                func.count(distinct(Intento.problema_id)).label('problemas_resueltos'),
+                func.avg(Intento.tiempo_resolucion).label('velocidad_promedio'),
+            )
+            .join(Problema, Intento.problema_id == Problema.id)
+            .where(Intento.estudiante_id == estudiante_id)
+            .group_by(Problema.operacion)
+        )
+
+        stats: Dict = {}
+        for row in result.all():
+            stats[row.operacion] = {
+                'total_intentos': row.total_intentos or 0,
+                'total_correctos': int(row.total_correctos or 0),
+                'problemas_resueltos': row.problemas_resueltos or 0,
+                'velocidad_promedio': float(row.velocidad_promedio or 0.0),
+            }
+        return stats
+
     async def marcar_sesion_sospechosa(
         self,
         sesion: SesionPractica,

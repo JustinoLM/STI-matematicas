@@ -84,7 +84,7 @@ async def seed_desbloqueables(db: AsyncSession):
     # ----------------------------------------------------------
     temas = [
         {"nombre": "Clásico",               "descripcion": "El tema predeterminado. Limpio y sin distracciones.",      "precio_puntos": 0,   "nivel_minimo_requerido": 1, "archivo_referencia": "tema-default",    "es_tema_inicial": True,  "orden": 1},
-        {"nombre": "Piratas del Caribe",    "descripcion": "Aventuras en alta mar. ¡Arrr, matemático!",                "precio_puntos": 500, "nivel_minimo_requerido": 1, "archivo_referencia": "tema-piratas",    "es_tema_inicial": True,  "orden": 2},
+        {"nombre": "Piratas de los Mares",  "descripcion": "Aventuras en alta mar. ¡Arrr, matemático!",                "precio_puntos": 500, "nivel_minimo_requerido": 1, "archivo_referencia": "tema-piratas",    "es_tema_inicial": True,  "orden": 2},
         {"nombre": "Astronautas Galácticos","descripcion": "Explora el universo resolviendo problemas.",               "precio_puntos": 500, "nivel_minimo_requerido": 1, "archivo_referencia": "tema-astronautas","es_tema_inicial": True,  "orden": 3},
         {"nombre": "Magos de la Academia",  "descripcion": "Usa la magia de los números para hechizar problemas.",    "precio_puntos": 500, "nivel_minimo_requerido": 1, "archivo_referencia": "tema-magos",      "es_tema_inicial": True,  "orden": 4},
         {"nombre": "Caballeros del Reino",  "descripcion": "Defiende el castillo con tus habilidades matemáticas.",   "precio_puntos": 500, "nivel_minimo_requerido": 1, "archivo_referencia": "tema-caballeros", "es_tema_inicial": True,  "orden": 5},

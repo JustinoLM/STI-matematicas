@@ -2,14 +2,14 @@
  * Página de práctica del estudiante.
  *
  * Flujo real con backend:
- * 1. Al montar → POST /adaptive/practice/start → obtiene sesion_id + todos los problemas
+ * 1. Al montar → POST /adaptive/practice/start  (o /redencion/iniciar si ?mode=redencion)
  * 2. Al verificar → POST /practices/{id}/submit-problem → valida, registra, devuelve siguiente
  * 3. Cuando sesion_completada=true → GET /gamification/session/{id}/rewards → resultados
  * 4. Pistas → POST /hints/request → contenido real (LLM para nivel 3)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,13 +26,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Lightbulb, Check, ChevronRight, Home, AlertCircle, Eraser, Loader2 } from 'lucide-react';
+import { Lightbulb, Check, ChevronRight, Home, AlertCircle, Eraser, Loader2, RefreshCw } from 'lucide-react';
 import { ProblemGrid, FeedbackDetallado } from '@/components/problems';
 import { HintModal } from '@/components/problems/HintModal';
 import { HintDisplay } from '@/components/problems/HintDisplay';
 import { SessionResults } from '@/components/practice';
+import { CanvasAnimationModal } from '@/components/practice/CanvasAnimationModal';
+import { VictoryEffect, type AnimationType } from '@/components/practice/VictoryEffect';
+import { useThemeStore } from '@/store/themeStore';
+import { EFECTOS } from '@/types/shop';
 import type { Operacion, RespuestaValidacion } from '@/types';
-import { validarRespuesta } from '@/utils';
+import { validarRespuesta, playSound } from '@/utils';
 import {
   studentService,
   type ProblemaBE,
@@ -99,6 +103,14 @@ function mapearProblema(be: ProblemaBE): ProblemaUI {
 
 export function PracticePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const modoRedencion = searchParams.get('mode') === 'redencion';
+
+  // Recuperación de sesión incompleta — viene del banner del dashboard
+  const locationState = location.state as { retomar?: boolean; sesionId?: number } | null;
+  const modoRetomar = locationState?.retomar === true;
+  const sesionIdRetomar = locationState?.sesionId ?? null;
 
   // ── Estado de sesión ──────────────────────────────────────────────────────
   const [sesionId, setSesionId] = useState<number | null>(null);
@@ -121,6 +133,9 @@ export function PracticePage() {
   // ── Tiempo de resolución ──────────────────────────────────────────────────
   const tiempoInicioProblema = useRef<number>(Date.now());
 
+  // ── Enunciados temáticos ──────────────────────────────────────────────────
+  const [enunciadosMap, setEnunciadosMap] = useState<Record<number, string>>({});
+
   // ── Pistas ────────────────────────────────────────────────────────────────
   const [modalPistaAbierto, setModalPistaAbierto] = useState(false);
   const [pistaActual, setPistaActual] = useState<{ nivel: 1 | 2 | 3; contenido: string } | null>(
@@ -128,11 +143,30 @@ export function PracticePage() {
   );
   const [pistasUsadas, setPistasUsadas] = useState<number[]>([]);
   const [cargandoPista, setCargandoPista] = useState(false);
+  const [puntosDisponibles, setPuntosDisponibles] = useState(0);
 
   // ── Resultados de sesión ──────────────────────────────────────────────────
   const [sesionCompletada, setSesionCompletada] = useState(false);
   const [resultadosProblemas, setResultadosProblemas] = useState<ResultadoProblema[]>([]);
   const [recompensas, setRecompensas] = useState<RecompensasSesionResponse | null>(null);
+  // null = cargando, '' = error/fallback, string = análisis listo
+  const [analisisLLM, setAnalisisLLM] = useState<string | null>(null);
+
+  // ── Animación paso a paso (Canvas Animation) ──────────────────────────────
+  const [mostrarAnimacion, setMostrarAnimacion] = useState(false);
+  // IDs de problemas cuya animación ya fue guardada en esta sesión
+  const [idsGuardados, setIdsGuardados] = useState<Set<number>>(new Set());
+
+  // ── Efecto especial de victoria (tienda) + audio ──────────────────────────
+  void useThemeStore(s => s.efectoActivoId);   // suscribir para re-render, valor leído en handlers
+  void useThemeStore(s => s.audioActivado);    // idem
+  const efectosSonidoActivados  = useThemeStore(s => s.efectosSonidoActivados);
+  const volumen                 = useThemeStore(s => s.volumen);
+  const [efectoVictoria, setEfectoVictoria] = useState<{
+    animacion: AnimationType;
+    duracionMs: number;
+    sonido?: string;
+  } | null>(null);
 
   // ── Derivados ─────────────────────────────────────────────────────────────
   const problemaActual = problemas[indiceProblemActual] ?? null;
@@ -159,8 +193,37 @@ export function PracticePage() {
       setEsRespuestaCorrecta(data.es_correcto);
       setIntentosRestantes(data.intentos_restantes);
 
+      // Sonidos de feedback (respetan la configuración de efectos de sonido)
+      const { efectosSonidoActivados: sfxOn, volumen: vol } = useThemeStore.getState();
+      if (sfxOn) {
+        const v = vol / 100;
+        if (data.es_correcto) {
+          playSound('/assets/sound_effects/correcto.mp3', v * 0.8);
+        } else {
+          playSound('/assets/sound_effects/incorrecto.mp3', v * 0.7);
+        }
+      }
+
+      // Lanzar efecto especial de victoria si el estudiante tiene uno activo
+      const efectoId = useThemeStore.getState().efectoActivoId;
+      if (data.es_correcto && efectoId) {
+        const efecto = EFECTOS.find(e => e.id === efectoId);
+        if (efecto?.config?.animacion) {
+          setEfectoVictoria({
+            animacion: efecto.config.animacion as AnimationType,
+            duracionMs: efecto.config.duracionMs ?? 2000,
+            sonido: efecto.config.sonido,
+          });
+        }
+      }
+
       if (!data.es_correcto && data.respuesta_correcta) {
         setRespuestaCorrectaBE(data.respuesta_correcta);
+      }
+
+      // Mostrar animación paso a paso tras agotar los 3 intentos
+      if (!data.es_correcto && data.intentos_restantes === 0 && !data.sesion_completada) {
+        setMostrarAnimacion(true);
       }
 
       // Feedback visual local (pasos intermedios)
@@ -197,6 +260,10 @@ export function PracticePage() {
           // Si falla, igual mostramos la pantalla de resultados
         }
         setSesionCompletada(true);
+        // Análisis R1 en segundo plano — actualiza el texto cuando llega
+        studentService.getAnalisisSesion(sesionId!).then((texto) => {
+          setAnalisisLLM(texto);
+        });
       }
     },
   });
@@ -208,14 +275,51 @@ export function PracticePage() {
     setCargandoSesion(true);
     setErrorSesion(null);
 
-    studentService
-      .iniciarPractica()
-      .then((data) => {
+    // Fetch balance alongside session start
+    studentService.getSaldo().then((s) => {
+      if (!cancelled) setPuntosDisponibles(s.puntos_totales);
+    }).catch(() => {/* silencioso, fallback a 0 */});
+
+    // Elegir qué llamada hacer según el modo
+    const iniciar = modoRetomar && sesionIdRetomar !== null
+      ? studentService.retomarPractica(sesionIdRetomar)
+      : modoRedencion
+        ? studentService.iniciarRedencion()
+        : studentService.iniciarPractica();
+
+    iniciar
+      .then(async (data) => {
         if (cancelled) return;
         setSesionId(data.sesion_id);
-        setProblemas(data.problemas.map(mapearProblema));
+        const problemasUI = data.problemas.map(mapearProblema);
+        setProblemas(problemasUI);
         setMensajeIntro(data.mensaje_intro);
         tiempoInicioProblema.current = Date.now();
+
+        // Cargar enunciados temáticos "en vivo": uno por problema en paralelo.
+        // Cada enunciado aparece en cuanto el LLM (o caché) responde, sin
+        // esperar a que terminen todos los demás.
+        try {
+          const personaliz = await studentService.getPersonalizacion();
+          const temaNombre = personaliz.tema_activo_nombre;
+          if (temaNombre && !cancelled) {
+            const ids = data.problemas.map((p) => p.id);
+            // Disparar todas las peticiones en paralelo (no await aquí).
+            // Usamos .then() en lugar de async/forEach para evitar anti-patrones.
+            ids.forEach((id) => {
+              studentService
+                .obtenerEnunciado(id, temaNombre)
+                .then((texto) => {
+                  if (texto && !cancelled) {
+                    setEnunciadosMap((prev) => ({ ...prev, [id]: texto }));
+                  }
+                })
+                .catch(() => {/* silencioso por problema */});
+            });
+          }
+        } catch {
+          // Silencioso: si falla getPersonalizacion, se usan preguntas genéricas
+        }
       })
       .catch((err: Error) => {
         if (cancelled) return;
@@ -233,7 +337,8 @@ export function PracticePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoRedencion, modoRetomar, sesionIdRetomar]);
 
   // Reiniciar timer cuando cambia de problema
   useEffect(() => {
@@ -294,6 +399,10 @@ export function PracticePage() {
         const pista = await studentService.solicitarPista(sesionId, problemaActual.id, nivel);
         setPistaActual({ nivel, contenido: pista.contenido });
         setPistasUsadas((prev) => [...prev, nivel]);
+        // Actualizar saldo si se gastaron puntos (nivel 3)
+        if (pista.puntos_gastados > 0) {
+          setPuntosDisponibles(pista.saldo_nuevo);
+        }
       } catch {
         // Fallback genérico si el servicio de pistas falla
         const fallback: Record<number, string> = {
@@ -358,6 +467,7 @@ export function PracticePage() {
         puntosGanados={recompensas?.puntos_ganados ?? 0}
         medallasObtenidas={recompensas?.medallas_nuevas.map((m) => m.nombre) ?? []}
         rachaActual={0}
+        analisisLLM={analisisLLM}
         onContinuar={() => navigate('/student/dashboard')}
         onVerDetalles={() => navigate('/student/progress')}
       />
@@ -372,8 +482,28 @@ export function PracticePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Mensaje introductorio (solo al primer problema) */}
-      {indiceProblemActual === 0 && mensajeIntro && (
+      {/* Banner de modo redención */}
+      {modoRedencion && (
+        <Alert className="border-orange-300 bg-orange-50">
+          <RefreshCw className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800 font-medium">
+            Modo Redención — {mensajeIntro || 'Demuestra que aprendiste de tus errores. ¡Tú puedes! 💪'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Banner de modo retomar */}
+      {modoRetomar && !modoRedencion && (
+        <Alert className="border-amber-300 bg-amber-50">
+          <RefreshCw className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 font-medium">
+            {mensajeIntro || 'Retomando práctica incompleta — ¡ya casi terminas! 💪'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Mensaje introductorio normal (solo al primer problema, no en redención) */}
+      {!modoRedencion && indiceProblemActual === 0 && mensajeIntro && (
         <Alert>
           <AlertDescription>{mensajeIntro}</AlertDescription>
         </Alert>
@@ -381,16 +511,11 @@ export function PracticePage() {
 
       {/* Header con progreso */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold">
-                  Problema {indiceProblemActual + 1} de {problemas.length}
-                </h2>
-                <p className="text-muted-foreground">{problemaActual.pregunta}</p>
-              </div>
-            </div>
+        <CardContent className="pt-3 pb-3">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-sm font-bold text-gray-600">
+              Problema {indiceProblemActual + 1} de {problemas.length}
+            </h2>
             <Button
               variant="outline"
               size="sm"
@@ -400,9 +525,20 @@ export function PracticePage() {
               Salir
             </Button>
           </div>
-          <Progress value={progreso} className="h-2" />
+          <Progress value={progreso} className="h-1.5" />
         </CardContent>
       </Card>
+
+      {/* Enunciado temático — solo si el LLM generó texto real */}
+      {enunciadosMap[problemaActual.id] && (
+        <Card className="border-indigo-200 bg-indigo-50">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-gray-800 text-sm leading-relaxed font-bold">
+              {enunciadosMap[problemaActual.id]}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Intentos restantes */}
       {!mostrarFeedback && intentosRestantes < 3 && (
@@ -418,7 +554,7 @@ export function PracticePage() {
       {/* Problema */}
       <Card>
         <CardHeader>
-          <CardTitle>{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
+          <CardTitle className="text-center">{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
         </CardHeader>
         <CardContent className="flex justify-center">
           <ProblemGrid
@@ -426,7 +562,11 @@ export function PracticePage() {
             operacion={problemaActual.operacion}
             numero1={problemaActual.numero1}
             numero2={problemaActual.numero2}
-            resultado={0}
+            resultado={
+              problemaActual.operacion === 'DIVISION'
+                ? parseFloat((problemaActual.numero1 / problemaActual.numero2).toFixed(2))
+                : 0
+            }
             onAnswerChange={setRespuestaEstudiante}
             showFeedback={mostrarFeedback}
             clearIncorrectTrigger={clearIncorrectTrigger}
@@ -566,7 +706,7 @@ export function PracticePage() {
         open={modalPistaAbierto}
         onClose={() => setModalPistaAbierto(false)}
         onRequestHint={handleSolicitarPista}
-        puntosDisponibles={0}
+        puntosDisponibles={puntosDisponibles}
         pistasUsadas={pistasUsadas}
       />
 
@@ -577,6 +717,42 @@ export function PracticePage() {
           onClose={() => setPistaActual(null)}
           nivel={pistaActual.nivel}
           contenido={pistaActual.contenido}
+        />
+      )}
+
+      {/* Efecto especial de victoria — overlay canvas al responder correctamente */}
+      {efectoVictoria && (
+        <VictoryEffect
+          animacion={efectoVictoria.animacion}
+          duracionMs={efectoVictoria.duracionMs}
+          sonido={efectosSonidoActivados ? efectoVictoria.sonido : undefined}
+          audioVolumen={efectosSonidoActivados ? volumen : 0}
+          onDone={() => setEfectoVictoria(null)}
+        />
+      )}
+
+      {/* Animación paso a paso — aparece tras agotar los 3 intentos */}
+      {problemaActual && (
+        <CanvasAnimationModal
+          open={mostrarAnimacion}
+          onClose={() => setMostrarAnimacion(false)}
+          problemaId={problemaActual.id}
+          operacion={problemaActual.operacion}
+          numero1={problemaActual.numero1}
+          numero2={problemaActual.numero2}
+          nivelDificultad={problemaActual.nivel_dificultad}
+          yaGuardado={idsGuardados.has(problemaActual.id)}
+          onGuardar={async () => {
+            await studentService.guardarAnimacion(
+              problemaActual.id,
+              problemaActual.operacion,
+              String(problemaActual.numero1),
+              String(problemaActual.numero2),
+              problemaActual.nivel_dificultad,
+            );
+            // Marcar como guardado para que el botón no reaparezca si se reabre el modal
+            setIdsGuardados(prev => new Set([...prev, problemaActual.id]));
+          }}
         />
       )}
     </div>

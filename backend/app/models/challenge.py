@@ -8,7 +8,7 @@ EstudianteDesafioIndividual: Tabla de resolución de desafíos individuales.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -33,9 +33,11 @@ class DesafioGrupal(Base):
     profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=False, index=True)
     nombre = Column(String(255), nullable=False)
     descripcion = Column(Text, nullable=True)
-    tipo = Column(String(100), nullable=False)  # Tipo de desafío según lista predefinida
-    objetivo_cantidad = Column(Integer, nullable=False)  # Meta numérica
-    recompensa_texto = Column(Text, nullable=True)  # Descripción de recompensa
+    tipo = Column(String(100), nullable=False)  # problemas_resueltos | sesiones_completadas | practicas_sin_errores | problemas_rapidos | practicas_rapidas
+    objetivo_cantidad = Column(Integer, nullable=False)   # Meta principal (X)
+    parametro_adicional = Column(Integer, nullable=True)  # Parámetro secundario (Y): max errores / seg por problema / min por práctica
+    recompensa_texto = Column(Text, nullable=True)        # Descripción de recompensa física (opcional)
+    recompensa_puntos = Column(Integer, nullable=True)    # XP otorgados al completar (opcional, alternativa o complemento al texto)
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     fecha_limite = Column(DateTime, nullable=True)
     completado = Column(Boolean, default=False, nullable=False)
@@ -64,6 +66,7 @@ class GrupoDesafio(Base):
     desafio_id = Column(Integer, ForeignKey("desafio_grupal.id"), primary_key=True)
     grupo_id = Column(Integer, ForeignKey("grupo.id"), primary_key=True)
     progreso_actual = Column(Integer, nullable=False, default=0)
+    puntos_otorgados = Column(Boolean, default=False, nullable=False)  # Evita otorgar XP más de una vez
     
     # Relaciones
     desafio = relationship("DesafioGrupal", back_populates="grupos")

@@ -46,6 +46,7 @@ interface ThemeState {
   // ---- Audio ----
   audioActivado: boolean;
   volumen: number; // 0-100
+  efectosSonidoActivados: boolean; // clicks, correcto/incorrecto, efectos victoria
 
   // ---- Notificaciones ----
   notificacionesActivadas: boolean;
@@ -68,6 +69,7 @@ interface ThemeState {
   setEfectoActivo: (efectoId: string | null) => void;
   setAudioActivado: (activado: boolean) => void;
   setVolumen: (vol: number) => void;
+  setEfectosSonidoActivados: (v: boolean) => void;
   setNotificacionesActivadas: (activado: boolean) => void;
   setNotifDesafios: (v: boolean) => void;
   setNotifLogros: (v: boolean) => void;
@@ -128,6 +130,7 @@ export const useThemeStore = create<ThemeState>()(
       efectoActivoId: null,
       audioActivado: false,
       volumen: 70,
+      efectosSonidoActivados: true,
       notificacionesActivadas: true,
       notifDesafios: true,
       notifLogros: true,
@@ -232,6 +235,7 @@ export const useThemeStore = create<ThemeState>()(
       // ---- Audio ----
       setAudioActivado: (activado: boolean) => set({ audioActivado: activado }),
       setVolumen: (vol: number) => set({ volumen: Math.min(100, Math.max(0, vol)) }),
+      setEfectosSonidoActivados: (v: boolean) => set({ efectosSonidoActivados: v }),
 
       // ---- Notificaciones ----
       setNotificacionesActivadas: (activado: boolean) =>

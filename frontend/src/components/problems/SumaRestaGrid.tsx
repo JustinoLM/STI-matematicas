@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
 import { useProblemInput } from '@/hooks';
+
+/** Ancho de N celdas + gaps como valor CSS rem — escala con cualquier font-size raíz */
+const cw = (n: number) => `calc(${n} * 2.75rem)`;
 import { DigitRow, OperatorSymbol, HorizontalLine, CarrySpaces, BorrowSpaces } from './atoms';
 
 interface SumaRestaGridProps {
@@ -20,7 +23,7 @@ export function SumaRestaGrid({
   operacion,
   numero1,
   numero2,
-  resultado,
+  resultado: _resultado,
   onAnswerChange,
   showFeedback,
   clearIncorrectTrigger,
@@ -99,13 +102,13 @@ export function SumaRestaGrid({
     <div className="flex flex-col items-end gap-2 font-mono text-xl">
       {/* Espacio para llevadas o prestadas según la operación */}
       {operacion === 'SUMA' ? (
-        <CarrySpaces count={maxLength} width={maxLength * 44} />
+        <CarrySpaces count={maxLength} width={cw(maxLength)} />
       ) : (
-        <BorrowSpaces count={maxLength} width={maxLength * 44} />
+        <BorrowSpaces count={maxLength} width={cw(maxLength)} />
       )}
 
       {/* Primer número */}
-      <div className="flex gap-1 justify-end" style={{ width: `${maxLength * 44}px` }}>
+      <div className="flex gap-1 justify-end" style={{ width: cw(maxLength) }}>
         {aligned1.split('').map((char, i) => (
           <span key={`num1-${i}`} className="w-10 h-10 flex items-center justify-center font-bold">
             {char}
@@ -126,7 +129,7 @@ export function SumaRestaGrid({
       </div>
 
       {/* Línea separadora */}
-      <HorizontalLine width={maxLength * 44} />
+      <HorizontalLine width={cw(maxLength)} />
 
       {/* Resultado con inputs */}
       <DigitRow

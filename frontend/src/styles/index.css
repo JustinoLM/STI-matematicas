@@ -62,6 +62,26 @@
    que tiene prioridad máxima sobre cualquier selector CSS.
    No necesita regla CSS adicional. */
 
+/* ================================================================
+   Frosted-glass cuando hay fondo activo (data-has-bg="true")
+   Afecta Cards (bg-card), TabsLists (bg-muted) y pills (bg-background).
+   El !important es necesario para ganar a las clases de Tailwind.
+   ================================================================ */
+
+[data-has-bg="true"] .bg-card {
+  background-color: rgba(255, 255, 255, 0.99) !important;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-has-bg="true"] .bg-muted {
+  background-color: rgba(243, 244, 246, 0.99) !important;
+}
+
+/* Botones pill y tabs con bg-background se vuelven translúcidos */
+[data-has-bg="true"] .bg-background {
+  background-color: rgba(255, 255, 255, 0.99) !important;
+}
+
 /* Estilos base */
 body {
   @apply font-sans antialiased;

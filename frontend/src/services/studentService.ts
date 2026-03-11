@@ -27,6 +27,16 @@ export interface SesionStartResponse {
   mensaje_intro: string;
 }
 
+export interface SesionActivaResponse {
+  sesion_id: number;
+  problemas_completados: number;
+  cantidad_problemas: number;
+  operaciones_incluidas: Record<string, number>;
+  nivel_actual: number;
+  minutos_transcurridos: number;
+  fecha_inicio: string;
+}
+
 export interface SubmitProblemResponse {
   es_correcto: boolean;
   respuesta_correcta: string | null;
@@ -120,6 +130,31 @@ export interface RecompensasSesionResponse {
   saldo_total: number;
   medallas_nuevas: Array<{ id: number; nombre: string; descripcion: string; imagen_url: string | null }>;
   mensaje_motivacional: string;
+}
+
+// ─── Tipos de animaciones ─────────────────────────────────────────────────────
+
+export interface AnimacionGuardadaResponse {
+  id: number;
+  problema_id: number;
+  operacion: string;
+  numero1: string;
+  numero2: string;
+  nivel_dificultad: number;
+  guardado_en: string;
+}
+
+export interface GuardarAnimacionResponse {
+  animacion: AnimacionGuardadaResponse;
+  guardadas_total: number;
+  maximo: number;
+  ya_existia: boolean;
+}
+
+export interface ColeccionAnimacionesResponse {
+  animaciones: AnimacionGuardadaResponse[];
+  total: number;
+  maximo: number;
 }
 
 // ─── Tipos de videos ──────────────────────────────────────────────────────────
@@ -266,6 +301,76 @@ export const studentService = {
     }
   },
 
+  /**
+   * Verifica si el estudiante tiene problemas disponibles para redención.
+   * Ruta: GET /adaptive/redencion/disponible
+   */
+  async getRedenciónDisponible(): Promise<{ disponible: boolean; total_problemas_fallados: number }> {
+    try {
+      const response = await apiClient.get<{ disponible: boolean; total_problemas_fallados: number }>(
+        '/adaptive/redencion/disponible'
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Inicia una sesión de redención con los 5 problemas fallados.
+   * Ruta: POST /adaptive/redencion/iniciar
+   */
+  async iniciarRedencion(): Promise<SesionStartResponse> {
+    try {
+      const response = await apiClient.post<SesionStartResponse>('/adaptive/redencion/iniciar');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Devuelve la sesión EN_PROGRESO activa del estudiante (<90 min) o null.
+   * Ruta: GET /adaptive/practice/sesion-activa
+   */
+  async getSesionActiva(): Promise<SesionActivaResponse | null> {
+    try {
+      const response = await apiClient.get<SesionActivaResponse | null>(
+        '/adaptive/practice/sesion-activa'
+      );
+      return response.data;
+    } catch {
+      return null; // Silencioso — no bloquea la UI
+    }
+  },
+
+  /**
+   * Retoma una sesión EN_PROGRESO devolviendo los problemas restantes.
+   * Ruta: POST /adaptive/practice/retomar/{sesion_id}
+   */
+  async retomarPractica(sesionId: number): Promise<SesionStartResponse> {
+    try {
+      const response = await apiClient.post<SesionStartResponse>(
+        `/adaptive/practice/retomar/${sesionId}`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Descarta (abandona) una sesión EN_PROGRESO para poder iniciar una nueva.
+   * Ruta: POST /adaptive/practice/descartar/{sesion_id}
+   */
+  async descartarSesion(sesionId: number): Promise<void> {
+    try {
+      await apiClient.post(`/adaptive/practice/descartar/${sesionId}`);
+    } catch {
+      // Silencioso — si falla, la sesión la cierra el scheduler
+    }
+  },
+
   // ── Gamificación ───────────────────────────────────────────────────────────
 
   async getSaldo(): Promise<SaldoPuntosResponse> {
@@ -326,6 +431,76 @@ export const studentService = {
     }
   },
 
+  /**
+   * Obtiene enunciados narrativos temáticos para múltiples problemas (batch).
+   * Ruta: POST /enunciados/lote
+   * Llamar al inicio de la sesión con todos los problema_ids y el tema activo.
+   * Retorna {} si el tema es vacío o no hay problema_ids.
+   */
+  async obtenerEnunciadosLote(
+    problema_ids: number[],
+    tema: string
+  ): Promise<Record<number, string>> {
+    try {
+      const response = await apiClient.post<{ enunciados: Record<string, string> }>(
+        '/enunciados/lote',
+        { problema_ids, tema }
+      );
+      // Convertir claves string → number
+      const result: Record<number, string> = {};
+      for (const [k, v] of Object.entries(response.data.enunciados)) {
+        result[parseInt(k, 10)] = v;
+      }
+      return result;
+    } catch {
+      return {};  // Silencioso — fallback a preguntas genéricas
+    }
+  },
+
+  /**
+   * Obtiene mensaje motivacional personalizado (LLM con caché diaria).
+   * tipo: "dashboard" | "progreso"
+   * UX: llamar en background; mostrar placeholder genérico mientras llega.
+   */
+  /**
+   * Obtiene el análisis pedagógico post-práctica generado con R1.
+   * Retorna string vacío si falla (el componente usa fallback genérico).
+   */
+  async getAnalisisSesion(sesionId: number): Promise<string> {
+    try {
+      const response = await apiClient.get<{ sesion_id: number; texto: string; generada_llm: boolean }>(
+        `/analisis/${sesionId}`
+      );
+      return response.data.texto;
+    } catch {
+      return '';
+    }
+  },
+
+  async getMensajeMotivacional(tipo: 'dashboard' | 'progreso'): Promise<string> {
+    try {
+      const response = await apiClient.get<{ tipo: string; texto: string; generada_llm: boolean }>(
+        `/mensajes/${tipo}`
+      );
+      return response.data.texto;
+    } catch {
+      return '';  // Silencioso — el componente mantiene el texto genérico
+    }
+  },
+
+  /**
+   * Obtiene el enunciado narrativo de UN solo problema.
+   * Wrapper sobre obtenerEnunciadosLote con un único ID.
+   * Retorna null si el LLM no generó texto o si la llamada falla.
+   */
+  async obtenerEnunciado(
+    problema_id: number,
+    tema: string
+  ): Promise<string | null> {
+    const result = await this.obtenerEnunciadosLote([problema_id], tema);
+    return result[problema_id] ?? null;
+  },
+
   async savePersonalizacion(data: PersonalizacionRequest): Promise<PersonalizacionResponse> {
     try {
       const response = await apiClient.put<PersonalizacionResponse>(
@@ -380,7 +555,7 @@ export const studentService = {
     sesionId: number,
     problemaId: number,
     nivel: number
-  ): Promise<{ contenido: string; costo_puntos: number }> {
+  ): Promise<{ contenido: string; puntos_gastados: number; saldo_nuevo: number; generada_llm: boolean }> {
     try {
       const response = await apiClient.post('/hints/request', {
         sesion_id: sesionId,
@@ -388,6 +563,46 @@ export const studentService = {
         nivel_pista: nivel,
       });
       return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  // ── Animaciones guardadas ──────────────────────────────────────────────────
+
+  async guardarAnimacion(
+    problemaId: number,
+    operacion: string,
+    numero1: string,
+    numero2: string,
+    nivelDificultad: number,
+  ): Promise<GuardarAnimacionResponse> {
+    try {
+      const response = await apiClient.post<GuardarAnimacionResponse>('/animaciones/guardar', {
+        problema_id: problemaId,
+        operacion,
+        numero1,
+        numero2,
+        nivel_dificultad: nivelDificultad,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async getColeccionAnimaciones(): Promise<ColeccionAnimacionesResponse> {
+    try {
+      const response = await apiClient.get<ColeccionAnimacionesResponse>('/animaciones/coleccion');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async eliminarAnimacion(id: number): Promise<void> {
+    try {
+      await apiClient.delete(`/animaciones/${id}`);
     } catch (error) {
       throw new Error(getErrorMessage(error));
     }

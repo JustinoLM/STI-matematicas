@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { useProblemInput, useDivisionCalculator } from '@/hooks';
 import { DigitRow, OperatorSymbol, HorizontalLine } from './atoms';
 
+/** Ancho de N celdas + gaps como valor CSS rem */
+const cw = (n: number) => `calc(${n} * 2.75rem)`;
+
 interface DivisionGridProps {
   numero1: number;
   numero2: number;
@@ -58,8 +61,8 @@ export function DivisionGrid({
 
   // Pasos intermedios (productos, dividendos parciales y residuos)
   pasos.forEach((paso, idx) => {
-    // Dividendo parcial (todos los pasos, incluyendo el primero)
-    if (paso.dividendoParcialStr) {
+    // Dividendo parcial — solo desde el segundo paso en adelante
+    if (idx > 0 && paso.dividendoParcialStr) {
       paso.dividendoParcialStr.split('').forEach((char: string, charIdx: number) => {
         expectedValues[`paso-${idx}-dividendo-parcial-${charIdx}`] = char;
       });
@@ -158,7 +161,7 @@ export function DivisionGrid({
             onBlur={() => setFocusedKey(null)}
           />
 
-          <HorizontalLine width={dividendoNormalizadoStr.length * 44} />
+          <HorizontalLine width={cw(dividendoNormalizadoStr.length)} />
         </div>
       )}
 
@@ -203,15 +206,15 @@ export function DivisionGrid({
       )}
 
       {!requiereNormalizacion && !esMetodoVertical && (
-        <HorizontalLine width={dividendoStr.length * 44} />
+        <HorizontalLine width={cw(dividendoStr.length)} />
       )}
 
       {/* Pasos */}
       <div className="space-y-1">
         {pasos.map((paso, idx: number) => (
           <div key={idx} className="space-y-1">
-            {/* Dividendo parcial — mostrar en todos los pasos */}
-            {paso.dividendoParcialStr && (
+            {/* Dividendo parcial — solo desde el segundo paso en adelante */}
+            {idx > 0 && paso.dividendoParcialStr && (
               <DigitRow
                 expectedValue={paso.dividendoParcialStr}
                 digitosRespuesta={digitosRespuesta}
@@ -222,7 +225,7 @@ export function DivisionGrid({
                 onDigitChange={handleDigitChange}
                 onFocus={setFocusedKey}
                 onBlur={() => setFocusedKey(null)}
-                paddingLeft={(paso.espaciosDividendoParcial ?? 0) * 44}
+                paddingLeft={cw(paso.espaciosDividendoParcial ?? 0)}
               />
             )}
 
@@ -236,12 +239,12 @@ export function DivisionGrid({
               onDigitChange={handleDigitChange}
               onFocus={setFocusedKey}
               onBlur={() => setFocusedKey(null)}
-              paddingLeft={(paso.espaciosProducto ?? 0) * 44}
+              paddingLeft={cw(paso.espaciosProducto ?? 0)}
             />
 
             <HorizontalLine
-              width={(paso.productoStr?.length ?? 0) * 44}
-              marginLeft={(paso.espaciosProducto ?? 0) * 44}
+              width={cw(paso.productoStr?.length ?? 0)}
+              marginLeft={cw(paso.espaciosProducto ?? 0)}
             />
 
             {/* Mostrar residuo solo si es el último paso */}
@@ -256,7 +259,7 @@ export function DivisionGrid({
                 onDigitChange={handleDigitChange}
                 onFocus={setFocusedKey}
                 onBlur={() => setFocusedKey(null)}
-                paddingLeft={(paso.espaciosResiduo ?? 0) * 44}
+                paddingLeft={cw(paso.espaciosResiduo ?? 0)}
               />
             )}
           </div>

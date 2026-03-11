@@ -238,9 +238,9 @@ export default function TeacherDashboard() {
                 >
                   <AlertTriangle
                     className={`h-5 w-5 mt-0.5 ${
-                      alerta.severidad === 'critical'
+                      alerta.severidad === 'alta'
                         ? 'text-red-500'
-                        : alerta.severidad === 'warning'
+                        : alerta.severidad === 'media'
                         ? 'text-yellow-500'
                         : 'text-blue-500'
                     }`}
@@ -250,9 +250,9 @@ export default function TeacherDashboard() {
                       <p className="text-sm font-medium">{alerta.titulo}</p>
                       <Badge
                         variant={
-                          alerta.severidad === 'critical'
+                          alerta.severidad === 'alta'
                             ? 'destructive'
-                            : alerta.severidad === 'warning'
+                            : alerta.severidad === 'media'
                             ? 'default'
                             : 'secondary'
                         }

@@ -7,6 +7,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { studentService } from '@/services/studentService';
 import { teacherService } from '@/services/teacherService';
+import { useThemeStore } from '@/store/themeStore';
+
+/** Emoji de cada tema narrativo. */
+const TEMA_EMOJI: Record<string, string> = {
+  'tema-default':      '📐',
+  'tema-piratas':      '🏴‍☠️',
+  'tema-astronautas':  '🚀',
+  'tema-magos':        '🧙',
+  'tema-caballeros':   '⚔️',
+  'tema-vaqueros':     '🤠',
+  'tema-princesas':    '👑',
+};
 
 interface HeaderProps {
   userName: string;
@@ -16,6 +28,11 @@ interface HeaderProps {
 }
 
 export function Header({ userName, userRole, onLogout, onMenuToggle }: HeaderProps) {
+  const temaActivoId = useThemeStore(s => s.temaActivoId);
+  const emoji = userRole === 'estudiante'
+    ? (TEMA_EMOJI[temaActivoId] ?? '📐')
+    : '🎓';
+
   const { data: perfil } = useQuery({
     queryKey: ['perfil-estudiante'],
     queryFn: () => studentService.getPerfil(),
@@ -46,7 +63,7 @@ export function Header({ userName, userRole, onLogout, onMenuToggle }: HeaderPro
             </Button>
           )}
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-primary" />
+            <span className="text-2xl leading-none select-none" role="img">{emoji}</span>
             <span className="font-bold text-lg">STI Matemáticas</span>
           </div>
         </div>

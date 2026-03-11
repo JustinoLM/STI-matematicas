@@ -82,7 +82,7 @@ export type TipoAlerta =
 export interface AlertaEstudiante {
   id: number;
   tipo: TipoAlerta;
-  severidad: 'info' | 'warning' | 'critical';
+  severidad: 'alta' | 'media' | 'baja';
   titulo: string;
   mensaje: string;
   activa: boolean;
@@ -206,14 +206,29 @@ export interface EstadisticasGrupo {
   estudiantes_sobresalientes: number;
 }
 
+/** Tipos de desafío ordenados de más fácil (1) a más difícil (5). */
+export type TipoDesafioGrupal =
+  | 'problemas_resueltos'    // ⭐     Resolver X problemas en grupo
+  | 'sesiones_completadas'   // ⭐⭐   Resolver X prácticas
+  | 'practicas_sin_errores'  // ⭐⭐⭐  Resolver X prácticas con ≤ Y errores
+  | 'problemas_rapidos'      // ⭐⭐⭐⭐ Resolver X problemas en ≤ Y seg/problema
+  | 'practicas_rapidas';     // ⭐⭐⭐⭐⭐ Resolver X prácticas en ≤ Y minutos
+
+export interface ContribuidorInfo {
+  nombre: string;
+  sesiones: number;
+}
+
 // Vista del desafío desde el lado del estudiante (endpoint /challenges/mis-desafios)
 export interface DesafioEstudiante {
   id: number;
   nombre: string;
   descripcion?: string;
-  tipo: 'problemas_resueltos' | 'racha_consecutiva' | 'precision_promedio' | 'nivel_alcanzado';
+  tipo: TipoDesafioGrupal;
   objetivo_cantidad: number;
+  parametro_adicional?: number;  // Parámetro Y (max errores / seg / min)
   recompensa_texto?: string;
+  recompensa_puntos?: number;    // Monedas al completar
   fecha_creacion: string;
   fecha_limite?: string;
   completado: boolean;
@@ -226,6 +241,12 @@ export interface DesafioEstudiante {
   // Calculados en servidor
   dias_restantes?: number;
   esta_expirado: boolean;
+  // Participación individual del estudiante
+  mi_sesiones_en_ventana: number;   // Sesiones propias en la ventana
+  califica_recompensa: boolean;     // True si cumple el mínimo de sesiones
+  sesiones_para_calificar: number;  // Cuántas más necesita
+  // Top contribuidores del grupo
+  top_contribuidores: ContribuidorInfo[];
 }
 
 export interface DesafioGrupal {
@@ -233,12 +254,15 @@ export interface DesafioGrupal {
   profesor_id: number;
   nombre: string;
   descripcion?: string;
-  tipo: string;
+  tipo: TipoDesafioGrupal;
   objetivo_cantidad: number;
+  parametro_adicional?: number;  // Parámetro Y (max errores / seg / min)
   recompensa_texto?: string;
+  recompensa_puntos?: number;    // XP al completar
   fecha_creacion: string;
   fecha_limite?: string;
   completado: boolean;
+  vencido: boolean;  // true si fecha_limite pasó sin completarse
   eliminado: boolean;
   progreso_grupos: ProgresoGrupoDesafio[];
 }
@@ -336,3 +360,82 @@ export {
   getFondosPorTema,
   getMusicasPorTema,
 } from './shop';
+
+// ==================== ESTADÍSTICAS DE GRUPO ====================
+
+export interface ActividadDia {
+  fecha: string;    // "YYYY-MM-DD"
+  sesiones: number;
+}
+
+export interface PrecisionSemana {
+  semana: string;      // "2026-W09"
+  precision: number;   // 0 – 100
+}
+
+export interface DistribucionPerfiles {
+  rapido_preciso: number;
+  cuidadoso_metodico: number;
+  impulsivo: number;
+  en_desarrollo: number;
+  no_clasificado: number;
+}
+
+export interface AlertaResumen {
+  posible_trampa: number;
+  rezagado: number;
+  inactivo: number;
+  promocion_rapida: number;
+  dificultad_persistente: number;
+  excelencia: number;
+}
+
+export interface NivelesOperacion {
+  suma: number[];           // [count_nivel1, count_nivel2, ..., count_nivel5]
+  resta: number[];
+  multiplicacion: number[];
+  division: number[];
+}
+
+export interface EstudianteStatsItem {
+  id: number;
+  nombre: string;
+  codigo: string;
+  // Niveles por operación
+  nivel_suma: number;
+  nivel_resta: number;
+  nivel_multiplicacion: number;
+  nivel_division: number;
+  nivel_actual: number;
+  // Métricas
+  precision: number;           // 0–100
+  velocidad_promedio: number;  // seg/problema
+  total_sesiones: number;
+  sesiones_esta_semana: number;
+  dias_sin_practicar: number;
+  // ML
+  perfil_aprendizaje: string;
+  confianza_perfil: number;    // 0–100
+  probabilidad_avance: number; // 0–100
+  // Alertas
+  alertas: string[];
+  // Actividad 14 días
+  actividad_14_dias: ActividadDia[];
+}
+
+export interface GrupoStatsResponse {
+  grupo_id: number;
+  grupo_nombre: string;
+  total_estudiantes: number;
+  distribucion_perfiles: DistribucionPerfiles;
+  resumen_alertas: AlertaResumen;
+  niveles_por_operacion: NivelesOperacion;
+  precision_semanal: PrecisionSemana[];
+  actividad_grupal: ActividadDia[];
+  estudiantes: EstudianteStatsItem[];
+}
+
+export interface AnalisisIAResponse {
+  texto: string;
+  generado_por_llm: boolean;
+}

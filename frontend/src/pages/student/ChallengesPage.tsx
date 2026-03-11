@@ -12,11 +12,15 @@ import {
   Trophy,
   BookOpen,
   Zap,
-  TrendingUp,
   CheckCircle2,
   AlertCircle,
   Gift,
   Loader2,
+  CheckSquare,
+  Shield,
+  Timer,
+  Coins,
+  Medal,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,11 +32,56 @@ import type { DesafioEstudiante } from '@/types';
 
 type TipoDesafio = DesafioEstudiante['tipo'];
 
-const TIPO_META: Record<TipoDesafio, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-  problemas_resueltos: { label: 'Problemas resueltos en grupo', icon: BookOpen },
-  racha_consecutiva:   { label: 'Racha consecutiva',           icon: Zap },
-  precision_promedio:  { label: 'Precisión promedio',          icon: Target },
-  nivel_alcanzado:     { label: 'Nivel alcanzado',             icon: TrendingUp },
+interface TipoInfo {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  dificultad: number;
+  dificultadLabel: string;
+  dificultadColor: string;
+  descripcionMeta: (obj: number, param?: number) => string;
+}
+
+const TIPO_META: Record<TipoDesafio, TipoInfo> = {
+  problemas_resueltos: {
+    label: 'Resolver problemas',
+    icon: BookOpen,
+    dificultad: 1,
+    dificultadLabel: 'Fácil',
+    dificultadColor: 'bg-green-100 text-green-700 border-green-300',
+    descripcionMeta: (obj) => `${obj} problemas correctos en grupo`,
+  },
+  sesiones_completadas: {
+    label: 'Completar prácticas',
+    icon: CheckSquare,
+    dificultad: 2,
+    dificultadLabel: 'Medio-bajo',
+    dificultadColor: 'bg-blue-100 text-blue-700 border-blue-300',
+    descripcionMeta: (obj) => `${obj} prácticas completadas`,
+  },
+  practicas_sin_errores: {
+    label: 'Prácticas con pocos errores',
+    icon: Shield,
+    dificultad: 3,
+    dificultadLabel: 'Medio',
+    dificultadColor: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    descripcionMeta: (obj, param) => `${obj} prácticas con máx. ${param ?? '?'} errores`,
+  },
+  problemas_rapidos: {
+    label: 'Problemas rápidos',
+    icon: Zap,
+    dificultad: 4,
+    dificultadLabel: 'Difícil',
+    dificultadColor: 'bg-orange-100 text-orange-700 border-orange-300',
+    descripcionMeta: (obj, param) => `${obj} problemas en ≤${param ?? '?'} seg c/u`,
+  },
+  practicas_rapidas: {
+    label: 'Prácticas en tiempo',
+    icon: Timer,
+    dificultad: 5,
+    dificultadLabel: 'Muy difícil',
+    dificultadColor: 'bg-red-100 text-red-700 border-red-300',
+    descripcionMeta: (obj, param) => `${obj} prácticas en ≤${param ?? '?'} minutos`,
+  },
 };
 
 function estadoBadge(desafio: DesafioEstudiante) {
@@ -56,10 +105,11 @@ function estadoBadge(desafio: DesafioEstudiante) {
 
 function unidadProgreso(tipo: TipoDesafio): string {
   switch (tipo) {
-    case 'problemas_resueltos': return 'problemas';
-    case 'racha_consecutiva':   return 'consecutivos';
-    case 'precision_promedio':  return '%';
-    case 'nivel_alcanzado':     return 'estudiantes';
+    case 'problemas_resueltos':  return 'problemas';
+    case 'sesiones_completadas': return 'prácticas';
+    case 'practicas_sin_errores':return 'prácticas';
+    case 'problemas_rapidos':    return 'problemas';
+    case 'practicas_rapidas':    return 'prácticas';
   }
 }
 
@@ -83,7 +133,7 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
               }
             </div>
             <div className="min-w-0">
-              <CardTitle className="text-base leading-tight truncate">{desafio.nombre}</CardTitle>
+              <CardTitle className="text-lg leading-tight">{desafio.nombre}</CardTitle>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Users className="h-3 w-3 shrink-0" />
                 <span className="truncate">{desafio.grupo_nombre}</span>
@@ -100,25 +150,30 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
           <p className="text-sm text-muted-foreground">{desafio.descripcion}</p>
         )}
 
-        {/* Tipo */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Icon className="h-3.5 w-3.5" />
-          <span>{meta.label}</span>
+        {/* Tipo + dificultad */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Icon className="h-3.5 w-3.5" />
+            {meta.descripcionMeta(desafio.objetivo_cantidad, desafio.parametro_adicional)}
+          </span>
+          <Badge variant="outline" className={`text-xs ${meta.dificultadColor}`}>
+            {'⭐'.repeat(meta.dificultad)} {meta.dificultadLabel}
+          </Badge>
         </div>
 
         {/* Barra de progreso */}
         <div className="space-y-1.5">
-          <div className="flex justify-between items-center text-sm">
-            <span className="font-medium">Progreso del grupo</span>
-            <span className="text-muted-foreground tabular-nums">
+          <div className="flex justify-between items-center text-sm font-medium">
+            <span>Progreso del grupo</span>
+            <span className="tabular-nums text-primary">
               {desafio.progreso_actual} / {desafio.objetivo_cantidad} {unidad}
             </span>
           </div>
           <Progress
             value={desafio.porcentaje}
-            className={`h-2.5 ${terminado ? '[&>div]:bg-green-500' : ''}`}
+            className={`h-3 ${terminado ? '[&>div]:bg-green-500' : ''}`}
           />
-          <p className="text-xs text-right text-muted-foreground">{desafio.porcentaje.toFixed(1)}%</p>
+          <p className="text-sm font-semibold text-right text-primary">{desafio.porcentaje.toFixed(1)}%</p>
         </div>
 
         {/* Fecha límite */}
@@ -136,11 +191,72 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
           </div>
         )}
 
-        {/* Recompensa */}
-        {desafio.recompensa_texto && (
-          <div className="flex items-start gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-2 text-xs text-amber-800">
-            <Gift className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>{desafio.recompensa_texto}</span>
+        {/* Recompensas */}
+        {(desafio.recompensa_puntos || desafio.recompensa_texto) && (
+          <div className="space-y-1.5">
+            {desafio.recompensa_puntos != null && desafio.recompensa_puntos > 0 && (
+              <div className="flex items-center gap-1.5 rounded-md bg-yellow-50 border border-yellow-200 px-2.5 py-1.5 text-xs text-yellow-800">
+                <Coins className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-medium">
+                  {terminado ? '¡' : ''}Recompensa: {desafio.recompensa_puntos.toLocaleString()} monedas{terminado ? ' ¡recibidas!' : ' al completar'}
+                </span>
+              </div>
+            )}
+            {desafio.recompensa_texto && (
+              <div className="flex items-start gap-1.5 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-800">
+                <Gift className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>{desafio.recompensa_texto}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Alerta de participación (solo si hay recompensa de monedas y el desafío no terminó) */}
+        {!terminado && desafio.recompensa_puntos != null && desafio.recompensa_puntos > 0 && (
+          <div className={`flex items-start gap-1.5 rounded-md px-2.5 py-1.5 text-xs border ${
+            desafio.califica_recompensa
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            {desafio.califica_recompensa
+              ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              : <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            }
+            <span>
+              {desafio.califica_recompensa
+                ? `¡Tu participación está asegurada! (${desafio.mi_sesiones_en_ventana} prácticas completadas)`
+                : desafio.sesiones_para_calificar === 1
+                  ? 'Practica 1 vez más para calificar para las monedas'
+                  : `Practica ${desafio.sesiones_para_calificar} veces más para calificar para las monedas`
+              }
+            </span>
+          </div>
+        )}
+
+        {/* Top contribuidores del grupo */}
+        {desafio.top_contribuidores.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t">
+            <p className="text-xs font-medium flex items-center gap-1 text-muted-foreground">
+              <Medal className="h-3.5 w-3.5" />
+              Más activos del grupo
+            </p>
+            <div className="space-y-0.5">
+              {desafio.top_contribuidores.map((c, i) => (
+                <div key={c.nombre} className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`font-bold w-4 text-center ${
+                      i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-muted-foreground'
+                    }`}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}
+                    </span>
+                    <span className="truncate max-w-[130px]">{c.nombre}</span>
+                  </span>
+                  <span className="text-muted-foreground shrink-0">
+                    {c.sesiones} {c.sesiones === 1 ? 'práctica' : 'prácticas'}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
@@ -279,9 +395,9 @@ export function ChallengesPage() {
         </Card>
       )}
 
-      {/* Grid de desafíos */}
+      {/* Grid de desafíos — máximo 2 columnas para que los parámetros sean legibles */}
       {!isLoading && !isError && filtrados.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2">
           {filtrados.map((desafio) => (
             <DesafioCard key={desafio.id} desafio={desafio} />
           ))}

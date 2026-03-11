@@ -107,11 +107,22 @@ export function ShopPage() {
     estaDesbloqueado: catalogoMap.get(f.id)?.poseido ?? false,
   }));
 
-  // Items de shop.ts enriquecidos con el flag estaDesbloqueado desde la BD
-  const todosLosItems = getTodosLosDesbloqueables().map(item => ({
-    ...item,
-    estaDesbloqueado: catalogoMap.get(item.id)?.poseido ?? false,
-  }));
+  // Items de shop.ts enriquecidos con el flag estaDesbloqueado desde la BD.
+  // Los fondos temáticos solo se muestran en "Todos" si el tema padre está desbloqueado.
+  const todosLosItems = getTodosLosDesbloqueables()
+    .map(item => ({
+      ...item,
+      estaDesbloqueado: catalogoMap.get(item.id)?.poseido ?? false,
+    }))
+    .filter(item => {
+      if (item.categoria === 'fondo' && item.config?.temaId) {
+        return catalogoMap.get(item.config.temaId)?.poseido ?? false;
+      }
+      if (item.categoria === 'musica' && item.config?.temaId_musica) {
+        return catalogoMap.get(item.config.temaId_musica)?.poseido ?? false;
+      }
+      return true;
+    });
 
   // Función para obtener el color del badge según la rareza
   const getRarezaColor = (rareza: RarezaItem): string => {

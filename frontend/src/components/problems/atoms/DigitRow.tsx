@@ -11,7 +11,7 @@ interface DigitRowProps {
   onFocus: (key: string) => void;
   onBlur: () => void;
   direction?: 'left-to-right' | 'right-to-left';
-  paddingLeft?: number; // Espacios en píxeles a la izquierda (división)
+  paddingLeft?: number | string; // Espacios a la izquierda (división): px o CSS string
   offsetCells?: number; // Número de celdas vacías a la derecha (multiplicación)
   readOnly?: boolean;
 }
@@ -98,7 +98,7 @@ export function DigitRow({
   };
 
   return (
-    <div className="flex gap-1" style={{ paddingLeft: `${paddingLeft}px` }}>
+    <div className="flex gap-1" style={{ paddingLeft: paddingLeft === undefined ? undefined : typeof paddingLeft === 'number' ? `${paddingLeft}px` : paddingLeft }}>
       {chars.map((char, index) => {
         const key = `${keyPrefix}-${index}`;
         const nextKey = getNextKey(index);

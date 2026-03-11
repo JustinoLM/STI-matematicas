@@ -118,7 +118,7 @@ export function SessionRewards({
                   <Star className="h-8 w-8 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Puntos XP</p>
+                  <p className="text-sm text-muted-foreground">Puntos Estrella</p>
                   <p className="text-4xl font-bold text-blue-600">
                     +{animatedPuntos}
                   </p>

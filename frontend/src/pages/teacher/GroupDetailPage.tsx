@@ -21,12 +21,14 @@ import {
   Check,
   X,
   Loader2,
+  Eye,
 } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -247,117 +249,163 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* ── Gestión de Estudiantes ──────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Panel Izquierdo: Estudiantes en el grupo */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Estudiantes en el grupo
-              <Badge variant="secondary" className="ml-auto">
-                {(grupo.estudiantes ?? []).length}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(grupo.estudiantes ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No hay estudiantes en este grupo aún.
-              </p>
-            ) : (
-              <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {(grupo.estudiantes as any[]).map((est) => (
-                  <li
-                    key={est.estudiante_id}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{est.nombre_completo}</p>
-                      <p className="text-xs text-muted-foreground">{est.codigo_estudiante}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      disabled={quitarMutation.isPending}
-                      onClick={() => quitarMutation.mutate(est.estudiante_id)}
-                    >
-                      {quitarMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <UserMinus className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      {/* ── Gestión de Estudiantes con Tabs ─────────────────────────────── */}
+      <Tabs defaultValue="estudiantes">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="estudiantes">
+            <Users className="mr-2 h-4 w-4" />
+            Estudiantes ({(grupo.estudiantes ?? []).length})
+          </TabsTrigger>
+          <TabsTrigger value="agregar">
+            <UserPlus className="mr-2 h-4 w-4" />
+            Agregar estudiantes
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Panel Derecho: Estudiantes disponibles para agregar */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              Agregar estudiantes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Buscador */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar por nombre o código..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+        {/* Tab 1: Estudiantes actuales del grupo */}
+        <TabsContent value="estudiantes">
+          <Card>
+            <CardContent className="pt-4">
+              {(grupo.estudiantes ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-10">
+                  No hay estudiantes en este grupo aún. Usa la pestaña "Agregar estudiantes".
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Nombre</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold">Nivel</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold">Precisión</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {(grupo.estudiantes as any[]).map((est) => (
+                        <tr key={est.estudiante_id} className="hover:bg-muted/50">
+                          <td className="px-4 py-3">
+                            <code className="text-xs bg-muted px-2 py-1 rounded">
+                              {est.codigo_estudiante}
+                            </code>
+                          </td>
+                          <td className="px-4 py-3 font-medium">{est.nombre_completo}</td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge variant="outline">Nivel {est.nivel_actual}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-sm font-semibold ${
+                              est.precision_ultimos_15 >= 80 ? 'text-green-600' :
+                              est.precision_ultimos_15 >= 50 ? 'text-yellow-600' :
+                              'text-red-600'
+                            }`}>
+                              {est.precision_ultimos_15.toFixed(0)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Link to={`/teacher/students/${est.estudiante_id}`}>
+                                <Button size="sm" variant="ghost">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                disabled={quitarMutation.isPending}
+                                onClick={() => quitarMutation.mutate(est.estudiante_id)}
+                              >
+                                {quitarMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            {estudiantesOrg.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No hay estudiantes en tu organización.
-              </p>
-            ) : estudiantesDisponibles.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                {busqueda
-                  ? 'No se encontraron estudiantes con esa búsqueda.'
-                  : 'Todos los estudiantes ya están en el grupo.'}
-              </p>
-            ) : (
-              <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {estudiantesDisponibles.map((est) => (
-                  <li
-                    key={est.id}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{est.nombre_completo}</p>
-                      <p className="text-xs text-muted-foreground">{est.codigo_estudiante}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-green-600 hover:text-green-800 hover:bg-green-50"
-                      disabled={agregarMutation.isPending}
-                      onClick={() => agregarMutation.mutate(est.id)}
-                    >
-                      {agregarMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <UserPlus className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        {/* Tab 2: Agregar estudiantes */}
+        <TabsContent value="agregar">
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              {/* Buscador */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre o código..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {estudiantesOrg.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No hay estudiantes en tu organización.
+                </p>
+              ) : estudiantesDisponibles.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  {busqueda
+                    ? 'No se encontraron estudiantes con esa búsqueda.'
+                    : 'Todos los estudiantes ya están en el grupo.'}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Nombre</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold">Agregar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {estudiantesDisponibles.map((est) => (
+                        <tr key={est.id} className="hover:bg-muted/50">
+                          <td className="px-4 py-3">
+                            <code className="text-xs bg-muted px-2 py-1 rounded">
+                              {est.codigo_estudiante}
+                            </code>
+                          </td>
+                          <td className="px-4 py-3 font-medium">{est.nombre_completo}</td>
+                          <td className="px-4 py-3 text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-green-600 hover:text-green-800 hover:bg-green-50"
+                              disabled={agregarMutation.isPending}
+                              onClick={() => agregarMutation.mutate(est.id)}
+                            >
+                              {agregarMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <UserPlus className="h-4 w-4 mr-1" />
+                              )}
+                              Agregar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* ── Alertas y Clasificación ─────────────────────────────────────── */}
       {stats && (

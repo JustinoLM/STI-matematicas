@@ -10,15 +10,17 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Palette, Volume2, Bell, VolumeX, Check, Lock, Save } from 'lucide-react';
+import { Settings, Palette, Volume2, Sparkles, VolumeX, Check, Lock, Save } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
 import { studentService, type ItemPoseido, type PersonalizacionRequest } from '@/services/studentService';
 import {
   TEMAS,
   FONDOS,
+  MUSICAS,
   getFondosPorTema,
   getMusicasPorTema,
   COLORES,
+  EFECTOS,
   type Desbloqueable,
 } from '@/types/shop';
 
@@ -139,23 +141,19 @@ export function SettingsPage() {
   const {
     temaActivoId,
     colorActivoId,
+    efectoActivoId,
     audioActivado,
     volumen,
-    notificacionesActivadas,
-    notifDesafios,
-    notifLogros,
-    notifRecordatorios,
+    efectosSonidoActivados,
     preferenciasPorTema,
     setTemaActivo,
     setFondoActivo,
     setMusicaActiva,
     setColorActivo,
+    setEfectoActivo,
     setAudioActivado,
     setVolumen,
-    setNotificacionesActivadas,
-    setNotifDesafios,
-    setNotifLogros,
-    setNotifRecordatorios,
+    setEfectosSonidoActivados,
     getTemaActivo,
     getFondoActivo,
     getMusicaActiva,
@@ -197,8 +195,32 @@ export function SettingsPage() {
     }
   }
 
-  // Si el catálogo aún no cargó, mostrar todo como desbloqueado (fallback)
-  const itemDesbloqueado = (id: string) => catalogo ? poseidos.has(id) : true;
+  /**
+   * Comprueba si un item está disponible para el estudiante.
+   * Acceso cruzado: comprar el fondo/música nº1 de cualquier tema desbloquea
+   * el equivalente (mismo índice) en TODOS los demás temas, y viceversa.
+   */
+  const itemDesbloqueado = (id: string): boolean => {
+    if (!catalogo) return true; // catálogo no cargado — mostrar todo disponible
+
+    if (poseidos.has(id)) return true;
+
+    // Fondos: mismo fondoIndex en cualquier tema → acceso cruzado
+    const fondo = FONDOS.find(f => f.id === id);
+    if (fondo?.config?.fondoIndex) {
+      const idx = fondo.config.fondoIndex;
+      return FONDOS.some(f => f.config?.fondoIndex === idx && poseidos.has(f.id));
+    }
+
+    // Músicas: mismo musicaIndex en cualquier tema → acceso cruzado
+    const musica = MUSICAS.find(m => m.id === id);
+    if (musica?.config?.musicaIndex) {
+      const idx = musica.config.musicaIndex;
+      return MUSICAS.some(m => m.config?.musicaIndex === idx && poseidos.has(m.id));
+    }
+
+    return false;
+  };
 
   // ── Mutación de persistencia ─────────────────────────────────────────────
   const { mutate: persistir, isPending: guardando } = useMutation({
@@ -574,12 +596,20 @@ export function SettingsPage() {
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {/* Toggle general */}
+          {/* Toggle música */}
           <Toggle
             checked={audioActivado}
             onChange={setAudioActivado}
-            label="Música activada"
+            label="Música de fondo"
             description="Reproduce música de fondo mientras practicas"
+          />
+
+          {/* Toggle efectos de sonido — independiente de la música */}
+          <Toggle
+            checked={efectosSonidoActivados}
+            onChange={setEfectosSonidoActivados}
+            label="Efectos de sonido"
+            description="Sonidos al hacer clic, al responder y en efectos de victoria"
           />
 
           {audioActivado && (
@@ -697,51 +727,69 @@ export function SettingsPage() {
       </Card>
 
       {/* ================================================================
-          SECCIÓN 3: NOTIFICACIONES
+          SECCIÓN 3: EFECTOS ESPECIALES
           ================================================================ */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5 text-orange-500" />
-            Notificaciones
+            <Sparkles className="h-5 w-5 text-yellow-500" />
+            Efectos Especiales
           </CardTitle>
           <CardDescription>
-            Controla qué alertas quieres recibir
+            Elige el efecto visual que aparece al responder correctamente
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          <div className="divide-y">
-            <Toggle
-              checked={notificacionesActivadas}
-              onChange={setNotificacionesActivadas}
-              label="Notificaciones activadas"
-              description="Activa o desactiva todas las notificaciones"
-            />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* Opción "Sin efecto" */}
+            <button
+              onClick={() => setEfectoActivo(null)}
+              className={`
+                relative rounded-xl border-2 p-3 text-center transition-all
+                ${!efectoActivoId
+                  ? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/30'
+                  : 'border-dashed border-gray-300 hover:border-primary/50 hover:bg-gray-50'
+                }
+              `}
+            >
+              {!efectoActivoId && (
+                <span className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
+                  <Check className="h-3 w-3" />
+                </span>
+              )}
+              <div className="mb-2 flex items-center justify-center h-14 rounded-lg bg-gray-50 border border-dashed border-gray-300">
+                <span className="text-2xl">🚫</span>
+              </div>
+              <p className="text-xs font-semibold text-gray-500">Sin efecto</p>
+            </button>
 
-            {notificacionesActivadas && (
-              <>
-                <Toggle
-                  checked={notifDesafios}
-                  onChange={setNotifDesafios}
-                  label="Desafíos grupales"
-                  description="Aviso cuando el profesor crea un nuevo desafío"
+            {/* Los 5 efectos del inventario */}
+            {EFECTOS.map(efecto => {
+              const desbloqueado = itemDesbloqueado(efecto.id);
+              const isActive = efectoActivoId === efecto.id;
+              return (
+                <SelectCard
+                  key={efecto.id}
+                  item={efecto}
+                  isActive={isActive}
+                  isLocked={!desbloqueado}
+                  onClick={() => {
+                    if (!desbloqueado) return;
+                    // Clic en el activo → desactivar; clic en otro → activar
+                    setEfectoActivo(isActive ? null : efecto.id);
+                  }}
+                  previewContent={
+                    <span className="text-3xl">{efecto.icono}</span>
+                  }
                 />
-                <Toggle
-                  checked={notifLogros}
-                  onChange={setNotifLogros}
-                  label="Logros y medallas"
-                  description="Aviso cuando obtienes una nueva insignia"
-                />
-                <Toggle
-                  checked={notifRecordatorios}
-                  onChange={setNotifRecordatorios}
-                  label="Recordatorios de práctica"
-                  description="Aviso para no perder tu racha de estudio"
-                />
-              </>
-            )}
+              );
+            })}
           </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            El efecto activo aparece como overlay al responder un problema correctamente durante la práctica.
+          </p>
         </CardContent>
       </Card>
     </div>

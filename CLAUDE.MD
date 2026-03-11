@@ -151,6 +151,17 @@ docker-compose up -d                     # BD + Ollama
 docker-compose down                      # Detener todo
 ```
 
+## Flujo de Verificación de Cambios
+
+**NUNCA** usar herramientas de automatización de Chrome (preview_*, Claude in Chrome) para probar el sistema.
+
+Cuando se completan cambios de código:
+1. Informar al usuario qué archivos se modificaron y qué se cambió
+2. Indicar claramente que los cambios están listos para probar
+3. Esperar a que el usuario pruebe manualmente y dé feedback
+
+El usuario prueba en su propio navegador y reporta los resultados.
+
 ## Patrones de Desarrollo
 
 ### Backend

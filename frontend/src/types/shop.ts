@@ -94,8 +94,8 @@ export const TEMAS: Desbloqueable[] = [
   },
   {
     id: 'tema-piratas',
-    nombre: 'Piratas del Caribe Matemático',
-    descripcion: 'Reparte tesoros, calcula distancias entre islas y conviértete en el capitán pirata de los decimales.',
+    nombre: 'Piratas de los Mares',
+    descripcion: 'Navega en alta mar, reparte botines y demuestra que los decimales no tienen secretos para un verdadero Capitán Pirata.',
     categoria: 'tema',
     precio: 500,
     nivelRequerido: 1,
@@ -259,22 +259,9 @@ export const FONDOS: Desbloqueable[] = [
     config: { patron: 'patron', urlImagen: '/assets/fondos/papel-cuadriculado.png' },
   },
   {
-    id: 'fondo-degradado-azul',
-    nombre: 'Pizarra Verde',
-    descripcion: 'Como estar en un salón de clases',
-    categoria: 'fondo',
-    precio: 75,
-    nivelRequerido: 1,
-    rareza: 'comun',
-    icono: '🟩',
-    estaDesbloqueado: false,
-    esGratuito: false,
-    config: { patron: 'solido', colorHex: '#065F46' },
-  },
-  {
     id: 'fondo-noche',
     nombre: 'Galaxia Infinita',
-    descripcion: 'Un fondo espacial con estrellas brillantes',
+    descripcion: 'Un fondo espacial con números como galaxia',
     categoria: 'fondo',
     precio: 75,
     nivelRequerido: 2,
@@ -981,7 +968,7 @@ export const EFECTOS: Desbloqueable[] = [
     icono: '✨',
     estaDesbloqueado: false,
     esGratuito: false,
-    config: { animacion: 'stars-fall', duracionMs: 2000, sonido: 'twinkle.mp3' },
+    config: { animacion: 'stars-fall', duracionMs: 2000, sonido: '/assets/sound_effects/estrellas.mp3' },
   },
   {
     id: 'efecto-confeti',
@@ -994,7 +981,7 @@ export const EFECTOS: Desbloqueable[] = [
     icono: '🎉',
     estaDesbloqueado: false,
     esGratuito: false,
-    config: { animacion: 'confetti-burst', duracionMs: 1500, sonido: 'celebration.mp3' },
+    config: { animacion: 'confetti-burst', duracionMs: 1500, sonido: '/assets/sound_effects/confetti.mp3' },
   },
   {
     id: 'efecto-fuegos',
@@ -1007,7 +994,7 @@ export const EFECTOS: Desbloqueable[] = [
     icono: '🎆',
     estaDesbloqueado: false,
     esGratuito: false,
-    config: { animacion: 'fireworks', duracionMs: 3000, sonido: 'fireworks.mp3' },
+    config: { animacion: 'fireworks', duracionMs: 3000, sonido: '/assets/sound_effects/fuegos_artificiales.mp3' },
   },
   {
     id: 'efecto-rayo',
@@ -1020,7 +1007,7 @@ export const EFECTOS: Desbloqueable[] = [
     icono: '⚡',
     estaDesbloqueado: false,
     esGratuito: false,
-    config: { animacion: 'lightning-strike', duracionMs: 1000, sonido: 'thunder.mp3' },
+    config: { animacion: 'lightning-strike', duracionMs: 1000, sonido: '/assets/sound_effects/rayos.mp3' },
   },
   {
     id: 'efecto-aurora',
@@ -1033,7 +1020,7 @@ export const EFECTOS: Desbloqueable[] = [
     icono: '🌌',
     estaDesbloqueado: false,
     esGratuito: false,
-    config: { animacion: 'aurora-borealis', duracionMs: 4000, sonido: 'mystical.mp3' },
+    config: { animacion: 'aurora-borealis', duracionMs: 4000, sonido: '/assets/sound_effects/boreal.mp3' },
   },
 ];
 

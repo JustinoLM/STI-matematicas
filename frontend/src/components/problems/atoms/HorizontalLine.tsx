@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 interface HorizontalLineProps {
   width?: number | string; // pixels o string CSS
-  marginLeft?: number; // pixels para desplazar a la derecha
+  marginLeft?: number | string; // pixels o string CSS para desplazar a la derecha
   className?: string;
 }
 
@@ -12,7 +12,7 @@ interface HorizontalLineProps {
  */
 export function HorizontalLine({ width, marginLeft, className }: HorizontalLineProps) {
   const widthStyle = typeof width === 'number' ? `${width}px` : width;
-  const marginLeftStyle = typeof marginLeft === 'number' ? `${marginLeft}px` : undefined;
+  const marginLeftStyle = marginLeft === undefined ? undefined : typeof marginLeft === 'number' ? `${marginLeft}px` : marginLeft;
 
   return (
     <div

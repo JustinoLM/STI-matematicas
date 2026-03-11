@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from app.repositories.hints_videos_repository import HintsVideosRepository
 from app.repositories.gamification_repository import GamificationRepository
 from app.repositories.adaptive_repository import AdaptiveRepository
-from app.services.ollama_service import OllamaService, OllamaPrompts
+from app.services.llm_service import LLMService, LLMPrompts
 from app.models.hints_videos import NivelPista, TipoError
 from app.models.problem import Problema
 from app.schemas.hints_videos import PistaResponse
@@ -28,12 +28,12 @@ class HintsService:
         hints_videos_repo: HintsVideosRepository,
         gamification_repo: GamificationRepository,
         adaptive_repo: AdaptiveRepository,
-        ollama_service: OllamaService
+        llm_service: LLMService
     ):
         self.hints_videos_repo = hints_videos_repo
         self.gamification_repo = gamification_repo
         self.adaptive_repo = adaptive_repo
-        self.ollama_service = ollama_service
+        self.llm_service = llm_service
     
     async def solicitar_pista(
         self,
@@ -192,7 +192,7 @@ class HintsService:
         
         operacion_simbolo = operacion_map.get(problema.operacion.value, problema.operacion.value)
         
-        prompt = OllamaPrompts.generar_pista_nivel_3(
+        prompt = LLMPrompts.generar_pista_nivel_3(
             operacion=operacion_simbolo,
             operando1=float(problema.operando1),
             operando2=float(problema.operando2),
@@ -204,7 +204,7 @@ class HintsService:
         inicio = time.time()
         
         try:
-            contenido = await self.ollama_service.generate(
+            contenido = await self.llm_service.generate(
                 prompt=prompt,
                 temperature=0.7,
                 max_tokens=150
@@ -217,7 +217,7 @@ class HintsService:
                 tipo="pista_nivel_3",
                 prompt_usado=prompt,
                 respuesta_llm=contenido,
-                modelo=self.ollama_service.model,
+                modelo=self.llm_service.model_v3,
                 problema_id=problema.id,
                 tiempo_generacion_ms=tiempo_ms,
                 exitoso=True
@@ -231,7 +231,7 @@ class HintsService:
                 tipo="pista_nivel_3",
                 prompt_usado=prompt,
                 respuesta_llm="",
-                modelo=self.ollama_service.model,
+                modelo=self.llm_service.model_v3,
                 problema_id=problema.id,
                 exitoso=False,
                 error=str(e)

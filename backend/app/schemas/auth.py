@@ -9,7 +9,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
-from app.models.user import TipoUsuario
+from app.models.user import TipoUsuario, Genero
 
 
 # ============================================
@@ -39,6 +39,7 @@ class CreateStudentRequest(BaseModel):
     """Request para crear estudiante (solo admin)."""
     codigo_estudiante: str = Field(min_length=5, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
+    genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
 
@@ -47,6 +48,7 @@ class CreateStudentRequest(BaseModel):
             "example": {
                 "codigo_estudiante": "EST001",
                 "nombre_completo": "Juan Pérez",
+                "genero": "masculino",
                 "password": "temp123",
                 "organizacion_id": 1,
             }
@@ -106,6 +108,7 @@ class StudentResponse(UserBase):
     """Response para estudiante."""
     codigo_estudiante: str
     nombre_completo: str
+    genero: Genero
     narrativa_seleccionada_id: Optional[int]
 
     class Config:

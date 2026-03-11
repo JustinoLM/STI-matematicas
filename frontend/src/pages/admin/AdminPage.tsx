@@ -32,6 +32,13 @@ import {
   Copy,
   Calendar,
   Clock,
+  Sparkles,
+  Brain,
+  ShieldCheck,
+  Activity,
+  RefreshCw,
+  Server,
+  Lock,
 } from 'lucide-react';
 import apiClient, { getErrorMessage } from '@/services/api';
 
@@ -40,6 +47,7 @@ import apiClient, { getErrorMessage } from '@/services/api';
 interface CreateStudentPayload {
   codigo_estudiante: string;
   nombre_completo: string;
+  genero: 'masculino' | 'femenino';
   password: string;
   organizacion_id?: number;
 }
@@ -100,15 +108,6 @@ interface UsuarioAdmin {
 interface AllUsersResponse {
   profesores: UsuarioAdmin[];
   estudiantes: UsuarioAdmin[];
-}
-
-// Registro local de contraseñas (solo en memoria de la sesión, nunca sale al backend)
-interface CredencialLocal {
-  codigo: string;
-  nombre: string;
-  password: string;
-  tipo: 'estudiante' | 'profesor';
-  creadoEn: string;
 }
 
 // ─── Servicios de admin ───────────────────────────────────────────────────────
@@ -237,6 +236,7 @@ function FormEstudiante({ organizaciones }: {
   const [form, setForm] = useState({
     codigo_estudiante: '',
     nombre_completo: '',
+    genero: 'masculino' as 'masculino' | 'femenino',
     password: '',
     organizacion_id: '',
   });
@@ -248,7 +248,7 @@ function FormEstudiante({ organizaciones }: {
     onSuccess: (data) => {
       setResultado(data);
       setError(null);
-      setForm({ codigo_estudiante: '', nombre_completo: '', password: '', organizacion_id: '' });
+      setForm({ codigo_estudiante: '', nombre_completo: '', genero: 'masculino', password: '', organizacion_id: '' });
     },
     onError: (err) => {
       setError(getErrorMessage(err));
@@ -262,6 +262,7 @@ function FormEstudiante({ organizaciones }: {
     mutation.mutate({
       codigo_estudiante: form.codigo_estudiante.trim().toUpperCase(),
       nombre_completo: form.nombre_completo.trim(),
+      genero: form.genero,
       password: form.password,
       organizacion_id: form.organizacion_id ? Number(form.organizacion_id) : undefined,
     });
@@ -293,6 +294,21 @@ function FormEstudiante({ organizaciones }: {
             required
             minLength={3}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="genero-est">Género *</Label>
+          <select
+            id="genero-est"
+            value={form.genero}
+            onChange={e => setForm(f => ({ ...f, genero: e.target.value as 'masculino' | 'femenino' }))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+            required
+          >
+            <option value="masculino">Masculino</option>
+            <option value="femenino">Femenino</option>
+          </select>
+          <p className="text-xs text-muted-foreground">Se usa para personalizar mensajes del tutor.</p>
         </div>
 
         <div className="space-y-2">
@@ -1030,16 +1046,431 @@ function SeccionEliminar() {
   );
 }
 
+// ─── Sección: Agregar puntos ──────────────────────────────────────────────────
+
+function SeccionAgregarPuntos() {
+  const queryClient = useQueryClient();
+  const [estudianteId, setEstudianteId] = useState('');
+  const [puntos, setPuntos] = useState('');
+  const [resultado, setResultado] = useState<{ nombre: string; nuevo_saldo: number } | null>(null);
+
+  const { data: usersData } = useQuery({
+    queryKey: ['admin-usuarios'],
+    queryFn: () => apiClient.get('/admin/users').then(r => r.data),
+    staleTime: 30 * 1000,
+  });
+  const estudiantes: { id: number; nombre_completo: string; codigo: string; puntos_totales: number }[] =
+    usersData?.estudiantes ?? [];
+
+  const mutation = useMutation({
+    mutationFn: (payload: { estudiante_id: number; puntos: number }) =>
+      apiClient.post('/admin/gamification/add-points', payload).then(r => r.data),
+    onSuccess: (data) => {
+      setResultado({ nombre: data.nombre, nuevo_saldo: data.nuevo_saldo });
+      setPuntos('');
+      queryClient.invalidateQueries({ queryKey: ['admin-usuarios'] });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!estudianteId || !puntos) return;
+    setResultado(null);
+    mutation.mutate({ estudiante_id: Number(estudianteId), puntos: Number(puntos) });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-yellow-500" />
+          Agregar Puntos (Testing)
+        </CardTitle>
+        <CardDescription>Añade puntos manualmente a un estudiante para probar la tienda y el sistema.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
+          <div className="space-y-2">
+            <Label htmlFor="estudiante-sel">Estudiante</Label>
+            <select
+              id="estudiante-sel"
+              value={estudianteId}
+              onChange={e => { setEstudianteId(e.target.value); setResultado(null); }}
+              className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm"
+              required
+            >
+              <option value="">Seleccionar estudiante...</option>
+              {estudiantes.map(e => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre_completo} ({e.codigo}) — {e.puntos_totales} pts
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="puntos-input">Puntos a agregar</Label>
+            <Input
+              id="puntos-input"
+              type="number"
+              min={1}
+              max={99999}
+              placeholder="Ej: 500"
+              value={puntos}
+              onChange={e => setPuntos(e.target.value)}
+              required
+            />
+          </div>
+
+          <Button type="submit" disabled={mutation.isPending} className="w-full bg-yellow-500 hover:bg-yellow-600 text-white">
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            Agregar Puntos
+          </Button>
+
+          {mutation.isError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-md">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {getErrorMessage(mutation.error)}
+            </div>
+          )}
+
+          {resultado && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-md">
+              <Check className="h-4 w-4 flex-shrink-0" />
+              <span>
+                <strong>{resultado.nombre}</strong> ahora tiene{' '}
+                <strong>{resultado.nuevo_saldo.toLocaleString()} puntos</strong>
+              </span>
+            </div>
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Tab: Machine Learning ────────────────────────────────────────────────────
+
+function TabML() {
+  const queryClient = useQueryClient();
+
+  const { data: estado, isLoading: cargandoEstado } = useQuery({
+    queryKey: ['admin-ml-estado'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/ml/estado');
+      return res.data as {
+        clustering_entrenado: boolean;
+        prediccion_entrenado: boolean;
+        scaler_disponible: boolean;
+        umbrales_por_perfil: Record<string, number>;
+      };
+    },
+    staleTime: 30 * 1000,
+  });
+
+  const entrenarMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post('/admin/ml/entrenar');
+      return res.data as {
+        success: boolean;
+        mensaje: string;
+        total_perfiles?: number;
+        perfiles_validos?: number;
+        reclasificados?: number;
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-ml-estado'] });
+    },
+  });
+
+  const perfilesLabel: Record<string, { label: string; color: string }> = {
+    rapido_preciso: { label: 'Rápido y Preciso', color: 'bg-green-100 text-green-800' },
+    cuidadoso_metodico: { label: 'Cuidadoso y Metódico', color: 'bg-blue-100 text-blue-800' },
+    impulsivo: { label: 'Impulsivo', color: 'bg-orange-100 text-orange-800' },
+    en_desarrollo: { label: 'En Desarrollo', color: 'bg-purple-100 text-purple-800' },
+    no_clasificado: { label: 'No Clasificado', color: 'bg-gray-100 text-gray-600' },
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Estado del modelo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-600" />
+            Estado del Modelo K-Means
+          </CardTitle>
+          <CardDescription>Clustering de perfiles de aprendizaje (k=4)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cargandoEstado ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Consultando estado...
+            </div>
+          ) : estado ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Clustering', activo: estado.clustering_entrenado },
+                  { label: 'Scaler', activo: estado.scaler_disponible },
+                  { label: 'Predicción', activo: estado.prediccion_entrenado },
+                ].map(({ label, activo }) => (
+                  <div key={label} className={`flex items-center gap-2 rounded-lg p-3 ${activo ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
+                    <div className={`h-2.5 w-2.5 rounded-full ${activo ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className={`ml-auto text-xs font-semibold ${activo ? 'text-green-700' : 'text-gray-500'}`}>
+                      {activo ? 'Activo' : 'Sin modelo'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Umbrales por perfil */}
+              <div>
+                <p className="text-sm font-medium mb-2">Umbrales de promoción por perfil</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {Object.entries(estado.umbrales_por_perfil).map(([perfil, umbral]) => {
+                    const info = perfilesLabel[perfil] ?? { label: perfil, color: 'bg-gray-100 text-gray-700' };
+                    return (
+                      <div key={perfil} className={`flex items-center justify-between rounded-md px-3 py-2 text-xs ${info.color}`}>
+                        <span>{info.label}</span>
+                        <span className="font-bold ml-2">{umbral} ✓</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Entrenar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-blue-600" />
+            Entrenar / Re-entrenar Modelo
+          </CardTitle>
+          <CardDescription>
+            Usa todos los perfiles con ≥3 sesiones. Requiere mínimo 10 estudiantes válidos.
+            Tras entrenar, reclasifica a todos los estudiantes automáticamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button
+            onClick={() => entrenarMutation.mutate()}
+            disabled={entrenarMutation.isPending}
+            className="w-full sm:w-auto"
+          >
+            {entrenarMutation.isPending
+              ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Entrenando...</>
+              : <><Brain className="h-4 w-4 mr-2" /> Entrenar ahora</>
+            }
+          </Button>
+
+          {entrenarMutation.isError && (
+            <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              {getErrorMessage(entrenarMutation.error)}
+            </div>
+          )}
+
+          {entrenarMutation.isSuccess && entrenarMutation.data && (
+            <div className={`rounded-lg p-4 border ${entrenarMutation.data.success ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-start gap-2">
+                {entrenarMutation.data.success
+                  ? <Check className="h-4 w-4 text-green-700 mt-0.5 flex-shrink-0" />
+                  : <AlertCircle className="h-4 w-4 text-amber-700 mt-0.5 flex-shrink-0" />
+                }
+                <div className="space-y-1">
+                  <p className={`text-sm font-medium ${entrenarMutation.data.success ? 'text-green-800' : 'text-amber-800'}`}>
+                    {entrenarMutation.data.mensaje}
+                  </p>
+                  {entrenarMutation.data.success && (
+                    <div className="flex gap-4 text-xs text-green-700 mt-2">
+                      <span>Perfiles totales: <strong>{entrenarMutation.data.total_perfiles}</strong></span>
+                      <span>Válidos: <strong>{entrenarMutation.data.perfiles_validos}</strong></span>
+                      <span>Reclasificados: <strong>{entrenarMutation.data.reclasificados}</strong></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            El sistema también entrena automáticamente cada 3 días si hay suficientes datos.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Tab: Sistema ─────────────────────────────────────────────────────────────
+
+function TabSistema() {
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['admin-sistema-stats'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/sistema/stats');
+      return res.data as {
+        total_estudiantes: number;
+        total_profesores: number;
+        total_grupos: number;
+        total_organizaciones: number;
+        sesiones_hoy: number;
+        sesiones_semana: number;
+        sesiones_activas: number;
+        total_sesiones: number;
+        perfiles_clasificados: number;
+      };
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const stats = [
+    { label: 'Estudiantes', value: data?.total_estudiantes, icon: BookOpen, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Profesores', value: data?.total_profesores, icon: GraduationCap, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: 'Grupos', value: data?.total_grupos, icon: Users, color: 'text-violet-600', bg: 'bg-violet-50' },
+    { label: 'Organizaciones', value: data?.total_organizaciones, icon: Building2, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: 'Sesiones hoy', value: data?.sesiones_hoy, icon: Activity, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: 'Sesiones (7 días)', value: data?.sesiones_semana, icon: Calendar, color: 'text-teal-600', bg: 'bg-teal-50' },
+    { label: 'Sesiones activas', value: data?.sesiones_activas, icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Total sesiones', value: data?.total_sesiones, icon: Server, color: 'text-gray-600', bg: 'bg-gray-50' },
+    { label: 'Perfiles ML', value: data?.perfiles_clasificados, icon: Brain, color: 'text-purple-600', bg: 'bg-purple-50' },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-gray-600" />
+              Estadísticas del Sistema
+            </CardTitle>
+            <CardDescription>Vista general del estado actual del STI</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando estadísticas...
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {stats.map(({ label, value, icon: Icon, color, bg }) => (
+              <div key={label} className={`rounded-xl p-4 ${bg} flex items-center gap-3`}>
+                <div className={`p-2 rounded-lg bg-white shadow-sm`}>
+                  <Icon className={`h-4 w-4 ${color}`} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className={`text-xl font-bold ${color}`}>{value ?? '—'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Password Gate ─────────────────────────────────────────────────────────────
+
+function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
+  const [pwd, setPwd] = useState('');
+  const [visible, setVisible] = useState(false);
+  const [error, setError] = useState('');
+
+  const ADMIN_PWD = import.meta.env.VITE_ADMIN_PASSWORD || '';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwd === ADMIN_PWD) {
+      sessionStorage.setItem('admin_auth', 'ok');
+      onAcceso();
+    } else {
+      setError('Contraseña incorrecta');
+      setPwd('');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center space-y-2">
+          <div className="flex justify-center">
+            <div className="p-3 rounded-full bg-blue-100">
+              <Lock className="h-6 w-6 text-blue-700" />
+            </div>
+          </div>
+          <CardTitle>Panel de Administración</CardTitle>
+          <CardDescription>Ingresa la contraseña para continuar</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="relative">
+              <Input
+                type={visible ? 'text' : 'password'}
+                placeholder="Contraseña de administrador"
+                value={pwd}
+                onChange={e => { setPwd(e.target.value); setError(''); }}
+                className="pr-10"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                onClick={() => setVisible(v => !v)}
+                tabIndex={-1}
+              >
+                {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4" /> {error}
+              </div>
+            )}
+            <Button type="submit" className="w-full">
+              <ShieldCheck className="h-4 w-4 mr-2" /> Ingresar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function AdminPage() {
+  const [autenticado, setAutenticado] = useState(() =>
+    sessionStorage.getItem('admin_auth') === 'ok'
+  );
+
   // Lista de organizaciones disponibles para los dropdowns (compartida entre tabs)
   const { data: orgsData } = useQuery({
     queryKey: ['admin-organizaciones'],
     queryFn: () => adminService.getOrganizaciones(),
     staleTime: 30 * 1000,
+    enabled: autenticado,
   });
   const organizaciones = orgsData?.organizaciones ?? [];
+
+  if (!autenticado) {
+    return <PasswordGate onAcceso={() => setAutenticado(true)} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -1051,9 +1482,21 @@ export function AdminPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Administración STI</h1>
-            <p className="text-sm text-muted-foreground">Gestión de usuarios y organizaciones del sistema</p>
+            <p className="text-sm text-muted-foreground">Gestión de usuarios, organizaciones y sistema</p>
           </div>
-          <Badge variant="outline" className="ml-auto">Panel Admin</Badge>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="outline" className="flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" /> Admin
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => { sessionStorage.removeItem('admin_auth'); setAutenticado(false); }}
+            >
+              Cerrar sesión
+            </Button>
+          </div>
         </div>
 
         {/* Info */}
@@ -1069,65 +1512,104 @@ export function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Tabs — 5 pestañas */}
-        <Tabs defaultValue="organizaciones">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="organizaciones" className="flex items-center gap-1 text-xs">
-              <Building2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Orgs</span>
-            </TabsTrigger>
-            <TabsTrigger value="estudiante" className="flex items-center gap-1 text-xs">
-              <BookOpen className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">+ Estudiante</span>
-            </TabsTrigger>
-            <TabsTrigger value="profesor" className="flex items-center gap-1 text-xs">
-              <GraduationCap className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">+ Profesor</span>
-            </TabsTrigger>
-            <TabsTrigger value="usuarios" className="flex items-center gap-1 text-xs">
+        {/* Tabs — 4 secciones principales */}
+        <Tabs defaultValue="usuarios">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="usuarios" className="flex items-center gap-1.5 text-xs">
               <Users className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Ver Usuarios</span>
+              <span>Usuarios</span>
             </TabsTrigger>
-            <TabsTrigger value="eliminar" className="flex items-center gap-1 text-xs text-red-600 data-[state=active]:text-red-700">
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Eliminar</span>
+            <TabsTrigger value="organizaciones" className="flex items-center gap-1.5 text-xs">
+              <Building2 className="h-3.5 w-3.5" />
+              <span>Orgs</span>
+            </TabsTrigger>
+            <TabsTrigger value="ml" className="flex items-center gap-1.5 text-xs">
+              <Brain className="h-3.5 w-3.5" />
+              <span>ML</span>
+            </TabsTrigger>
+            <TabsTrigger value="sistema" className="flex items-center gap-1.5 text-xs">
+              <Server className="h-3.5 w-3.5" />
+              <span>Sistema</span>
             </TabsTrigger>
           </TabsList>
 
+          {/* ── Usuarios: sub-tabs con toda la gestión de usuarios ── */}
+          <TabsContent value="usuarios">
+            <Tabs defaultValue="estudiante" className="mt-2">
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="estudiante" className="flex items-center gap-1 text-xs">
+                  <BookOpen className="h-3 w-3" />
+                  <span className="hidden sm:inline">+ Estudiante</span>
+                </TabsTrigger>
+                <TabsTrigger value="profesor" className="flex items-center gap-1 text-xs">
+                  <GraduationCap className="h-3 w-3" />
+                  <span className="hidden sm:inline">+ Profesor</span>
+                </TabsTrigger>
+                <TabsTrigger value="ver" className="flex items-center gap-1 text-xs">
+                  <Users className="h-3 w-3" />
+                  <span className="hidden sm:inline">Ver todos</span>
+                </TabsTrigger>
+                <TabsTrigger value="puntos" className="flex items-center gap-1 text-xs text-yellow-600 data-[state=active]:text-yellow-700">
+                  <Sparkles className="h-3 w-3" />
+                  <span className="hidden sm:inline">Puntos</span>
+                </TabsTrigger>
+                <TabsTrigger value="eliminar" className="flex items-center gap-1 text-xs text-red-600 data-[state=active]:text-red-700">
+                  <Trash2 className="h-3 w-3" />
+                  <span className="hidden sm:inline">Eliminar</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="estudiante">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Crear Estudiante</CardTitle>
+                    <CardDescription>El estudiante podrá iniciar sesión con su código y contraseña.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormEstudiante organizaciones={organizaciones} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="profesor">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Crear Profesor</CardTitle>
+                    <CardDescription>El profesor tendrá acceso al dashboard de gestión de grupos.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormProfesor organizaciones={organizaciones} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="ver">
+                <SeccionVerUsuarios />
+              </TabsContent>
+
+              <TabsContent value="puntos">
+                <SeccionAgregarPuntos />
+              </TabsContent>
+
+              <TabsContent value="eliminar">
+                <SeccionEliminar />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* ── Organizaciones ── */}
           <TabsContent value="organizaciones">
             <SeccionOrganizaciones />
           </TabsContent>
 
-          <TabsContent value="estudiante">
-            <Card>
-              <CardHeader>
-                <CardTitle>Crear Estudiante</CardTitle>
-                <CardDescription>El estudiante podrá iniciar sesión con su código y contraseña.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormEstudiante organizaciones={organizaciones} />
-              </CardContent>
-            </Card>
+          {/* ── Machine Learning ── */}
+          <TabsContent value="ml">
+            <TabML />
           </TabsContent>
 
-          <TabsContent value="profesor">
-            <Card>
-              <CardHeader>
-                <CardTitle>Crear Profesor</CardTitle>
-                <CardDescription>El profesor tendrá acceso al dashboard de gestión de grupos.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormProfesor organizaciones={organizaciones} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="usuarios">
-            <SeccionVerUsuarios />
-          </TabsContent>
-
-          <TabsContent value="eliminar">
-            <SeccionEliminar />
+          {/* ── Sistema ── */}
+          <TabsContent value="sistema">
+            <TabSistema />
           </TabsContent>
         </Tabs>
 

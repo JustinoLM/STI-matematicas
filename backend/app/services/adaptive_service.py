@@ -621,7 +621,17 @@ class AdaptiveService:
         
         # Mensaje motivacional
         mensaje = self._generar_mensaje_motivacional(es_perfecta, precision, cambios)
-        
+
+        # Actualizar progreso de desafíos grupales activos del estudiante
+        await self._actualizar_desafios_grupales(
+            estudiante_id=sesion.estudiante_id,
+            problemas_correctos=correctos,
+            problemas_incorrectos=incorrectos,
+            es_practica_perfecta=es_perfecta,
+            tiempo_total_segundos=int(tiempo_total),
+            velocidad_promedio=float(velocidad_promedio),
+        )
+
         return SesionCompleteResponse(
             sesion_id=sesion.id,
             problemas_correctos=correctos,
@@ -903,7 +913,191 @@ class AdaptiveService:
             return "Buen trabajo. Sigue practicando 💪"
         
         return "No te rindas. La práctica hace al maestro 📚"
-    
+
+    # ============================================
+    # Recuperación de Sesión Activa
+    # ============================================
+
+    async def get_sesion_activa(self, estudiante_id: int):
+        """
+        Devuelve la sesión EN_PROGRESO del estudiante si existe y tiene
+        menos de 90 minutos de inactividad, o None si no hay ninguna.
+        """
+        from app.schemas.adaptive import SesionActivaResponse
+        sesion = await self.adaptive_repo.get_sesion_activa(estudiante_id)
+        if not sesion:
+            return None
+        minutos = int((datetime.utcnow() - sesion.fecha_inicio).total_seconds() / 60)
+        return SesionActivaResponse(
+            sesion_id=sesion.id,
+            problemas_completados=sesion.progreso_actual,
+            cantidad_problemas=sesion.cantidad_problemas,
+            operaciones_incluidas=sesion.operaciones_incluidas or {},
+            nivel_actual=sesion.nivel_actual_inicio,
+            minutos_transcurridos=minutos,
+            fecha_inicio=sesion.fecha_inicio,
+        )
+
+    async def retomar_sesion(self, sesion_id: int, estudiante_id: int) -> SesionStartResponse:
+        """
+        Retoma una sesión EN_PROGRESO devolviendo solo los problemas restantes.
+        Si la sesión no pertenece al estudiante o no está EN_PROGRESO, lanza 404.
+        """
+        sesion = await self.adaptive_repo.get_sesion(sesion_id)
+        if not sesion or sesion.estudiante_id != estudiante_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sesión no encontrada"
+            )
+        if sesion.estado != "en_progreso":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La sesión ya no está activa"
+            )
+
+        # Problemas pendientes = desde progreso_actual hasta el final
+        todos_ids: List[int] = sesion.problemas_ids or []
+        ids_restantes = todos_ids[sesion.progreso_actual:]
+
+        problemas = []
+        for pid in ids_restantes:
+            p = await self.problem_repo.get_problem_by_id(pid)
+            if p:
+                problemas.append(p)
+
+        problemas_display = [
+            {
+                "id": p.id,
+                "operacion": p.operacion.value,
+                "numero1": str(p.numero1.normalize()),
+                "numero2": str(p.numero2.normalize()),
+                "nivel_dificultad": p.nivel_dificultad,
+                "cantidad_decimales": p.cantidad_decimales,
+            }
+            for p in problemas
+        ]
+
+        completados = sesion.progreso_actual
+        total = sesion.cantidad_problemas
+        return SesionStartResponse(
+            sesion_id=sesion.id,
+            cantidad_problemas=total,
+            operaciones_incluidas=sesion.operaciones_incluidas or {},
+            nivel_actual=sesion.nivel_actual_inicio,
+            problemas=problemas_display,
+            mensaje_intro=(
+                f"Retomando práctica… ya completaste {completados} de {total} problemas. ¡Sigue!"
+            ),
+        )
+
+    async def descartar_sesion(self, sesion_id: int, estudiante_id: int) -> None:
+        """
+        Marca una sesión EN_PROGRESO como ABANDONADA.
+        Solo el dueño puede descartarla.
+        """
+        sesion = await self.adaptive_repo.get_sesion(sesion_id)
+        if not sesion or sesion.estudiante_id != estudiante_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sesión no encontrada"
+            )
+        if sesion.estado != "en_progreso":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La sesión ya no está activa"
+            )
+        sesion.estado = "abandonada"
+        sesion.fecha_fin = datetime.utcnow()
+        await self.adaptive_repo.update_sesion(sesion)
+
+    # ============================================
+    # Redención
+    # ============================================
+
+    async def get_disponibilidad_redencion(self, estudiante_id: int) -> dict:
+        """Verifica si el estudiante tiene problemas disponibles para redimir."""
+        ids_fallados = await self.adaptive_repo.get_problemas_fallados(estudiante_id)
+        return {
+            "disponible": len(ids_fallados) > 0,
+            "total_problemas_fallados": len(ids_fallados)
+        }
+
+    async def iniciar_sesion_redencion(self, estudiante_id: int) -> SesionStartResponse:
+        """
+        Inicia una sesión de redención con 5 problemas que el estudiante falló.
+
+        Los problemas son exactamente los que el estudiante intentó pero nunca
+        resolvió correctamente, elegidos al azar entre todos los disponibles.
+        """
+        perfil = await self.adaptive_repo.get_or_create_perfil(estudiante_id)
+
+        if not perfil.diagnostico_completado:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Debes completar el diagnóstico inicial primero"
+            )
+
+        # Obtener hasta 50 problemas fallados y elegir 5 al azar
+        ids_fallados = await self.adaptive_repo.get_problemas_fallados(estudiante_id, limit=50)
+
+        if not ids_fallados:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No tienes problemas pendientes de redención. ¡Buen trabajo!"
+            )
+
+        cantidad = min(5, len(ids_fallados))
+        ids_elegidos = random.sample(ids_fallados, cantidad)
+
+        # Cargar los objetos Problema
+        problemas = []
+        for pid in ids_elegidos:
+            p = await self.problem_repo.get_problem_by_id(pid)
+            if p:
+                problemas.append(p)
+
+        random.shuffle(problemas)
+
+        # Calcular distribución por operación (para el JSON de la sesión)
+        distribucion: Dict[str, int] = {}
+        for p in problemas:
+            op_str = p.operacion.value  # "+", "-", "×", "÷"
+            distribucion[op_str] = distribucion.get(op_str, 0) + 1
+
+        # Crear sesión reutilizando el repositorio existente
+        sesion = await self.adaptive_repo.create_sesion(
+            estudiante_id=estudiante_id,
+            perfil=perfil,
+            cantidad_problemas=len(problemas),
+            problemas_ids=[p.id for p in problemas],
+            operaciones_incluidas=distribucion,
+            ratio_dificultad={"redencion": 1.0}
+        )
+
+        problemas_display = [
+            {
+                "id": p.id,
+                "operacion": p.operacion.value,
+                "numero1": str(p.numero1.normalize()),
+                "numero2": str(p.numero2.normalize()),
+                "nivel_dificultad": p.nivel_dificultad,
+                "cantidad_decimales": p.cantidad_decimales,
+            }
+            for p in problemas
+        ]
+
+        return SesionStartResponse(
+            sesion_id=sesion.id,
+            cantidad_problemas=len(problemas),
+            operaciones_incluidas=distribucion,
+            nivel_actual=perfil.nivel_actual,
+            problemas=problemas_display,
+            mensaje_intro=(
+                "¡Es hora de demostrar que aprendiste! "
+                "Estos son los problemas que antes no pudiste resolver. 💪"
+            )
+        )
+
     # ============================================
     # Obtener Perfil y Estadísticas
     # ============================================
@@ -962,3 +1156,150 @@ class AdaptiveService:
             grupo_nombre=grupo_info["grupo_nombre"] if grupo_info else None,
             profesor_nombre=grupo_info["profesor_nombre"] if grupo_info else None,
         )
+
+    # ============================================
+    # Desafíos Grupales
+    # ============================================
+
+    async def _actualizar_desafios_grupales(
+        self,
+        estudiante_id: int,
+        problemas_correctos: int,
+        problemas_incorrectos: int,
+        es_practica_perfecta: bool,
+        tiempo_total_segundos: int,
+        velocidad_promedio: float,
+    ) -> None:
+        """Actualiza el progreso de desafíos grupales activos y otorga monedas si se completan.
+
+        Tipos de desafío soportados:
+        - problemas_resueltos    → +N correctos por sesión
+        - sesiones_completadas   → +1 por sesión
+        - practicas_sin_errores  → +1 si incorrectos <= parametro_adicional
+        - problemas_rapidos      → +N correctos si velocidad <= parametro_adicional seg/problema
+        - practicas_rapidas      → +1 si tiempo_total <= parametro_adicional * 60 seg
+
+        Cuando un grupo completa un desafío por primera vez y hay recompensa_puntos,
+        se otorgan monedas (puntos de tienda) a todos los estudiantes activos del grupo
+        usando GamificationRepository para registrar la transacción correctamente.
+        """
+        from sqlalchemy import select, and_, func
+        from app.models.group import EstudianteGrupo
+        from app.models.challenge import DesafioGrupal, GrupoDesafio
+        from app.repositories.gamification_repository import GamificationRepository
+
+        db = self.adaptive_repo.db
+
+        # Grupos activos a los que pertenece el estudiante
+        result = await db.execute(
+            select(EstudianteGrupo.grupo_id)
+            .where(and_(
+                EstudianteGrupo.estudiante_id == estudiante_id,
+                EstudianteGrupo.activo == True,
+            ))
+        )
+        grupos_ids = [row[0] for row in result.all()]
+
+        if not grupos_ids:
+            return
+
+        # Desafíos activos asignados a esos grupos
+        result = await db.execute(
+            select(GrupoDesafio, DesafioGrupal)
+            .join(DesafioGrupal, GrupoDesafio.desafio_id == DesafioGrupal.id)
+            .where(and_(
+                GrupoDesafio.grupo_id.in_(grupos_ids),
+                DesafioGrupal.completado == False,
+                DesafioGrupal.eliminado == False,
+            ))
+        )
+        relaciones = result.all()
+
+        if not relaciones:
+            return
+
+        for gd, desafio in relaciones:
+            # ── Calcular incremento según tipo ────────────────────────────────
+            incremento = 0
+            max_param = desafio.parametro_adicional or 0
+
+            if desafio.tipo == "problemas_resueltos":
+                incremento = problemas_correctos
+
+            elif desafio.tipo == "sesiones_completadas":
+                incremento = 1
+
+            elif desafio.tipo == "practicas_sin_errores":
+                # Cuenta solo si esta sesión tuvo <= Y errores
+                if problemas_incorrectos <= max_param:
+                    incremento = 1
+
+            elif desafio.tipo == "problemas_rapidos":
+                # Cuenta los correctos solo si la velocidad fue <= Y seg/problema
+                if max_param > 0 and velocidad_promedio <= max_param:
+                    incremento = problemas_correctos
+
+            elif desafio.tipo == "practicas_rapidas":
+                # Cuenta la sesión solo si duró <= Y minutos
+                if max_param > 0 and tiempo_total_segundos <= max_param * 60:
+                    incremento = 1
+
+            if incremento > 0:
+                gd.progreso_actual = min(
+                    gd.progreso_actual + incremento,
+                    desafio.objetivo_cantidad,
+                )
+
+            # ── Detectar primera compleción y otorgar monedas de tienda ─────────
+            grupo_completo = gd.progreso_actual >= desafio.objetivo_cantidad
+            if grupo_completo and not gd.puntos_otorgados:
+                desafio.completado = True
+                gd.puntos_otorgados = True
+
+                # Otorgar monedas solo a estudiantes que participaron activamente
+                # (completaron al menos 1 sesión dentro de la ventana del desafío)
+                if desafio.recompensa_puntos and desafio.recompensa_puntos > 0:
+                    from app.models.adaptive import SesionPractica, EstadoSesion
+
+                    # 1. Todos los miembros activos del grupo
+                    est_result = await db.execute(
+                        select(EstudianteGrupo.estudiante_id)
+                        .where(and_(
+                            EstudianteGrupo.grupo_id == gd.grupo_id,
+                            EstudianteGrupo.activo == True,
+                        ))
+                    )
+                    miembros_ids = [row[0] for row in est_result.all()]
+
+                    # 2. Filtrar solo los que completaron ≥ MIN sesiones en la ventana
+                    #    (mismo umbral que el router de estudiante)
+                    MIN_SESIONES = 3
+                    cond_ventana = [
+                        SesionPractica.estudiante_id.in_(miembros_ids),
+                        SesionPractica.estado == EstadoSesion.COMPLETADA,
+                        SesionPractica.fecha_fin >= desafio.fecha_creacion,
+                    ]
+                    if desafio.fecha_limite:
+                        cond_ventana.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
+
+                    part_result = await db.execute(
+                        select(
+                            SesionPractica.estudiante_id,
+                            func.count(SesionPractica.id).label("cnt"),
+                        )
+                        .where(and_(*cond_ventana))
+                        .group_by(SesionPractica.estudiante_id)
+                        .having(func.count(SesionPractica.id) >= MIN_SESIONES)
+                    )
+                    participantes_ids = [row[0] for row in part_result.all()]
+
+                    # 3. Solo los participantes reciben la recompensa
+                    gamif_repo = GamificationRepository(db)
+                    for part_id in participantes_ids:
+                        await gamif_repo.agregar_puntos(
+                            estudiante_id=part_id,
+                            cantidad=desafio.recompensa_puntos,
+                            concepto=f"Desafío grupal completado: {desafio.nombre}",
+                        )
+
+        await db.flush()

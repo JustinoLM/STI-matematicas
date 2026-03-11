@@ -22,10 +22,12 @@ from app.schemas.adaptive import (
     DiagnosticoSubmit,
     DiagnosticoResultado,
     SesionStartResponse,
+    SesionActivaResponse,
     SesionComplete,
     SesionCompleteResponse,
     PerfilResponse
 )
+from typing import Optional
 
 router = APIRouter()
 
@@ -93,6 +95,45 @@ async def iniciar_practica(
     return await adaptive_service.iniciar_sesion(current_student.id)
 
 
+@router.get("/practice/sesion-activa", response_model=Optional[SesionActivaResponse])
+async def sesion_activa(
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep
+):
+    """
+    Devuelve la sesión EN_PROGRESO del estudiante si existe y tiene <90 min de inactividad.
+    Retorna null si no hay sesión activa.
+    """
+    return await adaptive_service.get_sesion_activa(current_student.id)
+
+
+@router.post("/practice/retomar/{sesion_id}", response_model=SesionStartResponse)
+async def retomar_practica(
+    sesion_id: int,
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep
+):
+    """
+    Retoma una sesión EN_PROGRESO devolviendo los problemas restantes.
+    Los problemas ya completados no se repiten.
+    """
+    return await adaptive_service.retomar_sesion(sesion_id, current_student.id)
+
+
+@router.post("/practice/descartar/{sesion_id}")
+async def descartar_practica(
+    sesion_id: int,
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep
+):
+    """
+    Descarta (marca como ABANDONADA) una sesión EN_PROGRESO.
+    Útil cuando el estudiante quiere empezar una sesión fresca.
+    """
+    await adaptive_service.descartar_sesion(sesion_id, current_student.id)
+    return {"ok": True}
+
+
 @router.post("/practice/complete", response_model=SesionCompleteResponse)
 async def completar_practica(
     sesion_complete: SesionComplete,
@@ -122,6 +163,36 @@ async def completar_practica(
 # ============================================
 # Perfil y Estadísticas
 # ============================================
+
+@router.get("/redencion/disponible")
+async def disponibilidad_redencion(
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep
+):
+    """
+    Verifica si el estudiante tiene problemas disponibles para redención.
+
+    Retorna:
+    - disponible: True si hay al menos un problema fallado
+    - total_problemas_fallados: cuántos hay en total
+    """
+    return await adaptive_service.get_disponibilidad_redencion(current_student.id)
+
+
+@router.post("/redencion/iniciar", response_model=SesionStartResponse)
+async def iniciar_redencion(
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep
+):
+    """
+    Inicia una sesión de redención con 5 problemas que el estudiante no pudo resolver.
+
+    Condiciones:
+    - Diagnóstico completado
+    - Tener al menos un problema que nunca se resolvió correctamente
+    """
+    return await adaptive_service.iniciar_sesion_redencion(current_student.id)
+
 
 @router.get("/profile", response_model=PerfilResponse)
 async def obtener_perfil(

@@ -99,12 +99,22 @@ class ConfiguracionPracticaResponse(BaseModel):
 # ==================== DESAFÍOS GRUPALES ====================
 
 class DesafioGrupalCreate(BaseModel):
-    """Crear desafío grupal."""
+    """Crear desafío grupal.
+
+    Tipos soportados (de más fácil a más difícil):
+    - problemas_resueltos    → objetivo_cantidad = X problemas
+    - sesiones_completadas   → objetivo_cantidad = X prácticas
+    - practicas_sin_errores  → objetivo_cantidad = X prácticas, parametro_adicional = máx errores
+    - problemas_rapidos      → objetivo_cantidad = X problemas, parametro_adicional = máx seg/problema
+    - practicas_rapidas      → objetivo_cantidad = X prácticas, parametro_adicional = máx minutos
+    """
     nombre: str = Field(..., max_length=255)
     descripcion: Optional[str] = None
-    tipo: str = Field(..., max_length=100)  # "problemas_resueltos", "nivel_alcanzado", etc.
+    tipo: str = Field(..., max_length=100)
     objetivo_cantidad: int = Field(..., gt=0)
-    recompensa_texto: Optional[str] = None
+    parametro_adicional: Optional[int] = Field(None, gt=0)   # Parámetro secundario (Y)
+    recompensa_texto: Optional[str] = None                    # Recompensa física
+    recompensa_puntos: Optional[int] = Field(None, ge=0)      # XP otorgados al completar
     fecha_limite: Optional[datetime] = None
     grupos_ids: List[int]
 
@@ -127,10 +137,13 @@ class DesafioGrupalDetalle(BaseModel):
     descripcion: Optional[str]
     tipo: str
     objetivo_cantidad: int
+    parametro_adicional: Optional[int]  # Parámetro Y (max errores / seg / min)
     recompensa_texto: Optional[str]
+    recompensa_puntos: Optional[int]    # XP otorgados al completar
     fecha_creacion: datetime
     fecha_limite: Optional[datetime]
     completado: bool
+    vencido: bool  # True si fecha_limite pasó sin alcanzar el objetivo
     eliminado: bool
     progreso_grupos: List[ProgresoGrupoDesafio]
 
@@ -144,6 +157,8 @@ class DesafioGrupalResumen(BaseModel):
     nombre: str
     tipo: str
     objetivo_cantidad: int
+    parametro_adicional: Optional[int]
+    recompensa_puntos: Optional[int]
     fecha_creacion: datetime
     fecha_limite: Optional[datetime]
     completado: bool

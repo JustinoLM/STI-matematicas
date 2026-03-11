@@ -18,6 +18,8 @@ export interface EstudianteOrg {
   codigo_estudiante: string;
   nombre_completo: string;
   activo: boolean;
+  nivel_actual: number;
+  precision_ultimos_15: number;
 }
 
 export interface PerfilProfesor {
@@ -161,7 +163,9 @@ export const teacherService = {
     descripcion?: string;
     tipo: string;
     objetivo_cantidad: number;
+    parametro_adicional?: number;
     recompensa_texto?: string;
+    recompensa_puntos?: number;
     grupos_ids: number[];
     fecha_limite?: string;
   }): Promise<DesafioGrupal> {

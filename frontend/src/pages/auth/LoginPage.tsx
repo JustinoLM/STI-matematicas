@@ -28,6 +28,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       await onLogin(codigo, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
+      setCodigo('');
+      setPassword('');
     } finally {
       setLoading(false);
     }

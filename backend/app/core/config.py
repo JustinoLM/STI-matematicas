@@ -24,10 +24,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # LLM (Ollama + DeepSeek)
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "deepseek-r1:7b"
-    OLLAMA_TIMEOUT: int = 30
+    # LLM (DeepSeek API)
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
+    DEEPSEEK_MODEL_V3: str = "deepseek-chat"        # rápido, mensajes y enunciados
+    DEEPSEEK_MODEL_R1: str = "deepseek-reasoner"    # razonamiento, análisis post-práctica
 
     # Cloudinary (almacenamiento de videos/imágenes)
     CLOUDINARY_CLOUD_NAME: str = ""

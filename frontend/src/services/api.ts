@@ -38,14 +38,15 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Token inválido o expirado
-    if (error.response?.status === 401) {
-      // Limpiar auth storage
+    // Token inválido o expirado — pero NO redirigir si es el propio endpoint de login.
+    // Un 401 en /auth/login significa "credenciales incorrectas", no "token expirado".
+    const isLoginRequest = error.config?.url?.includes('/auth/login');
+    if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('auth-storage');
       localStorage.removeItem('access_token');
       window.location.href = '/login';
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -55,7 +56,13 @@ export default apiClient;
 // Helper para extraer mensajes de error
 export const getErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.detail || error.message || 'Error desconocido';
+    const detail = error.response?.data?.detail;
+    // FastAPI validation errors (422) devuelven detail como array de objetos
+    if (Array.isArray(detail)) {
+      return detail.map((e: { msg?: string }) => e.msg ?? 'Error de validación').join(', ');
+    }
+    if (typeof detail === 'string') return detail;
+    return error.message || 'Error desconocido';
   }
   if (error instanceof Error) {
     return error.message;

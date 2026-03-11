@@ -152,6 +152,26 @@ class AdaptiveRepository:
             select(SesionPractica).where(SesionPractica.id == sesion_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_sesion_activa(self, estudiante_id: int) -> Optional[SesionPractica]:
+        """
+        Devuelve la sesión EN_PROGRESO más reciente del estudiante
+        siempre que tenga menos de 90 minutos de inactividad.
+        """
+        limite = datetime.utcnow() - timedelta(minutes=90)
+        result = await self.db.execute(
+            select(SesionPractica)
+            .where(
+                and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    SesionPractica.estado == EstadoSesion.EN_PROGRESO,
+                    SesionPractica.fecha_ultima_actividad >= limite,
+                )
+            )
+            .order_by(SesionPractica.fecha_ultima_actividad.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
     
     async def update_sesion(self, sesion: SesionPractica) -> SesionPractica:
         """Actualiza una sesión."""
@@ -201,9 +221,52 @@ class AdaptiveRepository:
         return list(result.scalars().all())
     
     # ============================================
+    # Redención
+    # ============================================
+
+    async def get_problemas_fallados(
+        self,
+        estudiante_id: int,
+        limit: int = 50
+    ) -> List[int]:
+        """
+        Retorna IDs de problemas que el estudiante NUNCA resolvió correctamente.
+
+        Condición: tiene al menos un intento pero ninguno fue correcto.
+        Usado para construir sesiones de Redención (máx. 5 problemas al azar).
+        """
+        from sqlalchemy import not_
+
+        # Sub-consulta: problema_ids con al menos un intento correcto
+        correctos_subq = (
+            select(Intento.problema_id)
+            .where(
+                and_(
+                    Intento.estudiante_id == estudiante_id,
+                    Intento.es_correcto == True  # noqa: E712
+                )
+            )
+            .distinct()
+            .scalar_subquery()
+        )
+
+        result = await self.db.execute(
+            select(Intento.problema_id)
+            .where(
+                and_(
+                    Intento.estudiante_id == estudiante_id,
+                    not_(Intento.problema_id.in_(correctos_subq))
+                )
+            )
+            .distinct()
+            .limit(limit)
+        )
+        return [row[0] for row in result.all()]
+
+    # ============================================
     # Estadísticas de Grupo
     # ============================================
-    
+
     async def get_velocidades_grupo(self, grupo_id: int) -> List[float]:
         """Obtiene velocidades promedio de todos los estudiantes del grupo."""
         # TODO: Implementar cuando tengamos la relación estudiante-grupo

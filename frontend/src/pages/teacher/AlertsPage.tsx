@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function AlertsPage() {
-  const [selectedTab, setSelectedTab] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [selectedTab, setSelectedTab] = useState<'all' | 'alta' | 'media' | 'baja'>('all');
 
   // Obtener alertas
   const { data: alertas, isLoading } = useQuery({
@@ -28,10 +28,10 @@ export default function AlertsPage() {
     return alerta.severidad === selectedTab;
   });
 
-  // Contar alertas por severidad
-  const criticalCount = alertas?.filter((a) => a.severidad === 'critical' && a.activa).length || 0;
-  const warningCount = alertas?.filter((a) => a.severidad === 'warning' && a.activa).length || 0;
-  const infoCount = alertas?.filter((a) => a.severidad === 'info' && a.activa).length || 0;
+  // Contar alertas por severidad (backend devuelve: 'alta', 'media', 'baja')
+  const altaCount = alertas?.filter((a) => a.severidad === 'alta' && a.activa).length || 0;
+  const mediaCount = alertas?.filter((a) => a.severidad === 'media' && a.activa).length || 0;
+  const bajaCount = alertas?.filter((a) => a.severidad === 'baja' && a.activa).length || 0;
   const totalActive = alertas?.filter((a) => a.activa).length || 0;
 
   return (
@@ -59,34 +59,34 @@ export default function AlertsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Críticas</CardTitle>
+            <CardTitle className="text-sm font-medium">Prioridad Alta</CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{criticalCount}</div>
-            <p className="text-xs text-muted-foreground">Prioridad alta</p>
+            <div className="text-2xl font-bold text-red-600">{altaCount}</div>
+            <p className="text-xs text-muted-foreground">Rezagados</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Advertencias</CardTitle>
+            <CardTitle className="text-sm font-medium">Prioridad Media</CardTitle>
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{warningCount}</div>
-            <p className="text-xs text-muted-foreground">Prioridad media</p>
+            <div className="text-2xl font-bold text-yellow-600">{mediaCount}</div>
+            <p className="text-xs text-muted-foreground">Inactivos / Estancados</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Informativas</CardTitle>
+            <CardTitle className="text-sm font-medium">Prioridad Baja</CardTitle>
             <AlertTriangle className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{infoCount}</div>
-            <p className="text-xs text-muted-foreground">Prioridad baja</p>
+            <div className="text-2xl font-bold text-blue-600">{bajaCount}</div>
+            <p className="text-xs text-muted-foreground">Excelencia</p>
           </CardContent>
         </Card>
       </div>
@@ -108,14 +108,14 @@ export default function AlertsPage() {
               <TabsTrigger value="all">
                 Todas ({alertas?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="critical">
-                Críticas ({criticalCount})
+              <TabsTrigger value="alta">
+                Alta ({altaCount})
               </TabsTrigger>
-              <TabsTrigger value="warning">
-                Advertencias ({warningCount})
+              <TabsTrigger value="media">
+                Media ({mediaCount})
               </TabsTrigger>
-              <TabsTrigger value="info">
-                Info ({infoCount})
+              <TabsTrigger value="baja">
+                Baja ({bajaCount})
               </TabsTrigger>
             </TabsList>
 
@@ -133,9 +133,9 @@ export default function AlertsPage() {
                     >
                       <AlertTriangle
                         className={`h-5 w-5 mt-0.5 flex-shrink-0 ${
-                          alerta.severidad === 'critical'
+                          alerta.severidad === 'alta'
                             ? 'text-red-500'
-                            : alerta.severidad === 'warning'
+                            : alerta.severidad === 'media'
                             ? 'text-yellow-500'
                             : 'text-blue-500'
                         }`}
@@ -148,14 +148,15 @@ export default function AlertsPage() {
                               <h3 className="font-semibold">{alerta.titulo}</h3>
                               <Badge
                                 variant={
-                                  alerta.severidad === 'critical'
+                                  alerta.severidad === 'alta'
                                     ? 'destructive'
-                                    : alerta.severidad === 'warning'
+                                    : alerta.severidad === 'media'
                                     ? 'default'
                                     : 'secondary'
                                 }
                               >
-                                {alerta.severidad}
+                                {alerta.severidad === 'alta' ? 'Alta' :
+                                 alerta.severidad === 'media' ? 'Media' : 'Baja'}
                               </Badge>
                               {!alerta.activa && (
                                 <Badge variant="outline">Resuelta</Badge>

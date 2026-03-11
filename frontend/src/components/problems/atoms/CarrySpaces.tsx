@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 interface CarrySpacesProps {
   count: number;
-  width: number;
+  width: number | string;
 }
 
 /**
@@ -61,7 +61,7 @@ export function CarrySpaces({ count, width }: CarrySpacesProps) {
   return (
     <div className="flex flex-col items-end">
       <div className="text-xs text-gray-400 mb-1 font-sans">Espacio para llevadas</div>
-      <div className="flex gap-1 justify-end" style={{ width: `${width}px` }}>
+      <div className="flex gap-1 justify-end" style={{ width: typeof width === 'number' ? `${width}px` : width }}>
         {Array.from({ length: count }).map((_, i) => (
           <input
             key={`carry-${i}`}

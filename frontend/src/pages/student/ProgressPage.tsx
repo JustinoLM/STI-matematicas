@@ -5,9 +5,11 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { TrendingUp, Target, Clock, Loader2, Lock } from 'lucide-react';
+import { TrendingUp, Target, Clock, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { studentService } from '@/services/studentService';
 import apiClient from '@/services/api';
 
@@ -59,6 +61,16 @@ function formatSegundos(segundos: number): string {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function ProgressPage() {
+  const navigate = useNavigate();
+
+  // Mensaje motivacional LLM — React Query lo cachea 24h en el cliente
+  const { data: mensajeLLM } = useQuery({
+    queryKey: ['mensaje-progreso'],
+    queryFn: () => studentService.getMensajeMotivacional('progreso'),
+    staleTime: 1000 * 60 * 60 * 24,
+    retry: false,
+  });
+
   const { data: perfil, isLoading: loadingPerfil } = useQuery({
     queryKey: ['perfil-estudiante'],
     queryFn: () => studentService.getPerfil(),
@@ -72,6 +84,13 @@ export function ProgressPage() {
       return response.data;
     },
     staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: redencion } = useQuery({
+    queryKey: ['redencion-disponible'],
+    queryFn: () => studentService.getRedenciónDisponible(),
+    staleTime: 1000 * 60 * 2,
+    retry: false,
   });
 
   const isLoading = loadingPerfil || loadingStats;
@@ -126,7 +145,11 @@ export function ProgressPage() {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Mensaje motivacional (genérico hasta que llega el LLM) */}
+          <p className="text-gray-700 italic text-sm">
+            {mensajeLLM ?? '¡Mira cuánto has aprendido! Cada problema resuelto te hace más fuerte.'}
+          </p>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Progreso al siguiente nivel</span>
@@ -161,6 +184,33 @@ export function ProgressPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Redención */}
+      {redencion?.disponible && (
+        <Card className="border-2 border-orange-300 bg-gradient-to-r from-orange-50 to-amber-50">
+          <CardContent className="pt-5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-full">
+                  <RefreshCw className="h-6 w-6 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-orange-800">Redención disponible</p>
+                  <p className="text-sm text-orange-600">
+                    {redencion.total_problemas_fallados} problema{redencion.total_problemas_fallados !== 1 ? 's' : ''} pendiente{redencion.total_problemas_fallados !== 1 ? 's' : ''} — practica 5 y demuestra que aprendiste
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => navigate('/student/practice?mode=redencion')}
+                className="bg-orange-500 hover:bg-orange-600 text-white shrink-0"
+              >
+                Redención
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Progreso por operación */}
       <Card>
@@ -199,7 +249,7 @@ export function ProgressPage() {
                     <span className="text-sm font-bold">{progresoOp}%</span>
                   </div>
                   <Progress
-                    value={disponible ? progresoOp : 0}
+                    value={progresoOp}
                     className={`h-2 ${!disponible ? 'opacity-30' : ''}`}
                   />
                 </div>

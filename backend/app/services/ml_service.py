@@ -100,15 +100,21 @@ class MLService:
     def predecir_perfil(self, perfil: PerfilEstudiante) -> Tuple[PerfilAprendizaje, float]:
         """
         Predice el perfil de aprendizaje de un estudiante.
-        
+
+        Orden de preferencia:
+        1. K-Means entrenado (mayor precisión, confianza basada en distancia a centroide)
+        2. Reglas heurísticas (cuando el modelo no existe o hay pocos estudiantes)
+        3. NO_CLASIFICADO (cuando no hay suficientes datos del estudiante)
+
         Returns:
             (perfil, confianza) donde confianza está entre 0 y 1
         """
-        if not self.clustering_model or not self.scaler:
-            return PerfilAprendizaje.NO_CLASIFICADO, 0.0
-        
         if not self._tiene_datos_suficientes(perfil):
             return PerfilAprendizaje.NO_CLASIFICADO, 0.0
+
+        # ── Sin modelo K-Means: usar reglas heurísticas ───────────────────────
+        if not self.clustering_model or not self.scaler:
+            return self._clasificar_por_reglas(perfil)
         
         # Extraer features
         features = self._extraer_features_perfil(perfil)
@@ -167,7 +173,35 @@ class MLService:
             perfil.velocidad_promedio is not None and
             perfil.precision_ultimos_15 is not None
         )
-    
+
+    def _clasificar_por_reglas(
+        self, perfil: PerfilEstudiante
+    ) -> Tuple[PerfilAprendizaje, float]:
+        """
+        Clasificación heurística basada en reglas cuando el modelo K-Means
+        no está entrenado (pocos estudiantes en el sistema).
+
+        Lógica:
+          - RAPIDO_PRECISO:       precisión ≥ 80% Y velocidad ≤ 15 seg/problema
+          - CUIDADOSO_METODICO:   precisión ≥ 75% Y velocidad > 15 seg/problema
+          - IMPULSIVO:            precisión < 60% Y velocidad ≤ 12 seg/problema
+          - EN_DESARROLLO:        resto (precisión baja o velocidad intermedia-alta)
+
+        Confianza fija 0.55 — indica clasificación por reglas, no por ML.
+        Cuando el modelo K-Means se entrene tomará el control con mayor precisión.
+        """
+        precision = float(perfil.precision_ultimos_15 or 0.0)
+        velocidad = float(perfil.velocidad_promedio or 30.0)
+
+        if precision >= 0.80 and velocidad <= 15.0:
+            return PerfilAprendizaje.RAPIDO_PRECISO, 0.55
+        elif precision >= 0.75 and velocidad > 15.0:
+            return PerfilAprendizaje.CUIDADOSO_METODICO, 0.55
+        elif precision < 0.60 and velocidad <= 12.0:
+            return PerfilAprendizaje.IMPULSIVO, 0.55
+        else:
+            return PerfilAprendizaje.EN_DESARROLLO, 0.55
+
     # ============================================
     # Predicción de Preparación
     # ============================================

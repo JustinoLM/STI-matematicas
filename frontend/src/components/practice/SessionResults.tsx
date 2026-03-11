@@ -1,4 +1,4 @@
-import { Trophy, Star, TrendingUp, Target, Award, ArrowRight } from 'lucide-react';
+import { Trophy, Star, TrendingUp, Target, Award, ArrowRight, Brain, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,9 @@ interface SessionResultsProps {
   medallasObtenidas: string[];
   rachaActual: number;
 
+  // Análisis LLM post-práctica (null = cargando, string = listo)
+  analisisLLM?: string | null;
+
   // Acciones
   onContinuar: () => void;
   onVerDetalles?: () => void;
@@ -34,6 +37,7 @@ export function SessionResults({
   puntosGanados,
   medallasObtenidas,
   rachaActual,
+  analisisLLM,
   onContinuar,
   onVerDetalles,
 }: SessionResultsProps) {
@@ -203,7 +207,33 @@ export function SessionResults({
           </CardContent>
         </Card>
 
-        {/* Sección 2: GAMIFICACIÓN (Secundaria) */}
+        {/* Sección 2: ANÁLISIS LLM (Retroalimentación personalizada R1) */}
+        <Card className="border-2 border-indigo-200 bg-indigo-50 shadow-md">
+          <CardContent className="p-6">
+            <h2 className="text-lg font-semibold text-indigo-800 flex items-center gap-2 mb-3">
+              <Brain className="w-5 h-5" />
+              Retroalimentación personalizada
+            </h2>
+            {analisisLLM === null || analisisLLM === undefined ? (
+              <div className="flex items-center gap-3 text-indigo-600">
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                <span className="text-sm italic">Analizando tu sesión...</span>
+              </div>
+            ) : analisisLLM === '' ? (
+              <p className="text-sm text-indigo-700 italic">
+                {porcentajeAciertos >= 80
+                  ? '¡Excelente sesión! Tus resultados muestran un gran dominio.'
+                  : porcentajeAciertos >= 60
+                  ? 'Buen trabajo. Cada práctica te ayuda a mejorar.'
+                  : 'La práctica constante lleva al éxito. ¡Sigue adelante!'}
+              </p>
+            ) : (
+              <p className="text-sm text-indigo-800 leading-relaxed">{analisisLLM}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sección 3: GAMIFICACIÓN (Secundaria) */}
         <Card className="border-2 border-purple-200 shadow-lg">
           <CardContent className="p-8 space-y-6">
             <h2 className="text-2xl font-bold text-gray-800 text-center flex items-center justify-center gap-2">
@@ -218,7 +248,7 @@ export function SessionResults({
                   +{puntosGanados}
                 </div>
                 <div className="text-lg font-medium text-gray-700">
-                  Puntos de Experiencia
+                  Puntos Estrella
                 </div>
                 <p className="text-sm text-gray-600 mt-2">
                   Usa tus puntos en la tienda

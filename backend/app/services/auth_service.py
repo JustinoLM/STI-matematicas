@@ -113,6 +113,7 @@ class AuthService:
             password_hash=password_hash,
             password_plain=data.password,
             nombre_completo=data.nombre_completo,
+            genero=data.genero,
             organizacion_id=data.organizacion_id,
         )
         

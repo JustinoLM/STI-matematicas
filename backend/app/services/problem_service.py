@@ -132,7 +132,8 @@ class ProblemService:
             operacion=operacion,
             rango_min=rango_min,
             rango_max=rango_max,
-            decimales_max=decimales_max
+            decimales_max=decimales_max,
+            nivel=nivel,
         )
         
         # Calcular resultado
@@ -172,29 +173,91 @@ class ProblemService:
         operacion: Operacion,
         rango_min: int,
         rango_max: int,
-        decimales_max: int
+        decimales_max: int,
+        nivel: int = 1,
     ) -> Tuple[Decimal, Decimal]:
         """
         Genera dos números aleatorios según la operación.
-        
+
         Para división, asegura que el resultado sea exacto (sin residuo infinito).
+        La precisión del cociente depende del nivel de dificultad:
+          - Nivel 3: cociente X.5 (mitades), divisor=2, dividendo entero
+          - Nivel 4: cociente con 1 decimal, divisor entero ∈ {2, 4, 5}
+          - Nivel 5: hasta 2 decimales; mix de escalamiento/vertical/normalización
+          - Default: cociente entero (escalamiento puro)
         """
         if operacion == Operacion.DIVISION:
-            # Para división, generar divisor primero y luego dividendo múltiplo
-            divisor = self._random_decimal(rango_min, min(rango_max, 50), decimales_max)
-            
-            # Evitar división por cero o números muy pequeños
-            while divisor < Decimal("0.1"):
-                divisor = self._random_decimal(rango_min, min(rango_max, 50), decimales_max)
-            
-            # Generar multiplicador entero para resultado exacto
-            multiplicador = random.randint(2, 20)
-            dividendo = divisor * Decimal(multiplicador)
-            
-            # Redondear dividendo según decimales_max
-            dividendo = self._round_to_decimals(dividendo, decimales_max)
-            
-            return dividendo, divisor
+            if nivel == 3:
+                # Cociente X.5 — divisor fijo 2, dividendo entero impar
+                divisor = Decimal(2)
+                cociente_entero = random.randint(2, 9)
+                cociente = Decimal(cociente_entero) + Decimal('0.5')
+                dividendo = divisor * cociente   # = 2N+1 (entero impar)
+                return dividendo, divisor
+
+            elif nivel == 4:
+                # Cociente con exactamente 1 decimal; divisor entero ∈ {2, 4, 5}
+                # Estos divisores garantizan que dividendo tenga ≤ 1 decimal
+                divisor = Decimal(random.choice([2, 4, 5]))
+                cociente_entero = random.randint(1, 9)
+                cociente_dec = random.randint(1, 9)   # parte decimal no nula
+                cociente = Decimal(f"{cociente_entero}.{cociente_dec}")
+                dividendo = (divisor * cociente).quantize(
+                    Decimal('0.1'), rounding=ROUND_HALF_UP
+                )
+                return dividendo, divisor
+
+            elif nivel == 5:
+                # Variedad: escalamiento, vertical o normalización
+                tipo = random.choice(['escalamiento', 'vertical', 'normalizacion'])
+
+                if tipo == 'escalamiento':
+                    # Ambos enteros, cociente entero
+                    divisor = Decimal(random.randint(2, 20))
+                    multiplicador = random.randint(2, 15)
+                    dividendo = divisor * Decimal(multiplicador)
+                    return dividendo, divisor
+
+                elif tipo == 'vertical':
+                    # Divisor entero ∈ {2,4,5,10}; dividendo con decimales;
+                    # cociente con 1 ó 2 decimales
+                    divisor = Decimal(random.choice([2, 4, 5, 10]))
+                    cociente_entero = random.randint(1, 9)
+                    num_decimals = random.choice([1, 2])
+                    if num_decimals == 1:
+                        d = random.randint(1, 9)
+                        cociente = Decimal(f"{cociente_entero}.{d}")
+                        dividendo = (divisor * cociente).quantize(
+                            Decimal('0.1'), rounding=ROUND_HALF_UP
+                        )
+                    else:
+                        d1 = random.randint(0, 9)
+                        d2 = random.randint(1, 9)
+                        cociente = Decimal(f"{cociente_entero}.{d1}{d2}")
+                        dividendo = (divisor * cociente).quantize(
+                            Decimal('0.01'), rounding=ROUND_HALF_UP
+                        )
+                    return dividendo, divisor
+
+                else:   # normalizacion
+                    # Divisor con 1 decimal; cociente entero (≤ 2 dec garantizado)
+                    div_ent = random.randint(1, 9)
+                    div_dec = random.randint(1, 9)
+                    divisor = Decimal(f"{div_ent}.{div_dec}")
+                    cociente = Decimal(random.randint(2, 9))
+                    dividendo = (divisor * cociente).quantize(
+                        Decimal('0.1'), rounding=ROUND_HALF_UP
+                    )
+                    return dividendo, divisor
+
+            else:
+                # Default (niveles 1-2): divisor entero, cociente entero
+                divisor = self._random_decimal(rango_min, min(rango_max, 50), 0)
+                while divisor < Decimal("1"):
+                    divisor = self._random_decimal(rango_min, min(rango_max, 50), 0)
+                multiplicador = random.randint(2, 20)
+                dividendo = divisor * Decimal(multiplicador)
+                return dividendo, divisor
         
         elif operacion == Operacion.MULTIPLICACION:
             # Para multiplicación, usar rangos más pequeños para evitar resultados gigantes

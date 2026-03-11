@@ -12,6 +12,7 @@ from app.api.dependencies import (
     get_practice_service,
 )
 from app.models.user import Profesor, Estudiante
+from app.models.adaptive import PerfilEstudiante
 from app.models.organization import Organizacion
 from app.services.adaptive_service import AdaptiveService
 from app.services.practice_service import PracticeService
@@ -235,27 +236,31 @@ async def listar_estudiantes_organizacion(
     if not profesor.organizacion_id:
         return []
 
-    stmt = select(Estudiante).where(Estudiante.organizacion_id == profesor.organizacion_id)
+    stmt = (
+        select(Estudiante, PerfilEstudiante)
+        .outerjoin(PerfilEstudiante, Estudiante.id == PerfilEstudiante.estudiante_id)
+        .where(Estudiante.organizacion_id == profesor.organizacion_id)
+    )
     result = await db.execute(stmt)
-    estudiantes = result.scalars().all()
+    rows = result.all()
 
-    # Filtro opcional de búsqueda
-    if q:
-        q_lower = q.lower()
-        estudiantes = [
-            e for e in estudiantes
-            if q_lower in e.nombre_completo.lower() or q_lower in e.codigo_estudiante.lower()
-        ]
-
-    return [
-        {
+    datos = []
+    for e, perfil in rows:
+        # Filtro opcional de búsqueda
+        if q:
+            q_lower = q.lower()
+            if q_lower not in e.nombre_completo.lower() and q_lower not in e.codigo_estudiante.lower():
+                continue
+        datos.append({
             "id": e.id,
             "codigo_estudiante": e.codigo_estudiante,
             "nombre_completo": e.nombre_completo,
             "activo": bool(e.activo),
-        }
-        for e in estudiantes
-    ]
+            "nivel_actual": perfil.nivel_actual if perfil else 1,
+            "precision_ultimos_15": round(float(perfil.precision_ultimos_15 or 0) * 100, 1) if perfil else 0.0,
+        })
+
+    return datos
 
 
 @router.post("/students/search", response_model=List[EstudianteSearchResult])
