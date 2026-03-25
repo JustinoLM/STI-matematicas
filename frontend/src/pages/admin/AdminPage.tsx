@@ -1552,16 +1552,6 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-/** Descarga un Blob como archivo */
-function descargarArchivo(contenido: string, nombre: string, tipo: string) {
-  const blob = new Blob([contenido], { type: tipo });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nombre;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }) {
   const [tipo, setTipo] = useState<'estudiantes' | 'profesores'>('estudiantes');
