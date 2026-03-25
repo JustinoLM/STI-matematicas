@@ -29,3 +29,9 @@ dist/
 
 # Logs
 *.log
+
+# Claude Code
+.claude/
+*.jsonl
+CLAUDE.md
+
