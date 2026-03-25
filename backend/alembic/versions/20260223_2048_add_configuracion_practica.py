@@ -10,12 +10,17 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = 'f632343d3b38'
 down_revision: Union[str, None] = 'add_organizacion_v1'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+def _col(table: str, column: str) -> bool:
+    return column in [c['name'] for c in inspect(op.get_bind()).get_columns(table)]
 
 
 def upgrade() -> None:
@@ -53,6 +58,9 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_video_temporal_id'), 'video_temporal', ['id'], unique=False)
+    # La migración 'test' (21889048861a) creó configuracion_practica con esquema viejo.
+    # La eliminamos para recrearla con el esquema correcto (aplicada_por_profesor_id, etc.).
+    op.execute("DROP TABLE IF EXISTS configuracion_practica CASCADE")
     op.create_table('configuracion_practica',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('grupo_id', sa.Integer(), nullable=False),
@@ -155,25 +163,89 @@ def upgrade() -> None:
     op.drop_constraint(op.f('organizacion_codigo_key'), 'organizacion', type_='unique')
     op.drop_index(op.f('ix_organizacion_codigo'), table_name='organizacion')
     op.create_index(op.f('ix_organizacion_codigo'), 'organizacion', ['codigo'], unique=True)
-    op.add_column('personalizacion_estudiante', sa.Column('tema_activo_id', sa.Integer(), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('fondo_activo_id', sa.Integer(), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('musica_activa_id', sa.Integer(), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('color_fondo', sa.String(length=7), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('color_texto', sa.String(length=7), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('color_botones', sa.String(length=7), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('efectos_activos', sa.JSON(), nullable=True))
-    op.add_column('personalizacion_estudiante', sa.Column('fecha_actualizacion', sa.DateTime(), nullable=True))
-    op.create_foreign_key(None, 'personalizacion_estudiante', 'desbloqueable', ['fondo_activo_id'], ['id'])
-    op.create_foreign_key(None, 'personalizacion_estudiante', 'desbloqueable', ['musica_activa_id'], ['id'])
-    op.create_foreign_key(None, 'personalizacion_estudiante', 'desbloqueable', ['tema_activo_id'], ['id'])
-    op.drop_column('personalizacion_estudiante', 'fondo_pantalla_id')
-    op.drop_column('personalizacion_estudiante', 'color_boton_id')
-    op.drop_column('personalizacion_estudiante', 'fecha_ultima_modificacion')
-    op.drop_column('personalizacion_estudiante', 'forma_boton_id')
-    op.drop_column('personalizacion_estudiante', 'fuente_texto_id')
-    op.drop_column('personalizacion_estudiante', 'musica_fondo_id')
-    op.drop_column('problema', 'enunciado_tematico')
-    op.drop_column('problema', 'tema')
+    # personalizacion_estudiante: migración 5 ya crea la tabla con esquema nuevo.
+    # Solo agregamos columnas si no existen, y eliminamos las viejas si existen.
+    if not _col('personalizacion_estudiante', 'tema_activo_id'):
+        op.add_column('personalizacion_estudiante', sa.Column('tema_activo_id', sa.Integer(), nullable=True))
+    if not _col('personalizacion_estudiante', 'fondo_activo_id'):
+        op.add_column('personalizacion_estudiante', sa.Column('fondo_activo_id', sa.Integer(), nullable=True))
+    if not _col('personalizacion_estudiante', 'musica_activa_id'):
+        op.add_column('personalizacion_estudiante', sa.Column('musica_activa_id', sa.Integer(), nullable=True))
+    if not _col('personalizacion_estudiante', 'color_fondo'):
+        op.add_column('personalizacion_estudiante', sa.Column('color_fondo', sa.String(length=7), nullable=True))
+    if not _col('personalizacion_estudiante', 'color_texto'):
+        op.add_column('personalizacion_estudiante', sa.Column('color_texto', sa.String(length=7), nullable=True))
+    if not _col('personalizacion_estudiante', 'color_botones'):
+        op.add_column('personalizacion_estudiante', sa.Column('color_botones', sa.String(length=7), nullable=True))
+    if not _col('personalizacion_estudiante', 'efectos_activos'):
+        op.add_column('personalizacion_estudiante', sa.Column('efectos_activos', sa.JSON(), nullable=True))
+    if not _col('personalizacion_estudiante', 'fecha_actualizacion'):
+        op.add_column('personalizacion_estudiante', sa.Column('fecha_actualizacion', sa.DateTime(), nullable=True))
+    # FKs para columnas nuevas: solo si la columna existe pero el FK no (migración 5 ya los crea)
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = 'personalizacion_estudiante'
+                  AND tc.constraint_type = 'FOREIGN KEY'
+                  AND kcu.column_name = 'fondo_activo_id'
+            ) THEN
+                ALTER TABLE personalizacion_estudiante
+                    ADD CONSTRAINT pe_fondo_fk FOREIGN KEY (fondo_activo_id) REFERENCES desbloqueable(id);
+            END IF;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = 'personalizacion_estudiante'
+                  AND tc.constraint_type = 'FOREIGN KEY'
+                  AND kcu.column_name = 'musica_activa_id'
+            ) THEN
+                ALTER TABLE personalizacion_estudiante
+                    ADD CONSTRAINT pe_musica_fk FOREIGN KEY (musica_activa_id) REFERENCES desbloqueable(id);
+            END IF;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = 'personalizacion_estudiante'
+                  AND tc.constraint_type = 'FOREIGN KEY'
+                  AND kcu.column_name = 'tema_activo_id'
+            ) THEN
+                ALTER TABLE personalizacion_estudiante
+                    ADD CONSTRAINT pe_tema_fk FOREIGN KEY (tema_activo_id) REFERENCES desbloqueable(id);
+            END IF;
+        END $$;
+    """)
+    # Eliminar columnas viejas (del esquema original de la migración test) si todavía existen
+    if _col('personalizacion_estudiante', 'fondo_pantalla_id'):
+        op.drop_column('personalizacion_estudiante', 'fondo_pantalla_id')
+    if _col('personalizacion_estudiante', 'color_boton_id'):
+        op.drop_column('personalizacion_estudiante', 'color_boton_id')
+    if _col('personalizacion_estudiante', 'fecha_ultima_modificacion'):
+        op.drop_column('personalizacion_estudiante', 'fecha_ultima_modificacion')
+    if _col('personalizacion_estudiante', 'forma_boton_id'):
+        op.drop_column('personalizacion_estudiante', 'forma_boton_id')
+    if _col('personalizacion_estudiante', 'fuente_texto_id'):
+        op.drop_column('personalizacion_estudiante', 'fuente_texto_id')
+    if _col('personalizacion_estudiante', 'musica_fondo_id'):
+        op.drop_column('personalizacion_estudiante', 'musica_fondo_id')
+    # enunciado_tematico y tema en problema: migración 5 los agrega, esta migración los elimina
+    # (migración 20260303 los vuelve a agregar después)
+    if _col('problema', 'enunciado_tematico'):
+        op.drop_column('problema', 'enunciado_tematico')
+    if _col('problema', 'tema'):
+        op.drop_column('problema', 'tema')
     op.drop_constraint(op.f('fk_profesor_organizacion_id'), 'profesor', type_='foreignkey')
     op.create_foreign_key(None, 'profesor', 'organizacion', ['organizacion_id'], ['id'])
     op.alter_column('sesion_practica', 'puntos_ganados',
