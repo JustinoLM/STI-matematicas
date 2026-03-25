@@ -5,7 +5,7 @@ Este archivo configura cómo Alembic detecta cambios en los modelos
 y genera/aplica migraciones.
 """
 from dotenv import load_dotenv
-load_dotenv(override=True)
+load_dotenv()  # NO override — las variables del entorno (Railway) tienen prioridad sobre .env
 
 
 import os
