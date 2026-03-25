@@ -34,6 +34,13 @@ export default function GroupsPage() {
     queryFn: () => teacherService.getGrupos(),
   });
 
+  // Total de estudiantes únicos en la organización (evita contar duplicados entre grupos)
+  const { data: estudiantesOrg } = useQuery({
+    queryKey: ['teacher', 'students'],
+    queryFn: () => teacherService.getEstudiantesOrg(),
+    staleTime: 2 * 60 * 1000,
+  });
+
   // Mutation para crear grupo
   const crearGrupoMutation = useMutation({
     mutationFn: () => teacherService.crearGrupo(nombreGrupo, codigoGrupo),
@@ -140,9 +147,9 @@ export default function GroupsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {grupos?.reduce((acc, g) => acc + g.cantidad_estudiantes, 0) || 0}
+              {estudiantesOrg?.length ?? 0}
             </div>
-            <p className="text-xs text-muted-foreground">En todos los grupos</p>
+            <p className="text-xs text-muted-foreground">En tu organización</p>
           </CardContent>
         </Card>
 

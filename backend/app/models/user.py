@@ -6,7 +6,7 @@ Los usuarios son creados por administradores, no hay registro público.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 
@@ -62,7 +62,7 @@ class Estudiante(Usuario):
     __tablename__ = "estudiante"
 
     id = Column(Integer, ForeignKey("usuario.id"), primary_key=True)
-    codigo_estudiante = Column(String(50), unique=True, nullable=False, index=True)
+    codigo_estudiante = Column(String(50), nullable=False, index=True)
     nombre_completo = Column(String(255), nullable=False)
     genero = Column(
         Enum(Genero, values_callable=lambda obj: [e.value for e in obj]),
@@ -72,6 +72,11 @@ class Estudiante(Usuario):
     narrativa_seleccionada_id = Column(Integer, ForeignKey("narrativa.id"), nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
     puntos_totales = Column(Integer, default=0, nullable=False, server_default="0")
+
+    # Datos académicos y personales
+    grado_academico = Column(String(50), nullable=True)   # Ej: "5to grado"
+    anio_nacimiento = Column(Integer, nullable=True)      # Ej: 2014
+    mes_nacimiento  = Column(Integer, nullable=True)      # 1-12
 
     # Relaciones
     narrativa = relationship("Narrativa", back_populates="estudiantes")
@@ -85,6 +90,11 @@ class Estudiante(Usuario):
     sesiones = relationship("SesionPractica", back_populates="estudiante")
     alertas = relationship("AlertaEstudiante", back_populates="estudiante")
     organizacion = relationship("Organizacion", back_populates="estudiantes", foreign_keys=[organizacion_id])
+
+    # Unicidad por organización — mismo código puede existir en distintas orgs
+    __table_args__ = (
+        UniqueConstraint("codigo_estudiante", "organizacion_id", name="uq_estudiante_codigo_org"),
+    )
 
     # Configuración de herencia
     __mapper_args__ = {
@@ -108,6 +118,7 @@ class Profesor(Usuario):
     nombre_completo = Column(String(255), nullable=False)
     institucion = Column(String(255), nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
+    grado_academico = Column(String(100), nullable=True)  # Ej: "Licenciatura", "Maestría"
 
     # Relaciones
     grupos = relationship("Grupo", back_populates="profesor")

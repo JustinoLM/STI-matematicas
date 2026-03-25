@@ -39,7 +39,13 @@ import {
   RefreshCw,
   Server,
   Lock,
+  Upload,
+  FileSpreadsheet,
+  Download,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import apiClient, { getErrorMessage } from '@/services/api';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -50,7 +56,33 @@ interface CreateStudentPayload {
   genero: 'masculino' | 'femenino';
   password: string;
   organizacion_id?: number;
+  grado_academico?: string;
+  anio_nacimiento?: number;
+  mes_nacimiento?: number;
 }
+
+interface BulkStudentRow {
+  codigo_estudiante: string;
+  nombre_completo: string;
+  genero: 'masculino' | 'femenino';
+  password: string;
+  organizacion_id?: number;
+  grado_academico?: string;
+  anio_nacimiento?: number;
+  mes_nacimiento?: number;
+}
+
+interface BulkTeacherRow {
+  codigo_profesor: string;
+  nombre_completo: string;
+  password: string;
+  institucion?: string;
+  organizacion_id?: number;
+  grado_academico?: string;
+}
+
+interface BulkImportError { fila: number; codigo: string; mensaje: string; }
+interface BulkImportResult { total: number; creados: number; errores: BulkImportError[]; }
 
 interface CreateTeacherPayload {
   codigo_profesor: string;
@@ -58,6 +90,7 @@ interface CreateTeacherPayload {
   password: string;
   institucion?: string;
   organizacion_id?: number;
+  grado_academico?: string;
 }
 
 interface CreateOrgPayload {
@@ -158,6 +191,14 @@ const adminService = {
   async eliminarEstudiante(estId: number): Promise<void> {
     await apiClient.delete(`/admin/students/${estId}`);
   },
+  async bulkImportStudents(rows: BulkStudentRow[]): Promise<BulkImportResult> {
+    const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/students', { estudiantes: rows });
+    return response.data;
+  },
+  async bulkImportTeachers(rows: BulkTeacherRow[]): Promise<BulkImportResult> {
+    const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/teachers', { profesores: rows });
+    return response.data;
+  },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -233,13 +274,13 @@ function PasswordInput({
 function FormEstudiante({ organizaciones }: {
   organizaciones: OrgCreated[];
 }) {
-  const [form, setForm] = useState({
-    codigo_estudiante: '',
-    nombre_completo: '',
+  const emptyForm = {
+    codigo_estudiante: '', nombre_completo: '',
     genero: 'masculino' as 'masculino' | 'femenino',
-    password: '',
-    organizacion_id: '',
-  });
+    password: '', organizacion_id: '',
+    grado_academico: '', anio_nacimiento: '', mes_nacimiento: '',
+  };
+  const [form, setForm] = useState(emptyForm);
   const [resultado, setResultado] = useState<UserCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -248,7 +289,7 @@ function FormEstudiante({ organizaciones }: {
     onSuccess: (data) => {
       setResultado(data);
       setError(null);
-      setForm({ codigo_estudiante: '', nombre_completo: '', genero: 'masculino', password: '', organizacion_id: '' });
+      setForm(emptyForm);
     },
     onError: (err) => {
       setError(getErrorMessage(err));
@@ -265,6 +306,9 @@ function FormEstudiante({ organizaciones }: {
       genero: form.genero,
       password: form.password,
       organizacion_id: form.organizacion_id ? Number(form.organizacion_id) : undefined,
+      grado_academico: form.grado_academico.trim() || undefined,
+      anio_nacimiento: form.anio_nacimiento ? Number(form.anio_nacimiento) : undefined,
+      mes_nacimiento: form.mes_nacimiento ? Number(form.mes_nacimiento) : undefined,
     });
   };
 
@@ -339,6 +383,44 @@ function FormEstudiante({ organizaciones }: {
             <p className="text-xs text-amber-600">Crea una organización primero en la pestaña "Orgs".</p>
           )}
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="grado-est">Grado académico</Label>
+          <Input
+            id="grado-est"
+            placeholder="5to grado"
+            value={form.grado_academico}
+            onChange={e => setForm(f => ({ ...f, grado_academico: e.target.value }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="anio-est">Año de nacimiento</Label>
+          <Input
+            id="anio-est"
+            type="number"
+            placeholder="2014"
+            min={2000}
+            max={2030}
+            value={form.anio_nacimiento}
+            onChange={e => setForm(f => ({ ...f, anio_nacimiento: e.target.value }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="mes-est">Mes de nacimiento</Label>
+          <select
+            id="mes-est"
+            value={form.mes_nacimiento}
+            onChange={e => setForm(f => ({ ...f, mes_nacimiento: e.target.value }))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">— Sin especificar —</option>
+            {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((m, i) => (
+              <option key={i + 1} value={i + 1}>{m}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -378,6 +460,7 @@ function FormProfesor({ organizaciones }: {
     password: '',
     institucion: '',
     organizacion_id: '',
+    grado_academico: '',
   });
   const [resultado, setResultado] = useState<UserCreated | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -387,7 +470,7 @@ function FormProfesor({ organizaciones }: {
     onSuccess: (data) => {
       setResultado(data);
       setError(null);
-      setForm({ codigo_profesor: '', nombre_completo: '', password: '', institucion: '', organizacion_id: '' });
+      setForm({ codigo_profesor: '', nombre_completo: '', password: '', institucion: '', organizacion_id: '', grado_academico: '' });
     },
     onError: (err) => {
       setError(getErrorMessage(err));
@@ -404,6 +487,7 @@ function FormProfesor({ organizaciones }: {
       password: form.password,
       institucion: form.institucion.trim() || undefined,
       organizacion_id: form.organizacion_id ? Number(form.organizacion_id) : undefined,
+      grado_academico: form.grado_academico.trim() || undefined,
     });
   };
 
@@ -453,6 +537,18 @@ function FormProfesor({ organizaciones }: {
             placeholder="Escuela Primaria Central"
             value={form.institucion}
             onChange={e => setForm(f => ({ ...f, institucion: e.target.value }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="grado-prof">
+            Grado académico <span className="text-muted-foreground text-xs">(opcional)</span>
+          </Label>
+          <Input
+            id="grado-prof"
+            placeholder="Ej: Licenciatura, Maestría"
+            value={form.grado_academico}
+            onChange={e => setForm(f => ({ ...f, grado_academico: e.target.value }))}
           />
         </div>
 
@@ -1452,6 +1548,294 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
   );
 }
 
+// ─── Importación Masiva ───────────────────────────────────────────────────────
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+/** Descarga un Blob como archivo */
+function descargarArchivo(contenido: string, nombre: string, tipo: string) {
+  const blob = new Blob([contenido], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }) {
+  const [tipo, setTipo] = useState<'estudiantes' | 'profesores'>('estudiantes');
+  const [filasEst, setFilasEst] = useState<BulkStudentRow[]>([]);
+  const [filasProf, setFilasProf] = useState<BulkTeacherRow[]>([]);
+  const [resultado, setResultado] = useState<BulkImportResult | null>(null);
+  const [importando, setImportando] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  const filas = tipo === 'estudiantes' ? filasEst : filasProf;
+
+  // ── Leer archivo CSV o Excel ─────────────────────────────────────────────
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParseError(null);
+    setResultado(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (tipo === 'estudiantes') {
+          const parsed = rows.map((r, i) => {
+            const codigo = String(r['codigo_estudiante'] || r['codigo'] || '').trim().toUpperCase();
+            // Soporta nombre_completo OR nombre + apellido como columnas separadas
+            const nombreBase = String(r['nombre_completo'] || r['nombre'] || '').trim();
+            const apellido = String(r['apellido'] || '').trim();
+            const nombre = apellido ? `${nombreBase} ${apellido}` : nombreBase;
+            // Password puede ser fórmula de Excel que genera número → convertir a string
+            const password = String(r['password'] || r['contraseña'] || r['clave'] || '').trim();
+            if (!codigo || !nombre || !password) throw new Error(`Fila ${i + 2}: faltan campos obligatorios (codigo, nombre, password)`);
+            return {
+              codigo_estudiante: codigo,
+              nombre_completo: nombre,
+              genero: (String(r['genero'] || 'masculino').toLowerCase() === 'femenino' ? 'femenino' : 'masculino') as 'masculino' | 'femenino',
+              password,
+              organizacion_id: r['organizacion_id'] ? Number(r['organizacion_id']) : undefined,
+              grado_academico: String(r['grado_academico'] || '').trim() || undefined,
+              anio_nacimiento: r['anio_nacimiento'] ? Number(r['anio_nacimiento']) : undefined,
+              mes_nacimiento: r['mes_nacimiento'] ? Number(r['mes_nacimiento']) : undefined,
+            } as BulkStudentRow;
+          });
+          setFilasEst(parsed);
+        } else {
+          const parsed = rows.map((r, i) => {
+            const codigo = String(r['codigo_profesor'] || r['codigo'] || '').trim().toUpperCase();
+            const nombre = String(r['nombre_completo'] || r['nombre'] || '').trim();
+            const password = String(r['password'] || r['contraseña'] || '').trim();
+            if (!codigo || !nombre || !password) throw new Error(`Fila ${i + 2}: faltan campos obligatorios (codigo, nombre, password)`);
+            return {
+              codigo_profesor: codigo,
+              nombre_completo: nombre,
+              password,
+              institucion: String(r['institucion'] || '').trim() || undefined,
+              organizacion_id: r['organizacion_id'] ? Number(r['organizacion_id']) : undefined,
+              grado_academico: String(r['grado_academico'] || '').trim() || undefined,
+            } as BulkTeacherRow;
+          });
+          setFilasProf(parsed);
+        }
+      } catch (err) {
+        setParseError(err instanceof Error ? err.message : 'Error al leer el archivo');
+        if (tipo === 'estudiantes') setFilasEst([]);
+        else setFilasProf([]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
+  // ── Importar ─────────────────────────────────────────────────────────────
+  const handleImportar = async () => {
+    setImportando(true);
+    setResultado(null);
+    try {
+      const res = tipo === 'estudiantes'
+        ? await adminService.bulkImportStudents(filasEst)
+        : await adminService.bulkImportTeachers(filasProf);
+      setResultado(res);
+      if (tipo === 'estudiantes') setFilasEst([]);
+      else setFilasProf([]);
+    } catch (err) {
+      setParseError(getErrorMessage(err));
+    } finally {
+      setImportando(false);
+    }
+  };
+
+  // ── Descargar plantilla ───────────────────────────────────────────────────
+  const descargarPlantilla = () => {
+    const wb = XLSX.utils.book_new();
+
+    if (tipo === 'estudiantes') {
+      const wsData = XLSX.utils.aoa_to_sheet([
+        ['codigo_estudiante', 'nombre', 'apellido', 'genero', 'password', 'organizacion_id', 'grado_academico', 'anio_nacimiento', 'mes_nacimiento'],
+        ['EST001', 'Juan', 'Pérez', 'masculino', 'temp123', organizaciones[0]?.id ?? '', '5to grado', 2014, 3],
+        ['EST002', 'María', 'García', 'femenino', 'temp123', organizaciones[0]?.id ?? '', '5to grado', 2013, 8],
+      ]);
+      XLSX.utils.book_append_sheet(wb, wsData, 'Estudiantes');
+    } else {
+      const wsData = XLSX.utils.aoa_to_sheet([
+        ['codigo_profesor', 'nombre_completo', 'password', 'institucion', 'organizacion_id', 'grado_academico'],
+        ['PROF001', 'Ana Martínez', 'temp123', 'Escuela Central', organizaciones[0]?.id ?? '', 'Licenciatura'],
+        ['PROF002', 'Carlos López', 'temp123', '', '', 'Maestría'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, wsData, 'Profesores');
+    }
+
+    // Segunda hoja: catálogo de organizaciones disponibles
+    const wsOrgs = XLSX.utils.aoa_to_sheet([
+      ['ID', 'Nombre', 'Código'],
+      ...organizaciones.map(o => [o.id, o.nombre, o.codigo]),
+    ]);
+    XLSX.utils.book_append_sheet(wb, wsOrgs, 'Organizaciones');
+
+    XLSX.writeFile(wb, tipo === 'estudiantes' ? 'plantilla_estudiantes.xlsx' : 'plantilla_profesores.xlsx');
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Selector de tipo */}
+      <div className="flex gap-2">
+        <Button
+          variant={tipo === 'estudiantes' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setTipo('estudiantes'); setResultado(null); setParseError(null); }}
+        >
+          <GraduationCap className="h-4 w-4 mr-1.5" /> Estudiantes
+        </Button>
+        <Button
+          variant={tipo === 'profesores' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setTipo('profesores'); setResultado(null); setParseError(null); }}
+        >
+          <BookOpen className="h-4 w-4 mr-1.5" /> Profesores
+        </Button>
+        <Button variant="outline" size="sm" onClick={descargarPlantilla} className="ml-auto">
+          <Download className="h-4 w-4 mr-1.5" /> Descargar plantilla
+        </Button>
+      </div>
+
+      {/* Zona de carga */}
+      <label className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 cursor-pointer hover:bg-gray-100 transition-colors">
+        <FileSpreadsheet className="h-10 w-10 text-gray-400" />
+        <div className="text-center">
+          <p className="text-sm font-medium text-gray-700">Haz clic para seleccionar un archivo</p>
+          <p className="text-xs text-gray-500 mt-1">CSV o Excel (.xlsx, .xls) — Máx. 500 filas</p>
+        </div>
+        <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
+      </label>
+
+      {/* Error de parseo */}
+      {parseError && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          {parseError}
+        </div>
+      )}
+
+      {/* Preview de filas */}
+      {filas.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-700">
+            Vista previa — <span className="text-blue-600">{filas.length} {tipo}</span> listos para importar
+          </p>
+          <div className="overflow-x-auto rounded-lg border max-h-64">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  {tipo === 'estudiantes' ? (
+                    <>
+                      <th className="px-3 py-2 text-left font-medium">Código</th>
+                      <th className="px-3 py-2 text-left font-medium">Nombre</th>
+                      <th className="px-3 py-2 text-left font-medium">Género</th>
+                      <th className="px-3 py-2 text-left font-medium">Grado</th>
+                      <th className="px-3 py-2 text-left font-medium">Nac.</th>
+                      <th className="px-3 py-2 text-left font-medium">Org.</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-3 py-2 text-left font-medium">Código</th>
+                      <th className="px-3 py-2 text-left font-medium">Nombre</th>
+                      <th className="px-3 py-2 text-left font-medium">Institución</th>
+                      <th className="px-3 py-2 text-left font-medium">Org.</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filas.slice(0, 20).map((fila, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    {tipo === 'estudiantes' ? (() => {
+                      const f = fila as BulkStudentRow;
+                      const org = organizaciones.find(o => o.id === f.organizacion_id);
+                      return (
+                        <>
+                          <td className="px-3 py-1.5 font-mono">{f.codigo_estudiante}</td>
+                          <td className="px-3 py-1.5">{f.nombre_completo}</td>
+                          <td className="px-3 py-1.5">{f.genero}</td>
+                          <td className="px-3 py-1.5">{f.grado_academico || '—'}</td>
+                          <td className="px-3 py-1.5">
+                            {f.anio_nacimiento
+                              ? `${f.mes_nacimiento ? MESES[f.mes_nacimiento - 1] + ' ' : ''}${f.anio_nacimiento}`
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-1.5">{org ? org.codigo : '—'}</td>
+                        </>
+                      );
+                    })() : (() => {
+                      const f = fila as BulkTeacherRow;
+                      const org = organizaciones.find(o => o.id === f.organizacion_id);
+                      return (
+                        <>
+                          <td className="px-3 py-1.5 font-mono">{f.codigo_profesor}</td>
+                          <td className="px-3 py-1.5">{f.nombre_completo}</td>
+                          <td className="px-3 py-1.5">{f.institucion || '—'}</td>
+                          <td className="px-3 py-1.5">{org ? org.codigo : '—'}</td>
+                        </>
+                      );
+                    })()}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filas.length > 20 && (
+              <p className="px-3 py-2 text-xs text-gray-500">
+                … y {filas.length - 20} filas más (no se muestran en la vista previa)
+              </p>
+            )}
+          </div>
+
+          <Button onClick={handleImportar} disabled={importando} className="w-full">
+            {importando ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</>
+            ) : (
+              <><Upload className="h-4 w-4 mr-2" />Importar {filas.length} {tipo}</>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Resultado */}
+      {resultado && (
+        <div className="space-y-3">
+          <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${resultado.errores.length === 0 ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+            {resultado.errores.length === 0
+              ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+              : <AlertCircle className="h-5 w-5 text-amber-600" />}
+            {resultado.creados} de {resultado.total} creados exitosamente.
+            {resultado.errores.length > 0 && ` ${resultado.errores.length} con error.`}
+          </div>
+          {resultado.errores.length > 0 && (
+            <div className="rounded-lg border border-red-200 overflow-hidden">
+              <p className="px-3 py-2 text-xs font-semibold text-red-700 bg-red-50 border-b">Errores</p>
+              {resultado.errores.map((err, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-1.5 text-xs border-b last:border-0">
+                  <XCircle className="h-3.5 w-3.5 mt-0.5 text-red-500 flex-shrink-0" />
+                  <span className="font-mono text-gray-600 w-20 flex-shrink-0">Fila {err.fila} · {err.codigo}</span>
+                  <span className="text-red-700">{err.mensaje}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -1536,7 +1920,7 @@ export function AdminPage() {
           {/* ── Usuarios: sub-tabs con toda la gestión de usuarios ── */}
           <TabsContent value="usuarios">
             <Tabs defaultValue="estudiante" className="mt-2">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="estudiante" className="flex items-center gap-1 text-xs">
                   <BookOpen className="h-3 w-3" />
                   <span className="hidden sm:inline">+ Estudiante</span>
@@ -1552,6 +1936,10 @@ export function AdminPage() {
                 <TabsTrigger value="puntos" className="flex items-center gap-1 text-xs text-yellow-600 data-[state=active]:text-yellow-700">
                   <Sparkles className="h-3 w-3" />
                   <span className="hidden sm:inline">Puntos</span>
+                </TabsTrigger>
+                <TabsTrigger value="importar" className="flex items-center gap-1 text-xs text-green-700 data-[state=active]:text-green-800">
+                  <Upload className="h-3 w-3" />
+                  <span className="hidden sm:inline">Importar</span>
                 </TabsTrigger>
                 <TabsTrigger value="eliminar" className="flex items-center gap-1 text-xs text-red-600 data-[state=active]:text-red-700">
                   <Trash2 className="h-3 w-3" />
@@ -1589,6 +1977,21 @@ export function AdminPage() {
 
               <TabsContent value="puntos">
                 <SeccionAgregarPuntos />
+              </TabsContent>
+
+              <TabsContent value="importar">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Importación masiva</CardTitle>
+                    <CardDescription>
+                      Carga un archivo CSV o Excel para crear múltiples usuarios de una vez.
+                      Descarga la plantilla, complétala y súbela aquí.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormImportarMasivo organizaciones={organizaciones} />
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="eliminar">

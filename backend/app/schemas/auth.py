@@ -42,6 +42,9 @@ class CreateStudentRequest(BaseModel):
     genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
+    grado_academico: Optional[str] = Field(None, max_length=50)
+    anio_nacimiento: Optional[int] = Field(None, ge=2000, le=2030)
+    mes_nacimiento: Optional[int] = Field(None, ge=1, le=12)
 
     class Config:
         json_schema_extra = {
@@ -51,6 +54,9 @@ class CreateStudentRequest(BaseModel):
                 "genero": "masculino",
                 "password": "temp123",
                 "organizacion_id": 1,
+                "grado_academico": "5to grado",
+                "anio_nacimiento": 2014,
+                "mes_nacimiento": 3,
             }
         }
 
@@ -62,6 +68,7 @@ class CreateTeacherRequest(BaseModel):
     password: str = Field(min_length=6, max_length=100)
     institucion: Optional[str] = Field(None, max_length=255)
     organizacion_id: Optional[int] = None
+    grado_academico: Optional[str] = Field(None, max_length=100)
 
     class Config:
         json_schema_extra = {
@@ -110,6 +117,9 @@ class StudentResponse(UserBase):
     nombre_completo: str
     genero: Genero
     narrativa_seleccionada_id: Optional[int]
+    grado_academico: Optional[str] = None
+    anio_nacimiento: Optional[int] = None
+    mes_nacimiento: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -132,6 +142,7 @@ class TeacherResponse(UserBase):
     codigo_profesor: str
     nombre_completo: str
     institucion: Optional[str]
+    grado_academico: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -186,3 +197,52 @@ class MessageResponse(BaseModel):
                 "message": "Operación exitosa"
             }
         }
+
+
+# ============================================
+# Schemas de Importación Masiva
+# ============================================
+
+class BulkStudentRow(BaseModel):
+    """Una fila del archivo de importación masiva de estudiantes."""
+    codigo_estudiante: str = Field(min_length=5, max_length=50)
+    nombre_completo: str = Field(min_length=3, max_length=255)
+    genero: Genero = Genero.MASCULINO
+    password: str = Field(min_length=6, max_length=100)
+    organizacion_id: Optional[int] = None
+    grado_academico: Optional[str] = Field(None, max_length=50)
+    anio_nacimiento: Optional[int] = Field(None, ge=2000, le=2030)
+    mes_nacimiento: Optional[int] = Field(None, ge=1, le=12)
+
+
+class BulkTeacherRow(BaseModel):
+    """Una fila del archivo de importación masiva de profesores."""
+    codigo_profesor: str = Field(min_length=5, max_length=50)
+    nombre_completo: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=6, max_length=100)
+    institucion: Optional[str] = Field(None, max_length=255)
+    organizacion_id: Optional[int] = None
+    grado_academico: Optional[str] = Field(None, max_length=100)
+
+
+class BulkImportStudentsRequest(BaseModel):
+    """Request para importación masiva de estudiantes."""
+    estudiantes: list[BulkStudentRow]
+
+
+class BulkImportTeachersRequest(BaseModel):
+    """Request para importación masiva de profesores."""
+    profesores: list[BulkTeacherRow]
+
+
+class BulkImportError(BaseModel):
+    fila: int
+    codigo: str
+    mensaje: str
+
+
+class BulkImportResult(BaseModel):
+    """Resultado de una importación masiva."""
+    total: int
+    creados: int
+    errores: list[BulkImportError]

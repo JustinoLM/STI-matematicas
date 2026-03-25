@@ -226,9 +226,9 @@ export default function StudentsPage() {
             <div className="flex items-start gap-3">
               <Users className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-800">
-                <span className="font-medium">¿Cómo agregar estudiantes a un grupo?</span>
+                <span className="font-medium">¿Cómo agregar estudiantes a un grupo en bulk?</span>
                 <span className="text-blue-700">
-                  {' '}Ve a la página de un grupo específico y usa el botón "Agregar Estudiante" para seleccionar estudiantes de esta lista.
+                  {' '}Ve al detalle de un grupo y usa el tab "Importar" para subir una lista de códigos en CSV o Excel.
                 </span>
               </div>
             </div>

@@ -628,7 +628,11 @@ class GamificationService:
         **campos
     ) -> PersonalizacionResponse:
         """Actualiza la personalización del estudiante."""
-        # Validar que posee los items que intenta activar
+        # Validar posesión del TEMA (ítem premium — no tiene acceso cruzado).
+        # Fondos y músicas usan acceso cruzado entre temas: si el estudiante posee
+        # el fondo/música nº1 de cualquier tema, puede activar el equivalente en
+        # cualquier otro tema. La validación de esos ítems se hace en el frontend;
+        # el backend solo verifica que el tema en sí esté desbloqueado.
         if "tema_activo_id" in campos and campos["tema_activo_id"]:
             if not await self.gamification_repo.estudiante_posee_item(
                 estudiante_id,
@@ -637,26 +641,6 @@ class GamificationService:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="No posees este tema"
-                )
-        
-        if "fondo_activo_id" in campos and campos["fondo_activo_id"]:
-            if not await self.gamification_repo.estudiante_posee_item(
-                estudiante_id,
-                campos["fondo_activo_id"]
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No posees este fondo"
-                )
-        
-        if "musica_activa_id" in campos and campos["musica_activa_id"]:
-            if not await self.gamification_repo.estudiante_posee_item(
-                estudiante_id,
-                campos["musica_activa_id"]
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No posees esta música"
                 )
         
         # Actualizar

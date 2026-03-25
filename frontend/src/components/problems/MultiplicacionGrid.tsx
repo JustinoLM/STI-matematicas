@@ -38,10 +38,11 @@ export function MultiplicacionGrid({
     expectedValues[`resultado-${index}`] = char;
   });
 
-  // Productos parciales
+  // Productos parciales — usar valorStrVisual (puede tener celda ' ' en la columna decimal)
+  // Las celdas ' ' no son inputs editables → no se incluyen en expectedValues
   productosParciales.forEach((parcial, idx) => {
-    parcial.valorStr.split('').forEach((char, charIdx) => {
-      expectedValues[`parcial-${idx}-${charIdx}`] = char;
+    parcial.valorStrVisual.split('').forEach((char, charIdx) => {
+      if (char !== ' ') expectedValues[`parcial-${idx}-${charIdx}`] = char;
     });
   });
 
@@ -106,7 +107,7 @@ export function MultiplicacionGrid({
         {productosParciales.map((parcial, idx) => (
           <DigitRow
             key={`parcial-${idx}`}
-            expectedValue={parcial.valorStr}
+            expectedValue={parcial.valorStrVisual}
             digitosRespuesta={digitosRespuesta}
             keyPrefix={`parcial-${idx}`}
             inputRefs={inputRefs}

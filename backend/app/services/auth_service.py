@@ -19,7 +19,11 @@ from app.schemas.auth import (
     TokenResponse,
     UserBase,
     StudentResponse,
-    TeacherResponse
+    TeacherResponse,
+    BulkImportStudentsRequest,
+    BulkImportTeachersRequest,
+    BulkImportResult,
+    BulkImportError,
 )
 
 
@@ -40,30 +44,43 @@ class AuthService:
         Raises:
             HTTPException: Si credenciales son inválidas
         """
-        # Buscar usuario por código
-        user = await self.user_repo.get_by_codigo(codigo)
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Código o contraseña incorrectos",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Verificar que el usuario esté activo
-        if not user.activo:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Usuario inactivo. Contacta al administrador."
-            )
-        
-        # Verificar contraseña
-        if not verify_password(password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Código o contraseña incorrectos",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        # Buscar todos los estudiantes con ese código (puede haber varios en distintas orgs)
+        estudiantes = await self.user_repo.get_all_students_by_codigo(codigo)
+        user = None
+
+        if estudiantes:
+            # Elegir el estudiante cuya contraseña coincida (desambiguación multi-org)
+            for est in estudiantes:
+                if est.activo and verify_password(password, est.password_hash):
+                    user = est
+                    break
+            # Si ninguno coincide pero hay estudiantes, reportar credenciales inválidas
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Código o contraseña incorrectos",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        else:
+            # No es estudiante — buscar como profesor
+            user = await self.user_repo.get_teacher_by_codigo(codigo)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Código o contraseña incorrectos",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if not user.activo:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Usuario inactivo. Contacta al administrador."
+                )
+            if not verify_password(password, user.password_hash):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Código o contraseña incorrectos",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
         
         # Actualizar último acceso
         await self.user_repo.update_last_access(user.id)
@@ -97,11 +114,11 @@ class AuthService:
         Raises:
             HTTPException: Si el código ya existe
         """
-        # Verificar que código no exista
-        if await self.user_repo.codigo_estudiante_exists(data.codigo_estudiante):
+        # Verificar que código no exista en la misma organización
+        if await self.user_repo.codigo_estudiante_exists(data.codigo_estudiante, data.organizacion_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El código de estudiante ya existe"
+                detail="El código de estudiante ya existe en esta organización"
             )
         
         # Hashear contraseña
@@ -115,6 +132,9 @@ class AuthService:
             nombre_completo=data.nombre_completo,
             genero=data.genero,
             organizacion_id=data.organizacion_id,
+            grado_academico=data.grado_academico,
+            anio_nacimiento=data.anio_nacimiento,
+            mes_nacimiento=data.mes_nacimiento,
         )
         
         return StudentResponse.model_validate(estudiante)
@@ -139,10 +159,73 @@ class AuthService:
             nombre_completo=data.nombre_completo,
             institucion=data.institucion,
             organizacion_id=data.organizacion_id,
+            grado_academico=data.grado_academico,
         )
         
         return TeacherResponse.model_validate(profesor)
     
+    async def bulk_import_students(self, data: BulkImportStudentsRequest) -> BulkImportResult:
+        """Importación masiva de estudiantes. Continúa aunque alguna fila falle."""
+        errores: list[BulkImportError] = []
+        creados = 0
+        for idx, row in enumerate(data.estudiantes, start=1):
+            try:
+                if await self.user_repo.codigo_estudiante_exists(row.codigo_estudiante, row.organizacion_id):
+                    errores.append(BulkImportError(
+                        fila=idx, codigo=row.codigo_estudiante,
+                        mensaje="El código ya existe en esta organización"
+                    ))
+                    continue
+                pw_hash = get_password_hash(row.password)
+                await self.user_repo.create_student(
+                    codigo_estudiante=row.codigo_estudiante,
+                    password_hash=pw_hash,
+                    password_plain=row.password,
+                    nombre_completo=row.nombre_completo,
+                    genero=row.genero,
+                    organizacion_id=row.organizacion_id,
+                    grado_academico=row.grado_academico,
+                    anio_nacimiento=row.anio_nacimiento,
+                    mes_nacimiento=row.mes_nacimiento,
+                )
+                creados += 1
+            except Exception as e:
+                errores.append(BulkImportError(
+                    fila=idx, codigo=row.codigo_estudiante,
+                    mensaje=str(e)
+                ))
+        return BulkImportResult(total=len(data.estudiantes), creados=creados, errores=errores)
+
+    async def bulk_import_teachers(self, data: BulkImportTeachersRequest) -> BulkImportResult:
+        """Importación masiva de profesores. Continúa aunque alguna fila falle."""
+        errores: list[BulkImportError] = []
+        creados = 0
+        for idx, row in enumerate(data.profesores, start=1):
+            try:
+                if await self.user_repo.codigo_profesor_exists(row.codigo_profesor):
+                    errores.append(BulkImportError(
+                        fila=idx, codigo=row.codigo_profesor,
+                        mensaje="El código ya existe"
+                    ))
+                    continue
+                pw_hash = get_password_hash(row.password)
+                await self.user_repo.create_teacher(
+                    codigo_profesor=row.codigo_profesor,
+                    password_hash=pw_hash,
+                    password_plain=row.password,
+                    nombre_completo=row.nombre_completo,
+                    institucion=row.institucion,
+                    organizacion_id=row.organizacion_id,
+                    grado_academico=row.grado_academico,
+                )
+                creados += 1
+            except Exception as e:
+                errores.append(BulkImportError(
+                    fila=idx, codigo=row.codigo_profesor,
+                    mensaje=str(e)
+                ))
+        return BulkImportResult(total=len(data.profesores), creados=creados, errores=errores)
+
     async def change_password(
         self,
         user_id: int,

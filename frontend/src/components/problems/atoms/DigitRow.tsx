@@ -105,6 +105,11 @@ export function DigitRow({
         const value = digitosRespuesta[key] || '';
         const isFocused = focusedKey === key;
 
+        // Espacio — celda vacía no-editable (marcador de posición del decimal en productos parciales)
+        if (char === ' ') {
+          return <div key={key} className="w-10 h-10" />;
+        }
+
         // Punto decimal - editable
         if (char === '.') {
           return (

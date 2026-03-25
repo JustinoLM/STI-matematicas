@@ -3,7 +3,7 @@
  * Muestra estadísticas, gestión de estudiantes (agregar/quitar) y borrar grupo.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,8 +22,14 @@ import {
   X,
   Loader2,
   Eye,
+  FileSpreadsheet,
+  Download,
+  Upload,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
-import { teacherService } from '@/services/teacherService';
+import * as XLSX from 'xlsx';
+import { teacherService, BulkAddResult } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +44,69 @@ export default function GroupDetailPage() {
 
   const [busqueda, setBusqueda] = useState('');
   const [confirmarBorrar, setConfirmarBorrar] = useState(false);
+
+  // Bulk import state
+  const [codigosPreview, setCodigosPreview] = useState<string[]>([]);
+  const [bulkResult, setBulkResult] = useState<BulkAddResult | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBulkFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkResult(null);
+    setBulkError(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+        const codigos = rows
+          .map((r) => String(r['codigo_estudiante'] ?? r['codigo'] ?? '').trim().toUpperCase())
+          .filter(Boolean);
+        if (codigos.length === 0) {
+          setBulkError('No se encontraron códigos en el archivo. Verifica que la columna se llame "codigo_estudiante" o "codigo".');
+        } else {
+          setCodigosPreview(codigos);
+        }
+      } catch {
+        setBulkError('No se pudo leer el archivo. Verifica que sea CSV o Excel válido.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const handleBulkImport = useCallback(async () => {
+    if (codigosPreview.length === 0) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    try {
+      const result = await teacherService.bulkAddToGroup(grupoId, codigosPreview);
+      setBulkResult(result);
+      if (result.agregados > 0) {
+        queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId] });
+        queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId, 'statistics'] });
+      }
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Error al importar');
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [codigosPreview, grupoId, queryClient]);
+
+  const downloadTemplate = useCallback(() => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['codigo_estudiante'],
+      ['EST001'],
+      ['EST002'],
+      ['EST003'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Códigos');
+    XLSX.writeFile(wb, 'plantilla_agregar_grupo.xlsx');
+  }, []);
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: grupo, isLoading: loadingGrupo } = useQuery({
@@ -251,14 +320,18 @@ export default function GroupDetailPage() {
 
       {/* ── Gestión de Estudiantes con Tabs ─────────────────────────────── */}
       <Tabs defaultValue="estudiantes">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="estudiantes">
             <Users className="mr-2 h-4 w-4" />
             Estudiantes ({(grupo.estudiantes ?? []).length})
           </TabsTrigger>
           <TabsTrigger value="agregar">
             <UserPlus className="mr-2 h-4 w-4" />
-            Agregar estudiantes
+            Agregar
+          </TabsTrigger>
+          <TabsTrigger value="importar">
+            <Upload className="mr-2 h-4 w-4" />
+            Importar lista
           </TabsTrigger>
         </TabsList>
 
@@ -401,6 +474,111 @@ export default function GroupDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: Importar lista de códigos */}
+        <TabsContent value="importar">
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sube un archivo CSV o Excel con una columna <code className="bg-muted px-1 rounded text-xs">codigo_estudiante</code> (o <code className="bg-muted px-1 rounded text-xs">codigo</code>). Los estudiantes deben pertenecer a tu organización.
+              </p>
+
+              {/* Acciones */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button variant="outline" size="sm" onClick={downloadTemplate} className="border-green-300 text-green-700 hover:bg-green-50">
+                  <Download className="h-4 w-4 mr-1" />
+                  Descargar plantilla
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={handleBulkFile}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { fileInputRef.current?.click(); setCodigosPreview([]); setBulkResult(null); }}
+                  className="border-green-300 text-green-700 hover:bg-green-50"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-1" />
+                  Seleccionar archivo
+                </Button>
+              </div>
+
+              {/* Preview de códigos */}
+              {codigosPreview.length > 0 && !bulkResult && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">{codigosPreview.length} códigos detectados — vista previa (máx. 15):</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {codigosPreview.slice(0, 15).map((c, i) => (
+                      <code key={i} className="text-xs bg-muted px-2 py-1 rounded border">{c}</code>
+                    ))}
+                    {codigosPreview.length > 15 && (
+                      <span className="text-xs text-muted-foreground self-center">…y {codigosPreview.length - 15} más</span>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleBulkImport}
+                    disabled={bulkLoading}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    size="sm"
+                  >
+                    {bulkLoading ? (
+                      <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Agregando...</>
+                    ) : (
+                      <><UserPlus className="h-4 w-4 mr-1" /> Agregar {codigosPreview.length} estudiantes al grupo</>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Resultado */}
+              {bulkResult && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-4 p-3 rounded-lg bg-muted">
+                    <div className="flex items-center gap-1.5 text-green-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="font-semibold">{bulkResult.agregados} agregados</span>
+                    </div>
+                    {bulkResult.errores.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-red-600">
+                        <XCircle className="h-4 w-4" />
+                        <span className="font-semibold">{bulkResult.errores.length} no encontrados</span>
+                      </div>
+                    )}
+                    <span className="text-sm text-muted-foreground">de {bulkResult.total} códigos</span>
+                  </div>
+                  {bulkResult.errores.length > 0 && (
+                    <div className="rounded border border-red-200 bg-red-50 p-2 space-y-1 max-h-40 overflow-y-auto">
+                      {bulkResult.errores.map((err, i) => (
+                        <p key={i} className="text-xs text-red-700">
+                          <code className="font-mono">{err.codigo}</code>: {err.mensaje}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCodigosPreview([]);
+                      setBulkResult(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                  >
+                    Nueva importación
+                  </Button>
+                </div>
+              )}
+
+              {bulkError && (
+                <p className="text-sm text-red-600">{bulkError}</p>
               )}
             </CardContent>
           </Card>

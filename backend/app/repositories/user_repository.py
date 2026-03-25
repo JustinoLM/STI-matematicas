@@ -21,26 +21,30 @@ class UserRepository:
     async def get_by_codigo(self, codigo: str) -> Optional[Usuario]:
         """
         Busca un usuario por su código (estudiante o profesor).
-        
-        Args:
-            codigo: Código de estudiante o profesor
-            
-        Returns:
-            Usuario si existe, None si no existe
+        Para estudiantes puede haber varios con el mismo código en distintas
+        organizaciones — devuelve el primero encontrado (la contraseña se
+        verifica en auth_service usando get_all_students_by_codigo).
         """
-        # Intentar buscar como estudiante
+        # Buscar como estudiante (puede haber más de uno → se resuelve en auth_service)
         result = await self.db.execute(
             select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
         )
-        estudiante = result.scalar_one_or_none()
+        estudiante = result.scalars().first()
         if estudiante:
             return estudiante
-        
+
         # Intentar buscar como profesor
         result = await self.db.execute(
             select(Profesor).where(Profesor.codigo_profesor == codigo)
         )
         return result.scalar_one_or_none()
+
+    async def get_all_students_by_codigo(self, codigo: str) -> list[Estudiante]:
+        """Devuelve TODOS los estudiantes con ese código (pueden ser de distintas orgs)."""
+        result = await self.db.execute(
+            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
+        )
+        return list(result.scalars().all())
     
     async def get_by_id(self, user_id: int) -> Optional[Usuario]:
         """
@@ -83,6 +87,9 @@ class UserRepository:
         genero: str = "masculino",
         password_plain: Optional[str] = None,
         organizacion_id: Optional[int] = None,
+        grado_academico: Optional[str] = None,
+        anio_nacimiento: Optional[int] = None,
+        mes_nacimiento: Optional[int] = None,
     ) -> Estudiante:
         """
         Crea un nuevo estudiante.
@@ -98,6 +105,9 @@ class UserRepository:
             nombre_completo=nombre_completo,
             genero=genero,
             organizacion_id=organizacion_id,
+            grado_academico=grado_academico,
+            anio_nacimiento=anio_nacimiento,
+            mes_nacimiento=mes_nacimiento,
             activo=True
         )
 
@@ -115,6 +125,7 @@ class UserRepository:
         password_plain: Optional[str] = None,
         institucion: Optional[str] = None,
         organizacion_id: Optional[int] = None,
+        grado_academico: Optional[str] = None,
     ) -> Profesor:
         """Crea un nuevo profesor."""
         profesor = Profesor(
@@ -125,6 +136,7 @@ class UserRepository:
             nombre_completo=nombre_completo,
             institucion=institucion,
             organizacion_id=organizacion_id,
+            grado_academico=grado_academico,
             activo=True
         )
         
@@ -164,11 +176,16 @@ class UserRepository:
             user.activo = True
             await self.db.commit()  # COMMIT
     
-    async def codigo_estudiante_exists(self, codigo: str) -> bool:
-        """Verifica si un código de estudiante ya existe."""
-        result = await self.db.execute(
-            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
-        )
+    async def codigo_estudiante_exists(self, codigo: str, organizacion_id: Optional[int] = None) -> bool:
+        """
+        Verifica si un código de estudiante ya existe.
+        Si se pasa organizacion_id, verifica solo dentro de esa organización
+        (un mismo código puede existir en distintas orgs).
+        """
+        query = select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
+        if organizacion_id is not None:
+            query = query.where(Estudiante.organizacion_id == organizacion_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none() is not None
     
     async def codigo_profesor_exists(self, codigo: str) -> bool:

@@ -30,7 +30,10 @@ from app.schemas.auth import (
     TeacherResponse,
     ChangePasswordRequest,
     MessageResponse,
-    UserBase
+    UserBase,
+    BulkImportStudentsRequest,
+    BulkImportTeachersRequest,
+    BulkImportResult,
 )
 
 router = APIRouter()
@@ -145,8 +148,31 @@ async def create_teacher(
 ):
     """
     Crea un nuevo profesor.
-    
+
     **NOTA:** En producción, este endpoint debe estar protegido por rol de administrador.
     Por ahora está abierto para facilitar testing y desarrollo.
     """
     return await auth_service.create_teacher(teacher_data)
+
+
+@router.post("/admin/bulk/students", response_model=BulkImportResult)
+async def bulk_import_students(
+    data: BulkImportStudentsRequest,
+    auth_service: AuthServiceDep
+):
+    """
+    Importación masiva de estudiantes desde un JSON (generado por el frontend al parsear CSV/Excel).
+    Continúa aunque alguna fila falle — devuelve resumen de éxitos y errores.
+    """
+    return await auth_service.bulk_import_students(data)
+
+
+@router.post("/admin/bulk/teachers", response_model=BulkImportResult)
+async def bulk_import_teachers(
+    data: BulkImportTeachersRequest,
+    auth_service: AuthServiceDep
+):
+    """
+    Importación masiva de profesores desde un JSON (generado por el frontend al parsear CSV/Excel).
+    """
+    return await auth_service.bulk_import_teachers(data)

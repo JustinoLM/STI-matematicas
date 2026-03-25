@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { TrendingUp, Target, Clock, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { studentService } from '@/services/studentService';
 import apiClient from '@/services/api';
+import { useThemeStore } from '@/store/themeStore';
 
 // ─── Tipos de stats ───────────────────────────────────────────────────────────
 
@@ -62,12 +63,15 @@ function formatSegundos(segundos: number): string {
 
 export function ProgressPage() {
   const navigate = useNavigate();
+  const { temaActivoId } = useThemeStore();
+  const today = new Date().toISOString().slice(0, 10);
 
-  // Mensaje motivacional LLM — React Query lo cachea 24h en el cliente
+  // Mensaje motivacional LLM — queryKey incluye fecha Y temaActivoId para que al
+  // cambiar de tema se genere un nuevo mensaje acorde a la temática activa.
   const { data: mensajeLLM } = useQuery({
-    queryKey: ['mensaje-progreso'],
+    queryKey: ['mensaje-progreso', today, temaActivoId],
     queryFn: () => studentService.getMensajeMotivacional('progreso'),
-    staleTime: 1000 * 60 * 60 * 24,
+    staleTime: 1000 * 60 * 60 * 12,
     retry: false,
   });
 
@@ -288,16 +292,24 @@ export function ProgressPage() {
         </CardContent>
       </Card>
 
-      {/* Sesiones de los últimos 7 días */}
-      {stats && stats.sesiones_ultimos_7_dias.some((s) => s > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Últimos 7 Días</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Sesiones de los últimos 7 días — siempre visible */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Prácticas — Últimos 7 Días</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingStats ? (
+            <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
+              Cargando...
+            </div>
+          ) : (
             <div className="flex items-end gap-2 h-24">
-              {stats.sesiones_ultimos_7_dias.map((sesiones, i) => {
-                const maxSesiones = Math.max(...stats.sesiones_ultimos_7_dias, 1);
+              {(stats?.sesiones_ultimos_7_dias?.length
+                ? stats.sesiones_ultimos_7_dias
+                : Array(7).fill(0)
+              ).map((sesiones: number, i: number) => {
+                const data = stats?.sesiones_ultimos_7_dias ?? Array(7).fill(0);
+                const maxSesiones = Math.max(...data, 1);
                 const altura = Math.round((sesiones / maxSesiones) * 100);
                 const diasAtras = 6 - i;
                 const fecha = new Date();
@@ -309,8 +321,8 @@ export function ProgressPage() {
                     <span className="text-xs text-gray-500">{sesiones > 0 ? sesiones : ''}</span>
                     <div className="w-full flex items-end justify-center" style={{ height: '72px' }}>
                       <div
-                        className="w-full bg-green-400 rounded-t transition-all"
-                        style={{ height: `${altura}%`, minHeight: sesiones > 0 ? '4px' : '0' }}
+                        className={`w-full rounded-t transition-all ${sesiones > 0 ? 'bg-green-400' : 'bg-gray-100'}`}
+                        style={{ height: `${sesiones > 0 ? altura : 100}%`, minHeight: '4px' }}
                       />
                     </div>
                     <span className="text-xs text-gray-500 capitalize">{diaSemana}</span>
@@ -318,9 +330,9 @@ export function ProgressPage() {
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 interface ProductoParcial {
   valor: number;
   valorStr: string;
+  valorStrVisual: string; // valorStr con celda vacía insertada en la columna decimal (si aplica)
   espacios: number; // celdas vacías a la derecha
 }
 
@@ -64,6 +65,10 @@ function calcularProductosParciales(
   const multiplicandoStr = m1.toString();
   const multiplicadorStr = m2.toString();
 
+  // Resultado final (necesario antes de calcular valorStrVisual de parciales)
+  const resultadoEntero = m1 * m2;
+  const resultadoStr = insertarDecimal(resultadoEntero, totalDecimales);
+
   const productosParciales: ProductoParcial[] = [];
 
   // Productos parciales (de unidades hacia arriba, como en el método tradicional)
@@ -72,19 +77,27 @@ function calcularProductosParciales(
     const producto = m1 * digito;
     const espacios = multiplicadorStr.length - 1 - i; // Unidades=0, decenas=1, centenas=2
 
-    // NO hacemos padding porque los offsetCells ya proporcionan la alineación visual
     const valorStr = producto.toString();
+
+    // Insertar celda vacía en la columna del decimal cuando el parcial la atraviesa.
+    // Fórmula: insertIdx = decimalIdx + valorStr.length + espacios - resultadoStr.length + 1
+    // Solo se aplica cuando 0 < insertIdx <= valorStr.length
+    let valorStrVisual = valorStr;
+    const decimalIdx = resultadoStr.indexOf('.');
+    if (decimalIdx >= 0) {
+      const insertIdx = decimalIdx + valorStr.length + espacios - resultadoStr.length + 1;
+      if (insertIdx > 0 && insertIdx <= valorStr.length) {
+        valorStrVisual = valorStr.slice(0, insertIdx) + ' ' + valorStr.slice(insertIdx);
+      }
+    }
 
     productosParciales.push({
       valor: producto,
       valorStr,
+      valorStrVisual,
       espacios,
     });
   }
-
-  // Resultado final
-  const resultadoEntero = m1 * m2;
-  const resultadoStr = insertarDecimal(resultadoEntero, totalDecimales);
 
   return {
     multiplicandoStr,

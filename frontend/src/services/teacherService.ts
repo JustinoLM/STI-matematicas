@@ -12,6 +12,18 @@ import {
   ProgresoEstudiante,
 } from '@/types';
 
+export interface BulkAddError {
+  fila: number;
+  codigo: string;
+  mensaje: string;
+}
+
+export interface BulkAddResult {
+  total: number;
+  agregados: number;
+  errores: BulkAddError[];
+}
+
 /** Estudiante de la organización del profesor (endpoint GET /teachers/students). */
 export interface EstudianteOrg {
   id: number;
@@ -232,6 +244,18 @@ export const teacherService = {
     try {
       const params = q ? { q } : {};
       const response = await apiClient.get<EstudianteOrg[]>('/teachers/students', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Añadir estudiantes a un grupo en bulk, dado una lista de códigos.
+   */
+  async bulkAddToGroup(grupoId: number, codigos: string[]): Promise<BulkAddResult> {
+    try {
+      const response = await apiClient.post<BulkAddResult>(`/teachers/groups/${grupoId}/students/bulk`, { codigos });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

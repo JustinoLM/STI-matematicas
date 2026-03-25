@@ -24,6 +24,7 @@ from app.schemas.teacher import (
     EstadisticasGrupo, ProgresoEstudiante, AlertaEstudianteResponse,
     BuscarEstudianteRequest, EstudianteSearchResult
 )
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -54,9 +55,78 @@ async def obtener_perfil_profesor(
     }
 
 
+class BulkAddStudentsRequest(BaseModel):
+    codigos: List[str]
+
+
+class BulkAddError(BaseModel):
+    fila: int
+    codigo: str
+    mensaje: str
+
+
+class BulkAddResult(BaseModel):
+    total: int
+    agregados: int
+    errores: List[BulkAddError]
+
+
 async def get_teacher_service(db: AsyncSession = Depends(get_db)) -> TeacherService:
     """Dependency para TeacherService."""
     return TeacherService(db)
+
+
+# ==================== IMPORTACIÓN MASIVA A GRUPO ====================
+
+@router.post("/groups/{group_id}/students/bulk", response_model=BulkAddResult)
+async def bulk_add_students_to_group(
+    group_id: int,
+    data: BulkAddStudentsRequest,
+    profesor: Profesor = Depends(get_current_teacher),
+    service: TeacherService = Depends(get_teacher_service),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Añade una lista de estudiantes (por código) a un grupo en bulk.
+    Los estudiantes deben pertenecer a la misma organización del profesor.
+    Continúa aunque alguna fila falle — devuelve resumen de éxitos y errores.
+    """
+    from sqlalchemy import select as sa_select
+    from app.models.user import Estudiante
+
+    errores: List[BulkAddError] = []
+    agregados = 0
+
+    for i, codigo in enumerate(data.codigos, start=1):
+        codigo = codigo.strip().upper()
+        if not codigo:
+            errores.append(BulkAddError(fila=i, codigo=codigo, mensaje="Código vacío"))
+            continue
+        try:
+            # Buscar estudiante en la organización del profesor
+            result = await db.execute(
+                sa_select(Estudiante).where(
+                    Estudiante.codigo_estudiante == codigo,
+                    Estudiante.organizacion_id == profesor.organizacion_id,
+                )
+            )
+            est = result.scalar_one_or_none()
+            if not est:
+                errores.append(BulkAddError(
+                    fila=i, codigo=codigo,
+                    mensaje="Estudiante no encontrado en tu organización"
+                ))
+                continue
+            await service.agregar_estudiante(group_id, est.id, profesor.id)
+            agregados += 1
+        except ValueError as e:
+            errores.append(BulkAddError(fila=i, codigo=codigo, mensaje=str(e)))
+        except Exception:
+            errores.append(BulkAddError(
+                fila=i, codigo=codigo, mensaje="Error inesperado al agregar"
+            ))
+
+    return BulkAddResult(total=len(data.codigos), agregados=agregados, errores=errores)
 
 
 # ==================== GRUPOS ====================
