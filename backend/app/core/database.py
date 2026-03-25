@@ -11,7 +11,7 @@ from app.core.config import settings
 
 # Crear engine asíncrono de SQLAlchemy
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.async_database_url,
     echo=settings.DEBUG,  # Mostrar queries SQL en modo debug
     future=True,
     pool_pre_ping=True,  # Verificar conexiones antes de usar

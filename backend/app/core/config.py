@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     # Base de datos
     DATABASE_URL: str
 
+    @property
+    def async_database_url(self) -> str:
+        """Asegura que la URL use el driver asyncpg, sin importar cómo llegue."""
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
     # Seguridad JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
