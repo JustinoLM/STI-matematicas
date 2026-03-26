@@ -25,19 +25,12 @@ app = FastAPI(
 # Configurar CORS
 # En desarrollo se permiten todos los orígenes localhost para evitar
 # problemas con puertos dinámicos de Vite (5173, 5174, etc.)
-# Orígenes permitidos: siempre incluye el frontend de Vercel + localhost para dev
-_PRODUCTION_ORIGINS = [
+cors_origins = [
     "https://tesis-sti-matematicas.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
-
-if settings.ENVIRONMENT == "production":
-    cors_origins = _PRODUCTION_ORIGINS
-    cors_credentials = True
-else:
-    cors_origins = ["*"]
-    cors_credentials = False  # allow_credentials=True es incompatible con allow_origins=["*"]
+cors_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
