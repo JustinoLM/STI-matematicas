@@ -5,8 +5,7 @@ Inserta:
 - 6 Narrativas
 - Desbloqueables completos (temas, fondos, colores, músicas, efectos)
   alineados 1:1 con los definidos en frontend/src/types/shop.ts
-- Medallas básicas
-- 1 Profesor de prueba + 3 Estudiantes de prueba
+- Medallas
 
 Uso:
     cd backend
@@ -22,20 +21,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
-from app.core.security import get_password_hash
 from app.models import (
     Narrativa,
     CategoriaDesbloqueable,
     CategoriaMedalla,
     Desbloqueable,
     Medalla,
-    Profesor,
-    Estudiante,
-    Usuario,
-    TipoUsuario,
-    Organizacion,
-    Grupo,
-    EstudianteGrupo,
 )
 
 
@@ -447,128 +438,6 @@ async def seed_medallas(db: AsyncSession):
     print(f"  ✓ {len(medallas)} medallas insertadas ({sum(1 for m in medallas if m.get('es_secreta'))} secretas, {sum(1 for m in medallas if not m.get('es_secreta'))} visibles)")
 
 
-# ============================================================
-# ORGANIZACIONES DE PRUEBA
-# ============================================================
-
-async def seed_organizaciones(db: AsyncSession):
-    """Insertar 2 organizaciones de prueba."""
-    result = await db.execute(select(Organizacion))
-    if result.scalars().first():
-        print("  → Organizaciones ya existen, omitiendo.")
-        return
-
-    orgs = [
-        Organizacion(
-            nombre="Escuela Primaria Central",
-            codigo="EPC001",
-            descripcion="Organización de prueba para tesis - colegio principal",
-            ciudad="Ciudad de Panamá",
-            pais="Panamá",
-        ),
-        Organizacion(
-            nombre="Colegio San José",
-            codigo="CSJ001",
-            descripcion="Segunda organización de prueba - colegio externo",
-            ciudad="David",
-            pais="Panamá",
-        ),
-    ]
-    for org in orgs:
-        db.add(org)
-    await db.commit()
-    print("  ✓ 2 organizaciones insertadas (EPC001, CSJ001)")
-
-
-# ============================================================
-# USUARIOS DE PRUEBA
-# ============================================================
-
-async def seed_usuarios_prueba(db: AsyncSession):
-    """Insertar 1 profesor y 3 estudiantes de prueba."""
-    result = await db.execute(select(Usuario))
-    if result.scalars().first():
-        print("  → Usuarios ya existen, omitiendo.")
-        return
-
-    # Obtener organización principal para asignar al profesor
-    org_result = await db.execute(select(Organizacion).where(Organizacion.codigo == "EPC001"))
-    org_principal = org_result.scalar_one_or_none()
-
-    # Profesor
-    db.add(Profesor(
-        tipo_usuario=TipoUsuario.PROFESOR,
-        password_hash=get_password_hash("profesor123"),
-        activo=True,
-        codigo_profesor="PROF001",
-        nombre_completo="María García",
-        institucion="Escuela Primaria Central",
-        email="profesor@sti.edu",
-        organizacion_id=org_principal.id if org_principal else None,
-    ))
-
-    # Estudiantes
-    estudiantes_data = [
-        {"codigo_estudiante": "EST001", "nombre_completo": "Juan Pérez"},
-        {"codigo_estudiante": "EST002", "nombre_completo": "Ana Martínez"},
-        {"codigo_estudiante": "EST003", "nombre_completo": "Carlos López"},
-    ]
-    for data in estudiantes_data:
-        db.add(Estudiante(
-            tipo_usuario=TipoUsuario.ESTUDIANTE,
-            password_hash=get_password_hash("estudiante123"),
-            activo=True,
-            email=None,
-            organizacion_id=org_principal.id if org_principal else None,
-            **data,
-        ))
-
-    await db.commit()
-    print("  ✓ 1 profesor (PROF001) y 3 estudiantes (EST001-003) con password 'estudiante123'")
-    if org_principal:
-        print(f"    Asignados a organización: {org_principal.nombre}")
-
-
-# ============================================================
-# GRUPOS DE PRUEBA
-# ============================================================
-
-async def seed_grupos(db: AsyncSession):
-    """Insertar 1 grupo de prueba con los 3 estudiantes asignados."""
-    result = await db.execute(select(Grupo))
-    if result.scalars().first():
-        print("  → Grupos ya existen, omitiendo.")
-        return
-
-    # Obtener profesor PROF001
-    prof_result = await db.execute(select(Profesor).where(Profesor.codigo_profesor == "PROF001"))
-    profesor = prof_result.scalar_one_or_none()
-    if not profesor:
-        print("  ⚠ Profesor PROF001 no encontrado, omitiendo grupos.")
-        return
-
-    # Crear grupo
-    grupo = Grupo(
-        nombre="5to Grado A",
-        codigo_grupo="5GA-2026",
-        profesor_id=profesor.id,
-        activo=True,
-    )
-    db.add(grupo)
-    await db.flush()  # Para obtener grupo.id
-
-    # Obtener estudiantes EST001-003 y asignarlos al grupo
-    codigos = ["EST001", "EST002", "EST003"]
-    est_result = await db.execute(
-        select(Estudiante).where(Estudiante.codigo_estudiante.in_(codigos))
-    )
-    estudiantes = est_result.scalars().all()
-
-    for est in estudiantes:
-        db.add(EstudianteGrupo(estudiante_id=est.id, grupo_id=grupo.id))
-
-    await db.commit()
-    print(f"  ✓ Grupo '5to Grado A' (5GA-2026) creado con {len(estudiantes)} estudiantes")
 
 
 # ============================================================
@@ -583,34 +452,19 @@ async def main():
     print("=" * 60)
 
     async with AsyncSessionLocal() as db:
-        print("\n[1/6] Narrativas...")
+        print("\n[1/3] Narrativas...")
         await seed_narrativas(db)
 
-        print("\n[2/6] Desbloqueables (tienda)...")
+        print("\n[2/3] Desbloqueables (tienda)...")
         await seed_desbloqueables(db)
 
-        print("\n[3/6] Medallas...")
+        print("\n[3/3] Medallas...")
         await seed_medallas(db)
-
-        print("\n[4/6] Organizaciones de prueba...")
-        await seed_organizaciones(db)
-
-        print("\n[5/6] Usuarios de prueba...")
-        await seed_usuarios_prueba(db)
-
-        print("\n[6/6] Grupos de prueba...")
-        await seed_grupos(db)
 
     print()
     print("=" * 60)
     print("SEED COMPLETADO")
-    print()
-    print("  Credenciales de prueba:")
-    print("  Profesor   → PROF001      / profesor123")
-    print("  Estudiante → EST001       / estudiante123")
-    print("  Estudiante → EST002       / estudiante123")
-    print("  Estudiante → EST003       / estudiante123")
-    print("  Grupo      → 5to Grado A  (código: 5GA-2026)")
+    print("  Organizaciones, profesores y estudiantes se crean desde /admin")
     print("=" * 60)
     print()
 
