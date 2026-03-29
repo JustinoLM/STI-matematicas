@@ -15,6 +15,7 @@ from app.repositories.problem_repository import ProblemRepository
 from app.services.ml_service import ml_service
 from app.services.problem_service import ProblemService
 from app.models.adaptive import PerfilEstudiante, PruebaDiagnostica, SesionPractica, EstadoDiagnostico
+from app.models.user import Estudiante
 from app.models.problem import Operacion, TipoSesion
 from app.schemas.adaptive import (
     DiagnosticoResultado,
@@ -589,12 +590,15 @@ class AdaptiveService:
         
         # Obtener perfil
         perfil = await self.adaptive_repo.get_perfil(sesion.estudiante_id)
-        
+
+        # Obtener org_id del estudiante para ML por organización
+        org_id = await self.adaptive_repo.get_org_id_estudiante(sesion.estudiante_id)
+
         # Evaluar cambios de nivel
         cambios = await self._evaluar_cambios_nivel(perfil, sesion, intentos)
-        
+
         # Actualizar perfil
-        await self._actualizar_metricas_perfil(perfil, sesion, intentos)
+        await self._actualizar_metricas_perfil(perfil, sesion, intentos, org_id=org_id)
         
         # Guardar cambios en sesión
         sesion.cambios_nivel = {
@@ -793,7 +797,8 @@ class AdaptiveService:
         self,
         perfil: PerfilEstudiante,
         sesion: SesionPractica,
-        intentos: List
+        intentos: List,
+        org_id: Optional[int] = None,
     ):
         """Actualiza métricas globales del perfil."""
         # Incrementar total de sesiones
@@ -823,7 +828,7 @@ class AdaptiveService:
         
         # Actualizar perfil ML si tiene suficientes datos
         if perfil.total_sesiones >= 3:
-            perfil_ml, confianza = ml_service.predecir_perfil(perfil)
+            perfil_ml, confianza = ml_service.predecir_perfil(perfil, org_id)
             perfil.perfil_aprendizaje = perfil_ml
             perfil.confianza_perfil = Decimal(confianza)
             perfil.fecha_ultima_clasificacion = datetime.utcnow()

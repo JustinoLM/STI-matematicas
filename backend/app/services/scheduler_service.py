@@ -8,6 +8,7 @@ Dos jobs:
 """
 
 import asyncio
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,6 +17,7 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.adaptive import PerfilEstudiante, SesionPractica, EstadoSesion
 from app.models.config import ConfiguracionSistema
+from app.models.user import Estudiante
 from app.services.ml_service import ml_service
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
@@ -57,21 +59,41 @@ async def job_entrenar_ml() -> None:
         perfiles_result = await db.execute(select(PerfilEstudiante))
         perfiles = list(perfiles_result.scalars().all())
 
-        # Entrenar en thread (sklearn es síncrono)
-        await asyncio.to_thread(ml_service.entrenar_clustering, perfiles)
+        # Obtener org_id de cada estudiante
+        est_result = await db.execute(
+            select(Estudiante.id, Estudiante.organizacion_id).where(
+                Estudiante.organizacion_id.isnot(None)
+            )
+        )
+        org_map: dict[int, int] = {row.id: row.organizacion_id for row in est_result}
 
-        if ml_service.clustering_model is None:
+        # Agrupar perfiles por organización
+        perfiles_por_org: dict[int, list] = defaultdict(list)
+        for p in perfiles:
+            org_id = org_map.get(p.estudiante_id)
+            if org_id:
+                perfiles_por_org[org_id].append(p)
+
+        # Entrenar un modelo por organización
+        orgs_entrenadas = 0
+        for org_id, org_perfiles in perfiles_por_org.items():
+            await asyncio.to_thread(ml_service.entrenar_clustering, org_perfiles, org_id)
+            if ml_service.has_model_for_org(org_id):
+                orgs_entrenadas += 1
+
+        if orgs_entrenadas == 0:
             validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
             print(
                 f"   ↳ No hay suficientes perfiles para entrenar "
-                f"({validos}/{len(perfiles)} válidos, se necesitan ≥10)."
+                f"({validos}/{len(perfiles)} válidos, se necesitan ≥10 por organización)."
             )
             return
 
-        # Reclasificar todos
+        # Reclasificar todos usando el modelo de su organización
         ahora = datetime.utcnow()
         for perfil in perfiles:
-            perfil_ml, confianza = ml_service.predecir_perfil(perfil)
+            org_id = org_map.get(perfil.estudiante_id)
+            perfil_ml, confianza = ml_service.predecir_perfil(perfil, org_id)
             perfil.perfil_aprendizaje = perfil_ml
             perfil.confianza_perfil = round(confianza, 2)
             perfil.fecha_ultima_clasificacion = ahora
@@ -92,7 +114,7 @@ async def job_entrenar_ml() -> None:
 
         validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
         print(
-            f"✅ [Scheduler] ML entrenado automáticamente: "
+            f"✅ [Scheduler] ML entrenado: {orgs_entrenadas} org(s), "
             f"{validos} perfiles válidos, {len(perfiles)} estudiantes reclasificados."
         )
 

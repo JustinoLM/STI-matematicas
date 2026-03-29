@@ -368,14 +368,23 @@ async def admin_agregar_puntos(payload: AgregarPuntosRequest, db: DBSession):
 # ─── Admin: Machine Learning ───────────────────────────────────────────────────
 
 @router.get("/admin/ml/estado", response_model=dict)
-async def estado_ml():
+async def estado_ml(db: DBSession):
     """
-    Devuelve el estado actual de los modelos de Machine Learning.
+    Devuelve el estado actual de los modelos de Machine Learning por organización.
     """
+    orgs_result = await db.execute(select(Organizacion.id, Organizacion.nombre))
+    orgs = orgs_result.all()
+
+    orgs_con_modelo = [
+        {"id": org.id, "nombre": org.nombre}
+        for org in orgs
+        if ml_service.has_model_for_org(org.id)
+    ]
+
     return {
-        "clustering_entrenado": ml_service.clustering_model is not None,
+        "orgs_con_modelo": orgs_con_modelo,
+        "total_orgs_entrenadas": len(orgs_con_modelo),
         "prediccion_entrenado": ml_service.prediccion_model is not None,
-        "scaler_disponible": ml_service.scaler is not None,
         "umbrales_por_perfil": {
             perfil.value: umbral
             for perfil, umbral in ml_service.UMBRALES_POR_PERFIL.items()
@@ -386,46 +395,56 @@ async def estado_ml():
 @router.post("/admin/ml/entrenar", response_model=dict)
 async def entrenar_modelos_ml(db: DBSession):
     """
-    Entrena (o re-entrena) el modelo de clustering K-Means con todos los
-    perfiles de estudiantes que tienen datos suficientes (≥3 sesiones).
+    Entrena (o re-entrena) el modelo de clustering K-Means por organización.
 
-    Tras entrenar, reclasifica a TODOS los estudiantes con el nuevo modelo
-    y actualiza perfil_aprendizaje + confianza_perfil en la BD.
-
-    Requiere mínimo 10 estudiantes con datos suficientes.
+    Cada org obtiene su propio modelo entrenado solo con sus estudiantes.
+    Requiere mínimo 10 estudiantes con datos suficientes (≥3 sesiones) por org.
     """
-    # 1. Cargar todos los perfiles
+    from collections import defaultdict
+
+    # 1. Cargar todos los perfiles y el org_id de cada estudiante
     result = await db.execute(select(PerfilEstudiante))
     perfiles: list[PerfilEstudiante] = list(result.scalars().all())
 
-    total_perfiles = len(perfiles)
-
-    # 2. Entrenar en un thread (sklearn es síncrono)
-    await asyncio.to_thread(ml_service.entrenar_clustering, perfiles)
-
-    entrenado = ml_service.clustering_model is not None
-
-    if not entrenado:
-        # No había suficientes datos; devolver info sin error fatal
-        perfiles_validos = sum(
-            1 for p in perfiles if ml_service._tiene_datos_suficientes(p)
+    est_result = await db.execute(
+        select(Estudiante.id, Estudiante.organizacion_id).where(
+            Estudiante.organizacion_id.isnot(None)
         )
+    )
+    org_map: dict[int, int] = {row.id: row.organizacion_id for row in est_result}
+
+    # 2. Agrupar por organización
+    perfiles_por_org: dict[int, list] = defaultdict(list)
+    for p in perfiles:
+        oid = org_map.get(p.estudiante_id)
+        if oid:
+            perfiles_por_org[oid].append(p)
+
+    # 3. Entrenar un modelo por organización
+    orgs_entrenadas = 0
+    for org_id, org_perfiles in perfiles_por_org.items():
+        await asyncio.to_thread(ml_service.entrenar_clustering, org_perfiles, org_id)
+        if ml_service.has_model_for_org(org_id):
+            orgs_entrenadas += 1
+
+    if orgs_entrenadas == 0:
+        perfiles_validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
         return {
             "success": False,
             "mensaje": (
-                f"No hay suficientes perfiles con datos para entrenar. "
-                f"Se necesitan ≥10 y solo hay {perfiles_validos} válidos de {total_perfiles} totales."
+                "No hay suficientes perfiles para entrenar ninguna organización. "
+                f"Se necesitan ≥10 por org. Válidos totales: {perfiles_validos}/{len(perfiles)}."
             ),
-            "total_perfiles": total_perfiles,
+            "total_perfiles": len(perfiles),
             "perfiles_validos": perfiles_validos,
         }
 
-    # 3. Reclasificar todos los estudiantes con el modelo recién entrenado
+    # 4. Reclasificar todos usando el modelo de su organización
     reclasificados = 0
     ahora = datetime.utcnow()
-
     for perfil in perfiles:
-        perfil_ml, confianza = ml_service.predecir_perfil(perfil)
+        org_id = org_map.get(perfil.estudiante_id)
+        perfil_ml, confianza = ml_service.predecir_perfil(perfil, org_id)
         perfil.perfil_aprendizaje = perfil_ml
         perfil.confianza_perfil = round(confianza, 2)
         perfil.fecha_ultima_clasificacion = ahora
@@ -434,17 +453,15 @@ async def entrenar_modelos_ml(db: DBSession):
 
     await db.commit()
 
-    perfiles_validos = sum(
-        1 for p in perfiles if ml_service._tiene_datos_suficientes(p)
-    )
-
+    perfiles_validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
     return {
         "success": True,
         "mensaje": (
-            f"Modelo K-Means entrenado con {perfiles_validos} perfiles válidos. "
+            f"{orgs_entrenadas} organización(es) entrenadas. "
             f"{reclasificados} estudiantes reclasificados."
         ),
-        "total_perfiles": total_perfiles,
+        "orgs_entrenadas": orgs_entrenadas,
+        "total_perfiles": len(perfiles),
         "perfiles_validos": perfiles_validos,
         "reclasificados": reclasificados,
     }

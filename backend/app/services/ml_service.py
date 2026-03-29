@@ -20,15 +20,15 @@ from app.models.adaptive import PerfilEstudiante, PerfilAprendizaje
 class MLService:
     """
     Service de Machine Learning para personalización adaptativa.
-    
+
     Componentes:
-    1. Clustering de perfiles (K-means, k=4)
-    2. Predicción de preparación (Regresión Logística)
+    1. Clustering de perfiles (K-means, k=4) — entrenado por organización
+    2. Predicción de preparación (Regresión Logística) — global
     """
-    
+
     # Directorio para guardar modelos entrenados
     MODELS_DIR = Path("ml_models")
-    
+
     # Perfiles identificados por clustering
     PERFILES = {
         0: PerfilAprendizaje.RAPIDO_PRECISO,
@@ -36,7 +36,7 @@ class MLService:
         2: PerfilAprendizaje.IMPULSIVO,
         3: PerfilAprendizaje.EN_DESARROLLO
     }
-    
+
     # Umbrales personalizados por perfil
     UMBRALES_POR_PERFIL = {
         PerfilAprendizaje.RAPIDO_PRECISO: 7,       # Subir más rápido
@@ -45,100 +45,131 @@ class MLService:
         PerfilAprendizaje.EN_DESARROLLO: 15,       # Más tiempo en nivel
         PerfilAprendizaje.NO_CLASIFICADO: 10       # Default
     }
-    
+
     def __init__(self):
-        self.clustering_model: Optional[KMeans] = None
+        # Modelos por organización: {org_id: (KMeans, StandardScaler)}
+        self._org_models: Dict[int, tuple] = {}
         self.prediccion_model: Optional[LogisticRegression] = None
-        self.scaler: Optional[StandardScaler] = None
-        
+
         # Crear directorio de modelos si no existe
         self.MODELS_DIR.mkdir(exist_ok=True)
-        
-        # Intentar cargar modelos existentes
-        self._load_models()
+
+        # Cargar modelo de predicción global si existe
+        self._load_prediccion_model()
     
     # ============================================
-    # Clustering de Perfiles
+    # Clustering de Perfiles (por organización)
     # ============================================
-    
-    def entrenar_clustering(self, estudiantes: List[PerfilEstudiante]) -> None:
+
+    def _org_dir(self, org_id: int) -> Path:
+        """Retorna (y crea si no existe) el directorio de modelos de una org."""
+        d = self.MODELS_DIR / f"org_{org_id}"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def has_model_for_org(self, org_id: int) -> bool:
+        """Indica si existe un modelo de clustering entrenado para esta org."""
+        modelo, _ = self._get_org_model(org_id)
+        return modelo is not None
+
+    def _get_org_model(self, org_id: int) -> tuple:
+        """Retorna (KMeans, StandardScaler) para la org; carga desde disco si hace falta."""
+        if org_id in self._org_models:
+            return self._org_models[org_id]
+        org_dir = self.MODELS_DIR / f"org_{org_id}"
+        cp = org_dir / "clustering_model.pkl"
+        sp = org_dir / "scaler.pkl"
+        if cp.exists() and sp.exists():
+            try:
+                modelo = joblib.load(cp)
+                scaler = joblib.load(sp)
+                self._org_models[org_id] = (modelo, scaler)
+                return modelo, scaler
+            except Exception as e:
+                print(f"⚠️  Error cargando modelos org {org_id}: {e}")
+        return None, None
+
+    def entrenar_clustering(self, estudiantes: List[PerfilEstudiante], org_id: int) -> None:
         """
-        Entrena modelo de clustering con perfiles de estudiantes.
-        
+        Entrena modelo de clustering para una organización específica.
+
         Requiere mínimo 10 estudiantes con datos suficientes.
         """
         if len(estudiantes) < 10:
-            print(f"⚠️  Insuficientes estudiantes para clustering: {len(estudiantes)}/10")
+            print(f"⚠️  Org {org_id}: Insuficientes estudiantes: {len(estudiantes)}/10")
             return
-        
-        # Extraer features
-        features = []
-        for perfil in estudiantes:
-            if self._tiene_datos_suficientes(perfil):
-                features.append(self._extraer_features_perfil(perfil))
-        
+
+        features = [
+            self._extraer_features_perfil(p)
+            for p in estudiantes
+            if self._tiene_datos_suficientes(p)
+        ]
+
         if len(features) < 10:
-            print(f"⚠️  Insuficientes perfiles válidos: {len(features)}/10")
+            print(f"⚠️  Org {org_id}: Insuficientes perfiles válidos: {len(features)}/10")
             return
-        
-        # Convertir a numpy array
+
         X = np.array(features)
-        
-        # Normalizar features
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        
-        # Entrenar K-means (k=4)
-        self.clustering_model = KMeans(n_clusters=4, random_state=42, n_init=10)
-        self.clustering_model.fit(X_scaled)
-        
-        # Guardar modelos
-        self._save_models()
-        
-        print(f"✅ Clustering entrenado con {len(features)} estudiantes")
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        modelo = KMeans(n_clusters=4, random_state=42, n_init=10)
+        modelo.fit(X_scaled)
+
+        # Guardar en memoria y en disco
+        self._org_models[org_id] = (modelo, scaler)
+        d = self._org_dir(org_id)
+        joblib.dump(modelo, d / "clustering_model.pkl")
+        joblib.dump(scaler, d / "scaler.pkl")
+
+        import json
+        with open(d / "metadata.json", "w") as f:
+            json.dump({
+                "fecha_entrenamiento": datetime.utcnow().isoformat(),
+                "org_id": org_id,
+                "perfiles_entrenados": len(features),
+            }, f, indent=2)
+
+        print(f"✅ Org {org_id}: Clustering entrenado con {len(features)} estudiantes")
     
-    def predecir_perfil(self, perfil: PerfilEstudiante) -> Tuple[PerfilAprendizaje, float]:
+    def predecir_perfil(
+        self,
+        perfil: PerfilEstudiante,
+        org_id: Optional[int] = None,
+    ) -> Tuple[PerfilAprendizaje, float]:
         """
         Predice el perfil de aprendizaje de un estudiante.
 
         Orden de preferencia:
-        1. K-Means entrenado (mayor precisión, confianza basada en distancia a centroide)
-        2. Reglas heurísticas (cuando el modelo no existe o hay pocos estudiantes)
+        1. K-Means de la organización (mayor precisión)
+        2. Reglas heurísticas (cuando no existe modelo para la org)
         3. NO_CLASIFICADO (cuando no hay suficientes datos del estudiante)
 
-        Returns:
-            (perfil, confianza) donde confianza está entre 0 y 1
+        Args:
+            perfil: Perfil del estudiante.
+            org_id: ID de la organización. Si es None, se usan heurísticas.
         """
         if not self._tiene_datos_suficientes(perfil):
             return PerfilAprendizaje.NO_CLASIFICADO, 0.0
 
-        # ── Sin modelo K-Means: usar reglas heurísticas ───────────────────────
-        if not self.clustering_model or not self.scaler:
+        modelo, scaler = self._get_org_model(org_id) if org_id else (None, None)
+
+        if not modelo or not scaler:
             return self._clasificar_por_reglas(perfil)
-        
-        # Extraer features
+
         features = self._extraer_features_perfil(perfil)
         X = np.array([features])
-        
-        # Normalizar
-        X_scaled = self.scaler.transform(X)
-        
-        # Predecir cluster
-        cluster = self.clustering_model.predict(X_scaled)[0]
-        
-        # Calcular confianza (distancia al centroide)
-        distancias = self.clustering_model.transform(X_scaled)[0]
+        X_scaled = scaler.transform(X)
+
+        cluster = modelo.predict(X_scaled)[0]
+
+        distancias = modelo.transform(X_scaled)[0]
         distancia_min = distancias[cluster]
         distancia_max = np.max(distancias)
-        
-        # Confianza inversa a la distancia (más cerca = más confianza)
-        if distancia_max > 0:
-            confianza = 1.0 - (distancia_min / distancia_max)
-        else:
-            confianza = 1.0
-        
+
+        confianza = 1.0 - (distancia_min / distancia_max) if distancia_max > 0 else 1.0
         perfil_aprendizaje = self.PERFILES.get(cluster, PerfilAprendizaje.NO_CLASIFICADO)
-        
+
         return perfil_aprendizaje, confianza
     
     def _extraer_features_perfil(self, perfil: PerfilEstudiante) -> List[float]:
@@ -252,9 +283,9 @@ class MLService:
         self.prediccion_model = LogisticRegression(random_state=42, max_iter=1000)
         self.prediccion_model.fit(X, y)
         
-        # Guardar modelo
-        self._save_models()
-        
+        # Guardar modelo de predicción
+        joblib.dump(self.prediccion_model, self.MODELS_DIR / "prediccion_model.pkl")
+
         print(f"✅ Predicción entrenada con {len(historico)} ejemplos")
     
     def predecir_exito_nivel_siguiente(
@@ -360,59 +391,16 @@ class MLService:
     # ============================================
     # Persistencia de Modelos
     # ============================================
-    
-    def _save_models(self) -> None:
-        """Guarda modelos entrenados en disco."""
-        if self.clustering_model:
-            joblib.dump(
-                self.clustering_model,
-                self.MODELS_DIR / "clustering_model.pkl"
-            )
-        
-        if self.scaler:
-            joblib.dump(
-                self.scaler,
-                self.MODELS_DIR / "scaler.pkl"
-            )
-        
-        if self.prediccion_model:
-            joblib.dump(
-                self.prediccion_model,
-                self.MODELS_DIR / "prediccion_model.pkl"
-            )
-        
-        # Guardar metadata
-        metadata = {
-            "fecha_entrenamiento": datetime.utcnow().isoformat(),
-            "modelos": {
-                "clustering": self.clustering_model is not None,
-                "prediccion": self.prediccion_model is not None
-            }
-        }
-        
-        import json
-        with open(self.MODELS_DIR / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
-    
-    def _load_models(self) -> None:
-        """Carga modelos existentes del disco."""
+
+    def _load_prediccion_model(self) -> None:
+        """Carga el modelo de predicción global desde disco si existe."""
         try:
-            clustering_path = self.MODELS_DIR / "clustering_model.pkl"
-            if clustering_path.exists():
-                self.clustering_model = joblib.load(clustering_path)
-                print("✅ Clustering model cargado")
-            
-            scaler_path = self.MODELS_DIR / "scaler.pkl"
-            if scaler_path.exists():
-                self.scaler = joblib.load(scaler_path)
-            
-            prediccion_path = self.MODELS_DIR / "prediccion_model.pkl"
-            if prediccion_path.exists():
-                self.prediccion_model = joblib.load(prediccion_path)
+            path = self.MODELS_DIR / "prediccion_model.pkl"
+            if path.exists():
+                self.prediccion_model = joblib.load(path)
                 print("✅ Predicción model cargado")
-        
         except Exception as e:
-            print(f"⚠️  Error cargando modelos: {e}")
+            print(f"⚠️  Error cargando modelo de predicción: {e}")
 
 
 # Instancia singleton

@@ -20,6 +20,7 @@ from app.models.adaptive import (
     PerfilAprendizaje
 )
 from app.models.problem import Intento, Problema
+from app.models.user import Estudiante
 
 
 class AdaptiveRepository:
@@ -36,6 +37,13 @@ class AdaptiveRepository:
         """Obtiene el perfil de un estudiante."""
         result = await self.db.execute(
             select(PerfilEstudiante).where(PerfilEstudiante.estudiante_id == estudiante_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_org_id_estudiante(self, estudiante_id: int) -> Optional[int]:
+        """Retorna el organizacion_id del estudiante, o None si no tiene."""
+        result = await self.db.execute(
+            select(Estudiante.organizacion_id).where(Estudiante.id == estudiante_id)
         )
         return result.scalar_one_or_none()
     
