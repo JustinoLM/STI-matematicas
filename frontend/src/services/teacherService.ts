@@ -29,6 +29,7 @@ export interface EstudianteOrg {
   id: number;
   codigo_estudiante: string;
   nombre_completo: string;
+  grado_academico: string | null;
   activo: boolean;
   nivel_actual: number;
   precision_ultimos_15: number;
@@ -39,6 +40,7 @@ export interface PerfilProfesor {
   codigo_profesor: string;
   nombre_completo: string;
   institucion: string | null;
+  grado_academico: string | null;
   organizacion_nombre: string | null;
 }
 

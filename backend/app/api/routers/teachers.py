@@ -51,6 +51,7 @@ async def obtener_perfil_profesor(
         "codigo_profesor": profesor.codigo_profesor,
         "nombre_completo": profesor.nombre_completo,
         "institucion": profesor.institucion,
+        "grado_academico": profesor.grado_academico,
         "organizacion_nombre": organizacion_nombre,
     }
 
@@ -325,6 +326,7 @@ async def listar_estudiantes_organizacion(
             "id": e.id,
             "codigo_estudiante": e.codigo_estudiante,
             "nombre_completo": e.nombre_completo,
+            "grado_academico": e.grado_academico,
             "activo": bool(e.activo),
             "nivel_actual": perfil.nivel_actual if perfil else 1,
             "precision_ultimos_15": round(float(perfil.precision_ultimos_15 or 0) * 100, 1) if perfil else 0.0,

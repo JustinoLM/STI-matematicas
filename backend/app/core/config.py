@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Seguridad JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 horas
 
     # LLM (DeepSeek API)
     DEEPSEEK_API_KEY: str = ""

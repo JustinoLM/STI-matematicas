@@ -17,15 +17,35 @@ import { Badge } from '@/components/ui/badge';
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [nivelFiltro, setNivelFiltro] = useState<number | null>(null);
+  const [gradoFiltro, setGradoFiltro] = useState<string>('');
+
+  // Obtener perfil del profesor (para pre-filtrar por su grado)
+  const { data: perfil } = useQuery({
+    queryKey: ['teacher', 'me'],
+    queryFn: () => teacherService.getPerfilProfesor(),
+    staleTime: 10 * 60 * 1000,
+  });
 
   // Obtener estudiantes de la organización del profesor
   const { data: estudiantes, isLoading, isError } = useQuery({
     queryKey: ['teacher', 'students'],
     queryFn: () => teacherService.getEstudiantesOrg(),
-    staleTime: 2 * 60 * 1000, // 2 minutos
+    staleTime: 2 * 60 * 1000,
   });
 
-  // Filtro local por nombre, código y nivel
+  // Una vez cargado el perfil, pre-setear el filtro de grado si el profesor tiene uno
+  const gradoProfesor = perfil?.grado_academico ?? null;
+
+  // Grados únicos presentes en la organización
+  const gradosUnicos = Array.from(
+    new Set((estudiantes ?? []).map((e) => e.grado_academico).filter(Boolean))
+  ).sort() as string[];
+
+  // Grado activo: el que el profesor seleccionó manualmente, o el suyo propio por defecto
+  const gradoActivo = gradoFiltro || gradoProfesor || '';
+
+  // Filtro local por nombre, código, nivel y grado
+  // El filtro de grado muestra: estudiantes del grado activo + sin grado registrado
   const filteredStudents = (estudiantes ?? []).filter((e) => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -35,6 +55,10 @@ export default function StudentsPage() {
       if (!matchesSearch) return false;
     }
     if (nivelFiltro !== null && e.nivel_actual !== nivelFiltro) return false;
+    if (gradoActivo) {
+      const matchesGrado = e.grado_academico === gradoActivo || e.grado_academico === null;
+      if (!matchesGrado) return false;
+    }
     return true;
   });
 
@@ -63,6 +87,17 @@ export default function StudentsPage() {
                 className="pl-10"
               />
             </div>
+            {/* Filtro por grado */}
+            <select
+              value={gradoActivo}
+              onChange={(e) => setGradoFiltro(e.target.value)}
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <option value="">Todos los grados</option>
+              {gradosUnicos.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
             {/* Filtro por nivel */}
             <select
               value={nivelFiltro ?? ''}
@@ -74,9 +109,9 @@ export default function StudentsPage() {
                 <option key={n} value={n}>Nivel {n}</option>
               ))}
             </select>
-            {(searchQuery || nivelFiltro !== null) && (
-              <Button variant="outline" onClick={() => { setSearchQuery(''); setNivelFiltro(null); }}>
-                Limpiar filtros
+            {(searchQuery || nivelFiltro !== null || gradoFiltro) && (
+              <Button variant="outline" onClick={() => { setSearchQuery(''); setNivelFiltro(null); setGradoFiltro(''); }}>
+                {gradoFiltro ? 'Limpiar filtros' : 'Ver todos los grados'}
               </Button>
             )}
           </div>
@@ -166,6 +201,7 @@ export default function StudentsPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Nombre</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Grado</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold">Nivel</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold">Precisión</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Estado</th>
@@ -184,6 +220,9 @@ export default function StudentsPage() {
                           </code>
                         </td>
                         <td className="px-4 py-3 font-medium">{student.nombre_completo}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {student.grado_academico ?? '—'}
+                        </td>
                         <td className="px-4 py-3 text-center">
                           <Badge variant="outline">Nivel {nivel}</Badge>
                         </td>

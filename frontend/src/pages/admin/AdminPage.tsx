@@ -557,7 +557,15 @@ function FormProfesor({ organizaciones }: {
           <select
             id="org-prof"
             value={form.organizacion_id}
-            onChange={e => setForm(f => ({ ...f, organizacion_id: e.target.value }))}
+            onChange={e => {
+              const orgId = e.target.value;
+              const org = organizaciones.find(o => String(o.id) === orgId);
+              setForm(f => ({
+                ...f,
+                organizacion_id: orgId,
+                institucion: f.institucion || (org?.nombre ?? ''),
+              }));
+            }}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="">— Sin organización —</option>
@@ -1606,12 +1614,15 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
             const nombre = String(r['nombre_completo'] || r['nombre'] || '').trim();
             const password = String(r['password'] || r['contraseña'] || '').trim();
             if (!codigo || !nombre || !password) throw new Error(`Fila ${i + 2}: faltan campos obligatorios (codigo, nombre, password)`);
+            const orgId = r['organizacion_id'] ? Number(r['organizacion_id']) : undefined;
+            const institucionArchivo = String(r['institucion'] || '').trim();
+            const orgNombre = orgId ? organizaciones.find(o => o.id === orgId)?.nombre : undefined;
             return {
               codigo_profesor: codigo,
               nombre_completo: nombre,
               password,
-              institucion: String(r['institucion'] || '').trim() || undefined,
-              organizacion_id: r['organizacion_id'] ? Number(r['organizacion_id']) : undefined,
+              institucion: institucionArchivo || orgNombre || undefined,
+              organizacion_id: orgId,
               grado_academico: String(r['grado_academico'] || '').trim() || undefined,
             } as BulkTeacherRow;
           });
@@ -1659,8 +1670,8 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
     } else {
       const wsData = XLSX.utils.aoa_to_sheet([
         ['codigo_profesor', 'nombre_completo', 'password', 'institucion', 'organizacion_id', 'grado_academico'],
-        ['PROF001', 'Ana Martínez', 'temp123', 'Escuela Central', organizaciones[0]?.id ?? '', 'Licenciatura'],
-        ['PROF002', 'Carlos López', 'temp123', '', '', 'Maestría'],
+        ['PROF001', 'Ana Martínez', 'temp123', 'Escuela Central', organizaciones[0]?.id ?? '', '5to grado'],
+        ['PROF002', 'Carlos López', 'temp123', '', '', '6to grado'],
       ]);
       XLSX.utils.book_append_sheet(wb, wsData, 'Profesores');
     }
@@ -1739,6 +1750,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                     <>
                       <th className="px-3 py-2 text-left font-medium">Código</th>
                       <th className="px-3 py-2 text-left font-medium">Nombre</th>
+                      <th className="px-3 py-2 text-left font-medium">Grado</th>
                       <th className="px-3 py-2 text-left font-medium">Institución</th>
                       <th className="px-3 py-2 text-left font-medium">Org.</th>
                     </>
@@ -1772,6 +1784,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                         <>
                           <td className="px-3 py-1.5 font-mono">{f.codigo_profesor}</td>
                           <td className="px-3 py-1.5">{f.nombre_completo}</td>
+                          <td className="px-3 py-1.5">{f.grado_academico || '—'}</td>
                           <td className="px-3 py-1.5">{f.institucion || '—'}</td>
                           <td className="px-3 py-1.5">{org ? org.codigo : '—'}</td>
                         </>
