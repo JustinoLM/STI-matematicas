@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Operacion } from '@/types';
@@ -118,13 +118,20 @@ export function CanvasAnimationModal({
     }
   }, [guardado, guardando, onGuardar]);
 
+  // Guardia: si generarPasos no devolvió nada, no renderizamos el modal
+  if (!pasos || pasos.length === 0) return null;
+
   const esFinal = pasoActual === pasos.length - 1;
   const paso = pasos[pasoActual];
+
+  // Guardia secundaria por si pasoActual queda fuera de rango
+  if (!paso) return null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         className="max-w-2xl mx-auto"
+        aria-describedby="canvas-anim-desc"
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -132,6 +139,9 @@ export function CanvasAnimationModal({
             <span className="text-2xl">📖</span>
             ¿Cómo se resuelve?
           </DialogTitle>
+          <DialogDescription id="canvas-anim-desc" className="sr-only">
+            Explicación paso a paso de cómo resolver el problema
+          </DialogDescription>
         </DialogHeader>
 
         {/* Encabezado del problema */}

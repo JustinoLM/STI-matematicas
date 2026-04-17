@@ -157,5 +157,8 @@ export function generarPasos(
         },
       ];
     }
+
+    default:
+      return [];
   }
 }

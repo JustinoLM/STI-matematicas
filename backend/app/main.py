@@ -2,8 +2,9 @@
 Entry point principal de la aplicación FastAPI.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports
@@ -56,6 +57,30 @@ app.include_router(analisis.router, prefix="/api/analisis", tags=["Análisis Pos
 app.include_router(animaciones.router, prefix="/api/animaciones", tags=["Animaciones Guardadas"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Estadísticas de Grupo"])
 app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaciones"])
+
+
+# ── Handler global para excepciones no-HTTP ──────────────────────────────────
+# Starlette en algunas versiones no añade headers CORS a respuestas 500 que
+# vienen de excepciones Python no capturadas (IndexError, TypeError, etc.).
+# Este handler garantiza que CORS siempre esté presente, incluso en 500s.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin", "")
+    cors_headers = {}
+    if origin in cors_origins:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    # Log del error para poder diagnosticarlo desde los logs de Railway
+    import traceback
+    print(f"[ERROR 500] {request.method} {request.url}")
+    print(traceback.format_exc())
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error"},
+        headers=cors_headers,
+    )
 
 
 # Health check endpoints
