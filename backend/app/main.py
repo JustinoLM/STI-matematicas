@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats
+from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
 # En producción se ocultan los docs para no exponer la API pública
@@ -55,6 +55,7 @@ app.include_router(mensajes.router, prefix="/api/mensajes", tags=["Mensajes Moti
 app.include_router(analisis.router, prefix="/api/analisis", tags=["Análisis Post-Práctica"])
 app.include_router(animaciones.router, prefix="/api/animaciones", tags=["Animaciones Guardadas"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Estadísticas de Grupo"])
+app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaciones"])
 
 
 # Health check endpoints

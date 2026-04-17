@@ -1839,6 +1839,166 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
   );
 }
 
+// ─── Tab Exportar ─────────────────────────────────────────────────────────────
+
+interface ExportDataset { columnas: string[]; filas: Record<string, unknown>[]; }
+
+const ENDPOINTS_EXPORT = [
+  { key: 'sesiones',  label: 'Sesiones',         desc: 'Historial de sesiones de práctica completadas.',         sheet: 'Sesiones' },
+  { key: 'niveles',   label: 'Niveles',           desc: 'Evolución de niveles e instantánea actual.',             sheet: null /* two sheets */ },
+  { key: 'medallas',  label: 'Medallas',          desc: 'Medallas obtenidas por los estudiantes.',                sheet: 'Medallas' },
+  { key: 'tienda',    label: 'Tienda',            desc: 'Compras realizadas en la tienda de recompensas.',        sheet: 'Tienda' },
+  { key: 'resumen',   label: 'Resumen por org',   desc: 'Agregado por organización: sesiones, precisión, etc.',   sheet: 'Resumen' },
+] as const;
+
+type ExportKey = (typeof ENDPOINTS_EXPORT)[number]['key'];
+
+function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
+  const [orgFiltro, setOrgFiltro] = useState<string>('');
+  const [descargando, setDescargando] = useState<ExportKey | null>(null);
+  const [descargandoTodo, setDescargandoTodo] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
+
+  const orgParam = orgFiltro ? `?org_id=${orgFiltro}` : '';
+
+  async function fetchDataset(key: ExportKey): Promise<{ data: ExportDataset; data2?: ExportDataset; label2?: string }> {
+    const res = await apiClient.get(`/admin/export/${key}${orgParam}`);
+    if (key === 'niveles') {
+      return { data: res.data.historial, data2: res.data.nivel_actual, label2: 'Niveles Actuales' };
+    }
+    return { data: res.data };
+  }
+
+  function datasetToSheet(dataset: ExportDataset) {
+    const rows = dataset.filas.map(f => {
+      const row: Record<string, unknown> = {};
+      for (const col of dataset.columnas) row[col] = f[col] ?? '';
+      return row;
+    });
+    return XLSX.utils.json_to_sheet(rows, { header: dataset.columnas });
+  }
+
+  async function descargarUno(ep: (typeof ENDPOINTS_EXPORT)[number]) {
+    setDescargando(ep.key);
+    setMsg(null);
+    try {
+      const { data, data2, label2 } = await fetchDataset(ep.key);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, datasetToSheet(data), ep.sheet ?? ep.label);
+      if (data2) XLSX.utils.book_append_sheet(wb, datasetToSheet(data2), label2!);
+      const orgSuffix = orgFiltro ? `_org${orgFiltro}` : '';
+      XLSX.writeFile(wb, `STI_${ep.key}${orgSuffix}.xlsx`);
+      setMsg({ tipo: 'ok', texto: `"${ep.label}" descargado correctamente.` });
+    } catch {
+      setMsg({ tipo: 'err', texto: `Error al descargar "${ep.label}".` });
+    } finally {
+      setDescargando(null);
+    }
+  }
+
+  async function descargarTodo() {
+    setDescargandoTodo(true);
+    setMsg(null);
+    try {
+      const wb = XLSX.utils.book_new();
+      for (const ep of ENDPOINTS_EXPORT) {
+        const { data, data2, label2 } = await fetchDataset(ep.key);
+        XLSX.utils.book_append_sheet(wb, datasetToSheet(data), ep.sheet ?? ep.label);
+        if (data2) XLSX.utils.book_append_sheet(wb, datasetToSheet(data2), label2!);
+      }
+      const orgSuffix = orgFiltro ? `_org${orgFiltro}` : '_todas';
+      XLSX.writeFile(wb, `STI_exportacion_completa${orgSuffix}.xlsx`);
+      setMsg({ tipo: 'ok', texto: 'Exportación completa descargada.' });
+    } catch {
+      setMsg({ tipo: 'err', texto: 'Error al generar la exportación completa.' });
+    } finally {
+      setDescargandoTodo(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 mt-4">
+      {/* Filtro de organización */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Download className="h-4 w-4 text-blue-600" />
+            Exportar datos de investigación
+          </CardTitle>
+          <CardDescription>
+            Descarga los registros del sistema en formato Excel para análisis estadístico en la tesis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-xs mb-1 block">Filtrar por organización (opcional)</Label>
+              <select
+                value={orgFiltro}
+                onChange={e => setOrgFiltro(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— Todas las organizaciones —</option>
+                {organizaciones.map(o => (
+                  <option key={o.id} value={String(o.id)}>{o.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <Button
+              onClick={descargarTodo}
+              disabled={descargandoTodo}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {descargandoTodo
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generando…</>
+                : <><FileSpreadsheet className="h-4 w-4 mr-2" />Descargar todo</>}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Mensaje de estado */}
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm ${
+          msg.tipo === 'ok'
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
+          {msg.tipo === 'ok'
+            ? <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            : <XCircle className="h-4 w-4 flex-shrink-0" />}
+          {msg.texto}
+        </div>
+      )}
+
+      {/* Tarjetas por dataset */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {ENDPOINTS_EXPORT.map(ep => (
+          <Card key={ep.key} className="flex flex-col">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{ep.label}</CardTitle>
+              <CardDescription className="text-xs">{ep.desc}</CardDescription>
+            </CardHeader>
+            <CardContent className="mt-auto pt-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => descargarUno(ep)}
+                disabled={descargando === ep.key}
+              >
+                {descargando === ep.key
+                  ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Descargando…</>
+                  : <><Download className="h-3.5 w-3.5 mr-1.5" />Descargar .xlsx</>}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -1899,9 +2059,9 @@ export function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Tabs — 4 secciones principales */}
+        {/* Tabs — 5 secciones principales */}
         <Tabs defaultValue="usuarios">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="usuarios" className="flex items-center gap-1.5 text-xs">
               <Users className="h-3.5 w-3.5" />
               <span>Usuarios</span>
@@ -1917,6 +2077,10 @@ export function AdminPage() {
             <TabsTrigger value="sistema" className="flex items-center gap-1.5 text-xs">
               <Server className="h-3.5 w-3.5" />
               <span>Sistema</span>
+            </TabsTrigger>
+            <TabsTrigger value="exportar" className="flex items-center gap-1.5 text-xs text-blue-700 data-[state=active]:text-blue-800">
+              <Download className="h-3.5 w-3.5" />
+              <span>Exportar</span>
             </TabsTrigger>
           </TabsList>
 
@@ -2016,6 +2180,11 @@ export function AdminPage() {
           {/* ── Sistema ── */}
           <TabsContent value="sistema">
             <TabSistema />
+          </TabsContent>
+
+          {/* ── Exportar ── */}
+          <TabsContent value="exportar">
+            <TabExportar organizaciones={organizaciones} />
           </TabsContent>
         </Tabs>
 

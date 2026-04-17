@@ -188,11 +188,17 @@ class ProblemService:
         """
         if operacion == Operacion.DIVISION:
             if nivel == 3:
-                # Cociente X.5 — divisor fijo 2, dividendo entero impar
-                divisor = Decimal(2)
-                cociente_entero = random.randint(2, 9)
-                cociente = Decimal(cociente_entero) + Decimal('0.5')
-                dividendo = divisor * cociente   # = 2N+1 (entero impar)
+                # Cociente con 1 decimal; divisores {2, 5} para resultados "bonitos"
+                divisor = Decimal(random.choice([2, 5]))
+                cociente_entero = random.randint(1, 9)
+                if divisor == Decimal(2):
+                    cociente_dec = Decimal('0.5')
+                else:  # divisor == 5
+                    cociente_dec = Decimal(random.choice(['0.2', '0.4', '0.6', '0.8']))
+                cociente = Decimal(cociente_entero) + cociente_dec
+                dividendo = (divisor * cociente).quantize(
+                    Decimal('0.1'), rounding=ROUND_HALF_UP
+                )
                 return dividendo, divisor
 
             elif nivel == 4:
@@ -251,11 +257,9 @@ class ProblemService:
                     return dividendo, divisor
 
             else:
-                # Default (niveles 1-2): divisor entero, cociente entero
-                divisor = self._random_decimal(rango_min, min(rango_max, 50), 0)
-                while divisor < Decimal("1"):
-                    divisor = self._random_decimal(rango_min, min(rango_max, 50), 0)
-                multiplicador = random.randint(2, 20)
+                # Default (niveles 1-2): divisor pequeño, cociente entero
+                divisor = Decimal(random.randint(2, 9))
+                multiplicador = random.randint(2, 10)
                 dividendo = divisor * Decimal(multiplicador)
                 return dividendo, divisor
         
