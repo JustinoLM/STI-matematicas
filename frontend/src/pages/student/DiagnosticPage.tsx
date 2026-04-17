@@ -9,7 +9,7 @@
  * 4. Mostrar resultados → botón para ir a la práctica
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ClipboardList, ChevronRight, Loader2, AlertCircle, BookOpen, CheckCircle2 } from 'lucide-react';
 import { ProblemGrid } from '@/components/problems';
+import { VirtualKeyboard } from '@/components/problems/VirtualKeyboard';
 import type { Operacion } from '@/types';
 import { studentService, type ProblemaBE } from '@/services/studentService';
 
@@ -165,6 +166,9 @@ export function DiagnosticPage() {
   // ── Resultado ─────────────────────────────────────────────────────────────
   const [resultado, setResultado] = useState<ResultadoDiagnostico | null>(null);
 
+  // ── Teclado virtual ────────────────────────────────────────────────────────
+  const lastFocusedInputRef = useRef<HTMLInputElement | null>(null);
+
   const problemaActual = problemas[indiceActual] ?? null;
   const progreso = problemas.length > 0
     ? Math.round(((indiceActual + 1) / problemas.length) * 100)
@@ -198,6 +202,45 @@ export function DiagnosticPage() {
 
     return () => { cancelled = true; };
   }, [navigate]);
+
+  // ── Rastrear el último input enfocado (para el teclado virtual) ──────────
+  useEffect(() => {
+    const handler = (e: FocusEvent) => {
+      const el = e.target as HTMLInputElement;
+      if (el.tagName === 'INPUT') lastFocusedInputRef.current = el;
+    };
+    document.addEventListener('focusin', handler);
+    return () => document.removeEventListener('focusin', handler);
+  }, []);
+
+  const handleVirtualKeyPress = useCallback((key: string) => {
+    const el = lastFocusedInputRef.current;
+    if (!el) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (setter) {
+      setter.call(el, key);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, []);
+
+  const handleVirtualDelete = useCallback(() => {
+    const el = lastFocusedInputRef.current;
+    if (!el) return;
+    if (el.value !== '') {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      if (setter) {
+        setter.call(el, '');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } else {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    }
+  }, []);
+
+  const handleLimpiar = useCallback(() => {
+    setRespuestaActual('');
+    setLimpiarKey(prev => prev + 1);
+  }, []);
 
   // ── Avanzar al siguiente problema ─────────────────────────────────────────
   const handleSiguiente = useCallback(async () => {
@@ -342,24 +385,40 @@ export function DiagnosticPage() {
         </CardContent>
       </Card>
 
-      {/* Problema */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex justify-center">
-          <ProblemGrid
-            key={`diag-${indiceActual}-${limpiarKey}`}
-            operacion={problemaActual.operacion}
-            numero1={problemaActual.numero1}
-            numero2={problemaActual.numero2}
-            resultado={0}
-            onAnswerChange={setRespuestaActual}
-            showFeedback={false}
-            clearIncorrectTrigger={limpiarKey}
+      {/* Teclado + Problema en fila — teclado izquierda, problema derecha */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start">
+        {/* Teclado virtual */}
+        <div className="w-full sm:w-44 flex-shrink-0 order-last sm:order-first">
+          <VirtualKeyboard
+            onKeyPress={handleVirtualKeyPress}
+            onDelete={handleVirtualDelete}
+            onClear={handleLimpiar}
           />
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Problema */}
+        <Card className="flex-1 min-w-0">
+          <CardHeader>
+            <CardTitle>{OPERACION_LABEL[problemaActual.operacion]}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <ProblemGrid
+              key={`diag-${indiceActual}-${limpiarKey}`}
+              operacion={problemaActual.operacion}
+              numero1={problemaActual.numero1}
+              numero2={problemaActual.numero2}
+              resultado={
+                problemaActual.operacion === 'DIVISION'
+                  ? parseFloat((problemaActual.numero1 / problemaActual.numero2).toFixed(2))
+                  : 0
+              }
+              onAnswerChange={setRespuestaActual}
+              showFeedback={false}
+              clearIncorrectTrigger={limpiarKey}
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Botón siguiente */}
       <div className="flex justify-end">
