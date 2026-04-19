@@ -2,6 +2,7 @@
  * Servicio de profesor (grupos, desafíos, alertas, configuración).
  */
 
+import axios from 'axios';
 import apiClient, { getErrorMessage } from './api';
 import {
   Grupo,
@@ -227,11 +228,15 @@ export const teacherService = {
   /**
    * Obtener configuración activa de un grupo.
    */
-  async getConfiguracionGrupo(grupoId: number): Promise<ConfiguracionPractica> {
+  async getConfiguracionGrupo(grupoId: number): Promise<ConfiguracionPractica | null> {
     try {
       const response = await apiClient.get<ConfiguracionPractica>(`/teachers/groups/${grupoId}/configuration`);
       return response.data;
     } catch (error) {
+      // 404 = el grupo aún no tiene configuración — es esperado, no es un error
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return null;
+      }
       throw new Error(getErrorMessage(error));
     }
   },

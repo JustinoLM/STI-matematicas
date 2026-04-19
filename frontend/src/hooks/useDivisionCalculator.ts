@@ -174,15 +174,16 @@ function calcularPasosDivision(
       : false;
 
     // Calcular offset: el producto se alinea según el número de dígitos bajados.
-    // Cuando "bajamos un 0 virtual" posicionDividendo puede superar dividendoStr.length
-    // en 1 — lo capamos para que los offsets no se desfasen.
-    const posEfectiva = Math.min(posicionDividendo, dividendoStr.length);
-    const offsetProducto = Math.max(0, posEfectiva - producto.toString().length);
-    const offsetResiduo = Math.max(0, posEfectiva - nuevoResiduo.toString().length);
+    // IMPORTANTE: NO capamos posicionDividendo porque cuando "bajamos un 0 virtual"
+    // (cociente decimal con dividendo entero, ej. 18÷5=3.6) posicionDividendo llega
+    // a dividendoStr.length + 1 y ese valor es correcto para alinear el paso decimal.
+    // Caparlo al length causaba que todos los pasos decimales quedasen en offset=0.
+    const offsetProducto = Math.max(0, posicionDividendo - producto.toString().length);
+    const offsetResiduo = Math.max(0, posicionDividendo - nuevoResiduo.toString().length);
 
     // El dividendo parcial es el número que formamos antes de dividir (residuoActual)
     const dividendoParcialStr = residuoActual.toString();
-    const offsetDividendoParcial = Math.max(0, posEfectiva - dividendoParcialStr.length);
+    const offsetDividendoParcial = Math.max(0, posicionDividendo - dividendoParcialStr.length);
 
     pasos.push({
       productoStr: producto.toString(),
