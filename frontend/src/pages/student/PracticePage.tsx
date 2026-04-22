@@ -108,6 +108,15 @@ export function PracticePage() {
   const location = useLocation();
   const modoRedencion = searchParams.get('mode') === 'redencion';
 
+  // ── Guard: redirigir al post-test si la org lo tiene activo ─────────────
+  useEffect(() => {
+    studentService.getPostTestEstado().then((estado) => {
+      if (estado.activo && !estado.completado) {
+        navigate('/student/post-test', { replace: true });
+      }
+    });
+  }, [navigate]);
+
   // Recuperación de sesión incompleta — viene del banner del dashboard
   const locationState = location.state as { retomar?: boolean; sesionId?: number } | null;
   const modoRetomar = locationState?.retomar === true;

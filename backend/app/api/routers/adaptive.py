@@ -25,7 +25,10 @@ from app.schemas.adaptive import (
     SesionActivaResponse,
     SesionComplete,
     SesionCompleteResponse,
-    PerfilResponse
+    PerfilResponse,
+    PostTestEstado,
+    PostTestSubmit,
+    PostTestResultado,
 )
 from typing import Optional
 
@@ -67,6 +70,7 @@ async def enviar_diagnostico(
     resultado = await adaptive_service.evaluar_diagnostico(
         diagnostico_id=diagnostico_submit.diagnostico_id,
         respuestas=diagnostico_submit.respuestas,
+        tiempos_por_problema=diagnostico_submit.tiempos_por_problema,
     )
     # Otorgar medallas (e.g. medalla de diagnóstico completado)
     await gamification_service.verificar_y_otorgar_medallas(current_student.id)
@@ -219,13 +223,64 @@ async def operaciones_disponibles(
 ):
     """
     Lista operaciones que el estudiante puede practicar actualmente.
-    
+
     Incluye información sobre prerequisitos faltantes para operaciones bloqueadas.
     """
     perfil_response = await adaptive_service.get_perfil(current_student.id)
-    
+
     return {
         "disponibles": perfil_response.operaciones_disponibles,
         "bloqueadas": perfil_response.operaciones_bloqueadas,
         "prerequisitos_faltantes": perfil_response.prerequisitos_faltantes
     }
+
+
+# ============================================
+# Post-Test Final (activado por el admin)
+# ============================================
+
+@router.get("/post-test/estado", response_model=PostTestEstado)
+async def post_test_estado(
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep,
+):
+    """
+    Verifica si el post-test está activo para la organización del estudiante
+    y si el estudiante ya lo completó.
+    """
+    return await adaptive_service.get_post_test_estado(current_student.id)
+
+
+@router.post("/post-test/start")
+async def iniciar_post_test(
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep,
+):
+    """
+    Genera los problemas del post-test (misma estructura que el diagnóstico:
+    8 problemas, 2 por operación a niveles 2 y 3).
+
+    Requiere que la organización tenga el post-test activado.
+    Solo se puede completar una vez por estudiante.
+    """
+    return await adaptive_service.generar_post_test(current_student.id)
+
+
+@router.post("/post-test/submit", response_model=PostTestResultado)
+async def enviar_post_test(
+    post_test_submit: PostTestSubmit,
+    current_student: CurrentStudent,
+    adaptive_service: AdaptiveServiceDep,
+):
+    """
+    Evalúa el post-test y guarda los resultados.
+
+    IMPORTANTE: No modifica el perfil adaptativo del estudiante.
+    Solo registra los resultados para comparación pre-test → post-test.
+    """
+    return await adaptive_service.evaluar_post_test(
+        post_test_id=post_test_submit.post_test_id,
+        estudiante_id=current_student.id,
+        respuestas=post_test_submit.respuestas,
+        tiempos_por_problema=post_test_submit.tiempos_por_problema,
+    )

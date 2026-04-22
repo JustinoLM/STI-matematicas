@@ -44,6 +44,7 @@ import {
   Download,
   CheckCircle2,
   XCircle,
+  ClipboardCheck,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import apiClient, { getErrorMessage } from '@/services/api';
@@ -116,6 +117,7 @@ interface OrgCreated {
   codigo: string;
   ciudad?: string;
   pais?: string;
+  post_test_activo?: boolean;
   total_profesores: number;
   total_estudiantes: number;
 }
@@ -181,6 +183,12 @@ const adminService = {
   },
   async quitarEstudianteOrg(orgId: number, estId: number): Promise<void> {
     await apiClient.delete(`/admin/organizations/${orgId}/students/${estId}`);
+  },
+  async activarPostTest(orgId: number): Promise<void> {
+    await apiClient.post(`/admin/organizations/${orgId}/post-test/activate`);
+  },
+  async desactivarPostTest(orgId: number): Promise<void> {
+    await apiClient.delete(`/admin/organizations/${orgId}/post-test/activate`);
   },
   async eliminarOrganizacion(orgId: number): Promise<void> {
     await apiClient.delete(`/admin/organizations/${orgId}`);
@@ -616,6 +624,21 @@ function OrgCard({ org, allUsers, onRefresh }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [togglingPostTest, setTogglingPostTest] = useState(false);
+
+  const handleTogglePostTest = async () => {
+    setTogglingPostTest(true);
+    try {
+      if (org.post_test_activo) {
+        await adminService.desactivarPostTest(org.id);
+      } else {
+        await adminService.activarPostTest(org.id);
+      }
+      onRefresh();
+    } finally {
+      setTogglingPostTest(false);
+    }
+  };
 
   const { data: detalle, refetch } = useQuery({
     queryKey: ['org-detalle', org.id],
@@ -673,6 +696,20 @@ function OrgCard({ org, allUsers, onRefresh }: {
               <span className="font-medium">{org.total_profesores}</span> prof ·{' '}
               <span className="font-medium">{org.total_estudiantes}</span> est
             </span>
+            {/* Post-test toggle */}
+            <Button
+              variant={org.post_test_activo ? 'default' : 'outline'}
+              size="sm"
+              className={`h-7 text-xs gap-1 ${org.post_test_activo ? 'bg-orange-500 hover:bg-orange-600 border-orange-500' : ''}`}
+              disabled={togglingPostTest}
+              onClick={handleTogglePostTest}
+              title={org.post_test_activo ? 'Desactivar post-test' : 'Activar post-test final'}
+            >
+              {togglingPostTest
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <ClipboardCheck className="h-3 w-3" />}
+              Post-test
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setExpanded(v => !v)}>
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>

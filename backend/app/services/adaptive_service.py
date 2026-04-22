@@ -14,7 +14,7 @@ from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.problem_repository import ProblemRepository
 from app.services.ml_service import ml_service
 from app.services.problem_service import ProblemService
-from app.models.adaptive import PerfilEstudiante, PruebaDiagnostica, SesionPractica, EstadoDiagnostico
+from app.models.adaptive import PerfilEstudiante, PruebaDiagnostica, ResultadoPostTest, SesionPractica, EstadoDiagnostico
 from app.models.user import Estudiante
 from app.models.problem import Operacion, TipoSesion
 from app.schemas.adaptive import (
@@ -143,7 +143,8 @@ class AdaptiveService:
     async def evaluar_diagnostico(
         self,
         diagnostico_id: int,
-        respuestas: Dict[int, Decimal]
+        respuestas: Dict[int, Decimal],
+        tiempos_por_problema: Optional[Dict[int, int]] = None,
     ) -> DiagnosticoResultado:
         """
         Evalúa diagnóstico y asigna niveles iniciales.
@@ -239,15 +240,37 @@ class AdaptiveService:
             mensaje = f"Empezarás en nivel {niveles['actual']}"
             perfecto = False
         
+        # Agregar tiempos por operación si se proporcionaron
+        tiempos_op: Dict[str, int] = {"suma": 0, "resta": 0, "multiplicacion": 0, "division": 0}
+        if tiempos_por_problema:
+            for problema_id in problemas_ids:
+                problema = await self.problem_repo.get_problem_by_id(problema_id)
+                if not problema:
+                    continue
+                op_k = problema.operacion.value
+                if op_k == "+":
+                    op_k = "suma"
+                elif op_k == "-":
+                    op_k = "resta"
+                elif op_k == "×":
+                    op_k = "multiplicacion"
+                elif op_k == "÷":
+                    op_k = "division"
+                tiempos_op[op_k] = tiempos_op.get(op_k, 0) + tiempos_por_problema.get(problema_id, 0)
+
         # Actualizar diagnóstico
         diagnostico.suma_nivel1_correcto = resultados["suma"][0] if len(resultados["suma"]) > 0 else False
         diagnostico.suma_nivel2_correcto = resultados["suma"][1] if len(resultados["suma"]) > 1 else False
+        diagnostico.suma_tiempo_total = tiempos_op["suma"] or None
         diagnostico.resta_nivel1_correcto = resultados["resta"][0] if len(resultados["resta"]) > 0 else False
         diagnostico.resta_nivel2_correcto = resultados["resta"][1] if len(resultados["resta"]) > 1 else False
+        diagnostico.resta_tiempo_total = tiempos_op["resta"] or None
         diagnostico.mult_nivel1_correcto = resultados["multiplicacion"][0] if len(resultados["multiplicacion"]) > 0 else False
         diagnostico.mult_nivel2_correcto = resultados["multiplicacion"][1] if len(resultados["multiplicacion"]) > 1 else False
+        diagnostico.mult_tiempo_total = tiempos_op["multiplicacion"] or None
         diagnostico.div_nivel1_correcto = resultados["division"][0] if len(resultados["division"]) > 0 else False
         diagnostico.div_nivel2_correcto = resultados["division"][1] if len(resultados["division"]) > 1 else False
+        diagnostico.div_tiempo_total = tiempos_op["division"] or None
         
         diagnostico.nivel_suma_asignado = niveles["suma"]
         diagnostico.nivel_resta_asignado = niveles["resta"]
@@ -1308,3 +1331,308 @@ class AdaptiveService:
                         )
 
         await db.flush()
+
+    # ============================================
+    # Post-Test Final
+    # ============================================
+
+    async def get_post_test_estado(self, estudiante_id: int) -> dict:
+        """
+        Devuelve si el post-test está activo para la org del estudiante
+        y si el estudiante ya lo completó.
+        """
+        from sqlalchemy import select
+        from app.models.organization import Organizacion
+
+        db = self.adaptive_repo.db
+
+        # Obtener org_id del estudiante
+        org_id = await self.adaptive_repo.get_org_id_estudiante(estudiante_id)
+        if not org_id:
+            return {"activo": False, "completado": False, "org_id": None}
+
+        # Verificar si la org tiene post-test activo
+        result = await db.execute(select(Organizacion).where(Organizacion.id == org_id))
+        org = result.scalar_one_or_none()
+        if not org:
+            return {"activo": False, "completado": False, "org_id": None}
+
+        # Verificar si el estudiante ya completó el post-test
+        pt_result = await db.execute(
+            select(ResultadoPostTest).where(
+                ResultadoPostTest.estudiante_id == estudiante_id,
+                ResultadoPostTest.completado == True,
+            )
+        )
+        post_test = pt_result.scalar_one_or_none()
+
+        return {
+            "activo": bool(org.post_test_activo),
+            "completado": post_test is not None,
+            "org_id": org_id,
+        }
+
+    async def generar_post_test(self, estudiante_id: int) -> Dict:
+        """
+        Genera el post-test final (misma estructura que el diagnóstico inicial:
+        8 problemas, 2 por operación, niveles 2 y 3).
+
+        - Si ya existe un registro pendiente (no completado) lo reutiliza.
+        - Si ya completó el post-test, lanza 400.
+        - Si la org no tiene post_test_activo, lanza 400.
+        """
+        from sqlalchemy import select
+        from app.models.organization import Organizacion
+
+        db = self.adaptive_repo.db
+
+        # Verificar org y activación
+        estado = await self.get_post_test_estado(estudiante_id)
+        if not estado["activo"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El post-test no está activo para tu organización",
+            )
+        if estado["completado"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya completaste el post-test final",
+            )
+
+        # ¿Hay un registro pendiente (problemas ya generados)?
+        existing = await db.execute(
+            select(ResultadoPostTest).where(
+                ResultadoPostTest.estudiante_id == estudiante_id,
+                ResultadoPostTest.completado == False,
+            )
+        )
+        registro = existing.scalar_one_or_none()
+
+        if registro:
+            # Reutilizar los problemas ya generados
+            problemas_ids = registro.problemas_ids
+            problemas = []
+            for pid in problemas_ids:
+                p = await self.problem_repo.get_problem_by_id(pid)
+                if p:
+                    problemas.append(p)
+        else:
+            # Generar 8 nuevos problemas (mismo proceso que el diagnóstico)
+            problemas = []
+            operaciones = [Operacion.SUMA, Operacion.RESTA, Operacion.MULTIPLICACION, Operacion.DIVISION]
+
+            for operacion in operaciones:
+                prob_n2 = await self.problem_service._generate_single_problem(
+                    nivel=2,
+                    operaciones=[operacion],
+                    decimales_max=1,
+                    rango_min=1,
+                    rango_max=50,
+                )
+                problemas.append(prob_n2)
+
+                prob_n3 = await self.problem_service._generate_single_problem(
+                    nivel=3,
+                    operaciones=[operacion],
+                    decimales_max=2,
+                    rango_min=1,
+                    rango_max=100,
+                )
+                problemas.append(prob_n3)
+
+            # Crear registro en BD
+            problemas_ids = [p.id for p in problemas]
+            registro = ResultadoPostTest(
+                estudiante_id=estudiante_id,
+                org_id=estado["org_id"],
+                completado=False,
+                fecha_inicio=datetime.utcnow(),
+                problemas_ids=problemas_ids,
+            )
+            db.add(registro)
+            await db.commit()
+            await db.refresh(registro)
+
+        problemas_display = [
+            ProblemaDisplay(
+                id=p.id,
+                operacion=p.operacion.value,
+                numero1=p.numero1,
+                numero2=p.numero2,
+                nivel_dificultad=p.nivel_dificultad,
+            )
+            for p in problemas
+        ]
+
+        return {
+            "post_test_id": registro.id,
+            "problemas": problemas_display,
+            "mensaje": "Esta es tu evaluación final. Demuestra cuánto has aprendido.",
+        }
+
+    async def evaluar_post_test(
+        self,
+        post_test_id: int,
+        estudiante_id: int,
+        respuestas: Dict[int, Decimal],
+        tiempos_por_problema: Optional[Dict[int, int]] = None,
+    ):
+        """
+        Evalúa el post-test y guarda los resultados SIN modificar el perfil adaptativo.
+        Retorna los resultados y la comparación con el pre-test.
+        """
+        from sqlalchemy import select
+
+        db = self.adaptive_repo.db
+
+        # Obtener el registro
+        pt_result = await db.execute(
+            select(ResultadoPostTest).where(
+                ResultadoPostTest.id == post_test_id,
+                ResultadoPostTest.estudiante_id == estudiante_id,
+            )
+        )
+        registro = pt_result.scalar_one_or_none()
+        if not registro:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post-test no encontrado",
+            )
+        if registro.completado:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El post-test ya fue completado",
+            )
+
+        problemas_ids = registro.problemas_ids
+        resultados: Dict[str, list] = {
+            "suma": [], "resta": [], "multiplicacion": [], "division": []
+        }
+
+        # Evaluar respuestas
+        for problema_id in problemas_ids:
+            problema = await self.problem_repo.get_problem_by_id(problema_id)
+            if not problema:
+                continue
+            respuesta = respuestas.get(problema_id)
+            if respuesta is None:
+                continue
+
+            es_correcto = abs(respuesta - problema.resultado) <= Decimal("0.01")
+            op_key = problema.operacion.value
+            if op_key == "+":
+                op_key = "suma"
+            elif op_key == "-":
+                op_key = "resta"
+            elif op_key == "×":
+                op_key = "multiplicacion"
+            elif op_key == "÷":
+                op_key = "division"
+            resultados[op_key].append(es_correcto)
+
+        # Agregar tiempos
+        tiempos_op: Dict[str, int] = {
+            "suma": 0, "resta": 0, "multiplicacion": 0, "division": 0
+        }
+        if tiempos_por_problema:
+            for problema_id in problemas_ids:
+                problema = await self.problem_repo.get_problem_by_id(problema_id)
+                if not problema:
+                    continue
+                op_k = problema.operacion.value
+                if op_k == "+":
+                    op_k = "suma"
+                elif op_k == "-":
+                    op_k = "resta"
+                elif op_k == "×":
+                    op_k = "multiplicacion"
+                elif op_k == "÷":
+                    op_k = "division"
+                tiempos_op[op_k] += tiempos_por_problema.get(problema_id, 0)
+
+        # Contar correctos por operación
+        correctos_por_op = {op: sum(resultados[op]) for op in resultados}
+        total_correctos = sum(correctos_por_op.values())
+        perfecto = total_correctos == 8
+
+        # Calcular niveles evaluados (solo para referencia)
+        niveles_evaluados: Dict[str, int] = {}
+        for op, correctos in correctos_por_op.items():
+            if correctos == 2:
+                niveles_evaluados[op] = 3
+            elif correctos == 1:
+                niveles_evaluados[op] = 2
+            else:
+                niveles_evaluados[op] = 1
+
+        # Actualizar registro
+        registro.suma_nivel1_correcto = resultados["suma"][0] if len(resultados["suma"]) > 0 else False
+        registro.suma_nivel2_correcto = resultados["suma"][1] if len(resultados["suma"]) > 1 else False
+        registro.suma_tiempo_total = tiempos_op["suma"] or None
+
+        registro.resta_nivel1_correcto = resultados["resta"][0] if len(resultados["resta"]) > 0 else False
+        registro.resta_nivel2_correcto = resultados["resta"][1] if len(resultados["resta"]) > 1 else False
+        registro.resta_tiempo_total = tiempos_op["resta"] or None
+
+        registro.mult_nivel1_correcto = resultados["multiplicacion"][0] if len(resultados["multiplicacion"]) > 0 else False
+        registro.mult_nivel2_correcto = resultados["multiplicacion"][1] if len(resultados["multiplicacion"]) > 1 else False
+        registro.mult_tiempo_total = tiempos_op["multiplicacion"] or None
+
+        registro.div_nivel1_correcto = resultados["division"][0] if len(resultados["division"]) > 0 else False
+        registro.div_nivel2_correcto = resultados["division"][1] if len(resultados["division"]) > 1 else False
+        registro.div_tiempo_total = tiempos_op["division"] or None
+
+        registro.nivel_suma_evaluado = niveles_evaluados["suma"]
+        registro.nivel_resta_evaluado = niveles_evaluados["resta"]
+        registro.nivel_mult_evaluado = niveles_evaluados["multiplicacion"]
+        registro.nivel_div_evaluado = niveles_evaluados["division"]
+
+        registro.total_correctos = total_correctos
+        registro.perfecto = perfecto
+        registro.completado = True
+        registro.fecha_fin = datetime.utcnow()
+
+        # Snapshot del perfil actual (pre-test → comparación)
+        perfil = await self.adaptive_repo.get_perfil(estudiante_id)
+        if perfil:
+            registro.pre_nivel_suma = perfil.nivel_suma
+            registro.pre_nivel_resta = perfil.nivel_resta
+            registro.pre_nivel_mult = perfil.nivel_multiplicacion
+            registro.pre_nivel_div = perfil.nivel_division
+            registro.pre_nivel_actual = perfil.nivel_actual
+
+        await db.commit()
+
+        # Obtener correctos del pre-test para comparación
+        pre_correctos = None
+        pre_nivel_actual = None
+        diagnostico = await self.adaptive_repo.get_diagnostico_by_estudiante(estudiante_id)
+        if diagnostico:
+            pre_correctos = {
+                "suma": int(bool(diagnostico.suma_nivel1_correcto)) + int(bool(diagnostico.suma_nivel2_correcto)),
+                "resta": int(bool(diagnostico.resta_nivel1_correcto)) + int(bool(diagnostico.resta_nivel2_correcto)),
+                "multiplicacion": int(bool(diagnostico.mult_nivel1_correcto)) + int(bool(diagnostico.mult_nivel2_correcto)),
+                "division": int(bool(diagnostico.div_nivel1_correcto)) + int(bool(diagnostico.div_nivel2_correcto)),
+            }
+            pre_nivel_actual = diagnostico.nivel_actual_asignado
+
+        if perfecto:
+            mensaje = "¡Increíble! Lo lograste perfectamente. Tu esfuerzo ha dado frutos. 🏆"
+        elif total_correctos >= 6:
+            mensaje = "¡Excelente progreso! Estás dominando las matemáticas. ⭐"
+        elif total_correctos >= 4:
+            mensaje = "Buen trabajo. Has mejorado mucho desde el inicio. 💪"
+        else:
+            mensaje = "Gracias por esforzarte. Cada práctica te hace más fuerte. 📚"
+
+        from app.schemas.adaptive import PostTestResultado
+        return PostTestResultado(
+            estudiante_id=estudiante_id,
+            perfecto=perfecto,
+            total_correctos=total_correctos,
+            correctos_por_operacion=correctos_por_op,
+            tiempos_por_operacion=tiempos_op,
+            pre_correctos_por_operacion=pre_correctos,
+            pre_nivel_actual=pre_nivel_actual,
+            mensaje=mensaje,
+        )

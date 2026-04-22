@@ -87,6 +87,7 @@ class Estudiante(Usuario):
     medallas = relationship("EstudianteMedalla", back_populates="estudiante")
     desbloqueables = relationship("EstudianteDesbloqueable", back_populates="estudiante")
     diagnostico = relationship("PruebaDiagnostica", back_populates="estudiante", uselist=False)
+    post_test = relationship("ResultadoPostTest", back_populates="estudiante", uselist=False)
     sesiones = relationship("SesionPractica", back_populates="estudiante")
     alertas = relationship("AlertaEstudiante", back_populates="estudiante")
     organizacion = relationship("Organizacion", back_populates="estudiantes", foreign_keys=[organizacion_id])

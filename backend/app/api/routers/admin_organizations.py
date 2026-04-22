@@ -69,6 +69,7 @@ def _to_response(org: Organizacion, total_profs: int = 0, total_ests: int = 0) -
         pais=org.pais,
         fecha_creacion=org.fecha_creacion,
         activa=bool(org.activa),
+        post_test_activo=bool(org.post_test_activo),
         total_profesores=total_profs,
         total_estudiantes=total_ests,
     )
@@ -333,6 +334,34 @@ async def listar_todos_usuarios(db: DBSession):
     }
 
 
+# ─── Admin: Post-Test ─────────────────────────────────────────────────────────
+
+@router.post("/admin/organizations/{org_id}/post-test/activate", response_model=dict)
+async def activar_post_test(org_id: int, db: DBSession):
+    """
+    Activa el post-test final para todos los estudiantes de la organización.
+    Mientras esté activo, los estudiantes verán una pantalla de post-test
+    en lugar de la práctica normal hasta completarlo.
+    """
+    org = await _get_org_or_404(org_id, db)
+    if org.post_test_activo:
+        return {"success": True, "mensaje": "El post-test ya estaba activo", "activo": True}
+    org.post_test_activo = True
+    await db.commit()
+    return {"success": True, "mensaje": f"Post-test activado para '{org.nombre}'", "activo": True}
+
+
+@router.delete("/admin/organizations/{org_id}/post-test/activate", response_model=dict)
+async def desactivar_post_test(org_id: int, db: DBSession):
+    """
+    Desactiva el post-test final para la organización.
+    """
+    org = await _get_org_or_404(org_id, db)
+    org.post_test_activo = False
+    await db.commit()
+    return {"success": True, "mensaje": f"Post-test desactivado para '{org.nombre}'", "activo": False}
+
+
 # ─── Admin: agregar puntos ────────────────────────────────────────────────────
 
 class AgregarPuntosRequest(BaseModel):
@@ -420,12 +449,17 @@ async def entrenar_modelos_ml(db: DBSession):
         if oid:
             perfiles_por_org[oid].append(p)
 
-    # 3. Entrenar un modelo por organización
+    # 3. Entrenar un modelo por organización y persistir en BD
     orgs_entrenadas = 0
     for org_id, org_perfiles in perfiles_por_org.items():
         await asyncio.to_thread(ml_service.entrenar_clustering, org_perfiles, org_id)
         if ml_service.has_model_for_org(org_id):
             orgs_entrenadas += 1
+            # Persistir en PostgreSQL para sobrevivir reinicios
+            n_validos = sum(
+                1 for p in org_perfiles if ml_service._tiene_datos_suficientes(p)
+            )
+            await ml_service.save_org_model_to_db(org_id, db, perfiles_entrenados=n_validos)
 
     if orgs_entrenadas == 0:
         perfiles_validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))

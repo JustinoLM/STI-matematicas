@@ -6,7 +6,7 @@ Permite al administrador separar usuarios de diferentes colegios o contextos.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -30,6 +30,9 @@ class Organizacion(Base):
     pais = Column(String(100), nullable=True, default="Colombia")
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     activa = Column(Integer, default=1, nullable=False)  # 1=activa, 0=inactiva
+
+    # Post-test activado por el admin para medir mejora final
+    post_test_activo = Column(Boolean, default=False, nullable=False)
 
     # Relaciones
     profesores = relationship("Profesor", back_populates="organizacion")

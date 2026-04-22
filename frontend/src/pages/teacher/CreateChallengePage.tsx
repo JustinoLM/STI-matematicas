@@ -38,6 +38,9 @@ interface TipoMeta {
   placeholderParam?: string;
   unidad: string;
   puntosBase: number;
+  /** Rango orientativo de monedas sugeridas para este tipo. */
+  puntosMin: number;
+  puntosMax: number;
 }
 
 const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
@@ -53,6 +56,8 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
     placeholderObjetivo: 'ej. 100',
     unidad: 'problemas',
     puntosBase: 200,
+    puntosMin: 200,
+    puntosMax: 500,
   },
   sesiones_completadas: {
     label: 'Completar X prácticas',
@@ -66,6 +71,8 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
     placeholderObjetivo: 'ej. 20',
     unidad: 'prácticas',
     puntosBase: 350,
+    puntosMin: 300,
+    puntosMax: 700,
   },
   practicas_sin_errores: {
     label: 'X prácticas con máximo Y errores',
@@ -81,6 +88,8 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
     placeholderParam: 'ej. 3',
     unidad: 'prácticas',
     puntosBase: 550,
+    puntosMin: 500,
+    puntosMax: 1000,
   },
   problemas_rapidos: {
     label: 'X problemas en Y segundos o menos por problema',
@@ -96,6 +105,8 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
     placeholderParam: 'ej. 30',
     unidad: 'problemas rápidos',
     puntosBase: 800,
+    puntosMin: 700,
+    puntosMax: 1500,
   },
   practicas_rapidas: {
     label: 'X prácticas en Y minutos o menos',
@@ -111,14 +122,23 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
     placeholderParam: 'ej. 15',
     unidad: 'prácticas en tiempo',
     puntosBase: 1100,
+    puntosMin: 1000,
+    puntosMax: 2500,
   },
 };
 
-/** Monedas sugeridas = base del tipo × raíz del objetivo (redondeado a 50 más cercano). */
+/**
+ * Monedas sugeridas para un desafío según su tipo y cantidad objetivo.
+ * Escala logarítmicamente entre puntosMin (objetivo pequeño) y puntosMax
+ * (objetivo ≥ 100), siempre dentro del rango orientativo del tier.
+ * Redondeado a múltiplos de 50.
+ */
 function calcularPuntosSugeridos(tipo: TipoDesafioGrupal, objetivo: number): number {
-  const base = TIPOS[tipo].puntosBase;
-  const factor = Math.max(1, Math.ceil(Math.sqrt(objetivo)));
-  return Math.round((base * factor) / 50) * 50;
+  const { puntosMin, puntosMax } = TIPOS[tipo];
+  // log10(1)=0 → mín ; log10(100)=2 → máx ; se capea en 1
+  const t = Math.min(1, Math.log10(Math.max(1, objetivo)) / 2);
+  const raw = puntosMin + (puntosMax - puntosMin) * t;
+  return Math.round(raw / 50) * 50;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -139,7 +159,7 @@ export default function CreateChallengePage() {
 
   const meta    = TIPOS[tipo];
   const objNum  = parseInt(objetivoCantidad) || 0;
-  const sugerido = objNum > 0 ? calcularPuntosSugeridos(tipo, objNum) : meta.puntosBase;
+  const sugerido = objNum > 0 ? calcularPuntosSugeridos(tipo, objNum) : meta.puntosMin;
 
   const { data: grupos } = useQuery({
     queryKey: ['teacher', 'groups'],

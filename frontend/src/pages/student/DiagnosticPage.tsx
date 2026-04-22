@@ -169,6 +169,10 @@ export function DiagnosticPage() {
   // ── Teclado virtual ────────────────────────────────────────────────────────
   const lastFocusedInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ── Tracking de tiempo por problema ───────────────────────────────────────
+  const problemStartTimeRef = useRef<number>(Date.now());
+  const [tiempos, setTiempos] = useState<Record<number, number>>({});
+
   const problemaActual = problemas[indiceActual] ?? null;
   const progreso = problemas.length > 0
     ? Math.round(((indiceActual + 1) / problemas.length) * 100)
@@ -249,12 +253,18 @@ export function DiagnosticPage() {
     const respuestaNum = parseFloat(respuestaActual.replace(',', '.'));
     if (isNaN(respuestaNum)) return;
 
+    // Registrar tiempo empleado en este problema
+    const elapsed = Math.round((Date.now() - problemStartTimeRef.current) / 1000);
+    const nuevosTiempos = { ...tiempos, [problemaActual.id]: elapsed };
+    setTiempos(nuevosTiempos);
+
     // Guardar respuesta
     const nuevasRespuestas = { ...respuestas, [problemaActual.id]: respuestaNum };
     setRespuestas(nuevasRespuestas);
 
     if (indiceActual < problemas.length - 1) {
-      // Siguiente problema
+      // Siguiente problema — reiniciar temporizador
+      problemStartTimeRef.current = Date.now();
       setIndiceActual(prev => prev + 1);
       setRespuestaActual('');
       setLimpiarKey(prev => prev + 1);
@@ -262,7 +272,7 @@ export function DiagnosticPage() {
       // Último problema → enviar diagnóstico
       setFase('enviando');
       try {
-        const res = await studentService.enviarDiagnostico(diagnosticoId, nuevasRespuestas);
+        const res = await studentService.enviarDiagnostico(diagnosticoId, nuevasRespuestas, nuevosTiempos);
         setResultado(res);
         setFase('resultados');
       } catch (err) {
@@ -270,7 +280,7 @@ export function DiagnosticPage() {
         setFase('resolviendo');
       }
     }
-  }, [problemaActual, diagnosticoId, respuestaActual, respuestas, indiceActual, problemas.length]);
+  }, [problemaActual, diagnosticoId, respuestaActual, respuestas, tiempos, indiceActual, problemas.length]);
 
   // ── Render: cargando ──────────────────────────────────────────────────────
   if (cargando) {
@@ -346,7 +356,10 @@ export function DiagnosticPage() {
                 <p className="text-sm text-gray-700">Al finalizar verás tu nivel inicial asignado</p>
               </div>
             </div>
-            <Button size="lg" className="mt-2 px-8" onClick={() => setFase('resolviendo')}>
+            <Button size="lg" className="mt-2 px-8" onClick={() => {
+              problemStartTimeRef.current = Date.now();
+              setFase('resolviendo');
+            }}>
               <ClipboardList className="h-5 w-5 mr-2" />
               Comenzar diagnóstico
             </Button>

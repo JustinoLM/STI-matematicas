@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports
+from app.core.database import AsyncSessionLocal
+from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
 # En producción se ocultan los docs para no exponer la API pública
@@ -115,6 +117,14 @@ async def startup_event():
     print(f"Debug: {settings.DEBUG}")
     print(f"API Docs: http://localhost:8000/docs")
     print("=" * 60)
+
+    # Cargar modelos ML desde PostgreSQL (sobreviven reinicios del servidor)
+    try:
+        async with AsyncSessionLocal() as session:
+            await ml_service.load_all_from_db(session)
+    except Exception as e:
+        print(f"⚠️  No se pudieron cargar modelos ML desde BD: {e}")
+
     await start_scheduler()
 
 

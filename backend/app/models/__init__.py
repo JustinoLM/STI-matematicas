@@ -31,6 +31,7 @@ from app.models.adaptive import (
     TipoAlerta,
     PerfilEstudiante,
     PruebaDiagnostica,
+    ResultadoPostTest,
     SesionPractica,
     EstadoSesion,
     AlertaEstudiante,
@@ -88,6 +89,9 @@ from app.models.error import (
 # System configuration
 from app.models.config import ConfiguracionSistema
 
+# ML model persistence
+from app.models.ml_model import ModeloML
+
 __all__ = [
     # Organization
     "Organizacion",
@@ -106,6 +110,7 @@ __all__ = [
     "TipoAlerta",
     "PerfilEstudiante",
     "PruebaDiagnostica",
+    "ResultadoPostTest",
     "SesionPractica",
     "EstadoSesion",
     "AlertaEstudiante",
@@ -137,6 +142,8 @@ __all__ = [
     # Error / Buggy Model
     "ErrorComun",
     "EstudianteError",
+    # ML model persistence
+    "ModeloML",
     # Hints and Videos
     "NivelPista",
     "TipoError",

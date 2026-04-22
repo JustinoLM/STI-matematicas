@@ -21,6 +21,7 @@ import {
   ClipboardList,
   PlayCircle,
   Trash2,
+  ChevronRight,
 } from 'lucide-react';
 import type { SesionActivaResponse } from '@/services/studentService';
 
@@ -116,6 +117,15 @@ export function StudentDashboard() {
   // ── Diagnóstico completado ─────────────────────────────────────────────────
   const diagnosticoCompletado = perfil?.diagnostico_completado ?? true; // true mientras carga (no interrumpir UX)
 
+  // ── Post-test ──────────────────────────────────────────────────────────────
+  const { data: postTestEstado } = useQuery({
+    queryKey: ['post-test-estado'],
+    queryFn: () => studentService.getPostTestEstado(),
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+  const postTestPendiente = (postTestEstado?.activo ?? false) && !(postTestEstado?.completado ?? true);
+
   // ── Navegación ─────────────────────────────────────────────────────────────
   const navigationCards = [
     { title: 'Práctica',       description: 'Resolver problemas',    icon: BookOpen,   path: '/student/practice',   color: 'bg-blue-500'   },
@@ -125,8 +135,11 @@ export function StudentDashboard() {
   ];
 
   const handleNavegacion = (path: string) => {
-    // Si el estudiante no ha completado el diagnóstico y quiere practicar, redirigir
-    if (path === '/student/practice' && !diagnosticoCompletado) {
+    // Post-test pendiente → redirigir al post-test
+    if (path === '/student/practice' && postTestPendiente) {
+      navigate('/student/post-test');
+    // Diagnóstico no completado → redirigir al diagnóstico
+    } else if (path === '/student/practice' && !diagnosticoCompletado) {
       navigate('/student/diagnostic');
     } else {
       navigate(path);
@@ -140,6 +153,29 @@ export function StudentDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Banner de post-test pendiente (tiene prioridad sobre diagnóstico) */}
+      {postTestPendiente && (
+        <Card
+          className="cursor-pointer border-2 border-orange-500 bg-orange-50 hover:bg-orange-100 transition-colors"
+          onClick={() => navigate('/student/post-test')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-lg bg-orange-500 text-white flex-shrink-0">
+                <ClipboardList className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-base text-orange-800">Evaluación final disponible</p>
+                <p className="text-sm text-orange-700">
+                  Tu profesor ha activado la evaluación final. Complétala para ver cuánto has mejorado.
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-orange-500 flex-shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Banner de diagnóstico pendiente */}
       {!loadingPerfil && !diagnosticoCompletado && (
         <Card

@@ -27,7 +27,11 @@ class DiagnosticoSubmit(BaseModel):
     respuestas: Dict[int, Decimal] = Field(
         description="Mapa de problema_id -> respuesta del estudiante"
     )
-    
+    tiempos_por_problema: Optional[Dict[int, int]] = Field(
+        default=None,
+        description="Mapa de problema_id -> segundos empleados (opcional)"
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -37,6 +41,12 @@ class DiagnosticoSubmit(BaseModel):
                     "2": "15.5",
                     "3": "7",
                     "4": "23.5"
+                },
+                "tiempos_por_problema": {
+                    "1": 12,
+                    "2": 25,
+                    "3": 18,
+                    "4": 40
                 }
             }
         }
@@ -461,3 +471,39 @@ class EstadisticasDetalladas(BaseModel):
             }
         }
     }
+
+
+# ============================================
+# Schemas de Post-Test
+# ============================================
+
+class PostTestEstado(BaseModel):
+    """Estado del post-test para el estudiante autenticado."""
+    activo: bool        # ¿La organización tiene el post-test habilitado?
+    completado: bool    # ¿El estudiante ya lo completó?
+    org_id: Optional[int] = None
+
+
+class PostTestSubmit(BaseModel):
+    """Request para enviar respuestas del post-test."""
+    post_test_id: int
+    respuestas: Dict[int, Decimal] = Field(
+        description="Mapa de problema_id -> respuesta del estudiante"
+    )
+    tiempos_por_problema: Optional[Dict[int, int]] = Field(
+        default=None,
+        description="Mapa de problema_id -> segundos empleados (opcional)"
+    )
+
+
+class PostTestResultado(BaseModel):
+    """Response con resultados del post-test."""
+    estudiante_id: int
+    perfecto: bool
+    total_correctos: int
+    correctos_por_operacion: Dict[str, int]
+    tiempos_por_operacion: Dict[str, int]   # segundos por operación
+    # Comparación con pre-test (si está disponible)
+    pre_correctos_por_operacion: Optional[Dict[str, int]] = None
+    pre_nivel_actual: Optional[int] = None
+    mensaje: str

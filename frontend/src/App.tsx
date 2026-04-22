@@ -20,6 +20,7 @@ import { AdminPage } from '@/pages/admin/AdminPage';
 import { StudentDashboard } from '@/pages/student/StudentDashboard';
 import { PracticePage } from '@/pages/student/PracticePage';
 import { DiagnosticPage } from '@/pages/student/DiagnosticPage';
+import { PostTestPage } from '@/pages/student/PostTestPage';
 import { ShopPage } from '@/pages/student/ShopPage';
 import { InventoryPage } from '@/pages/student/InventoryPage';
 import { BadgesPage } from '@/pages/student/BadgesPage';
@@ -95,6 +96,27 @@ function App() {
                 hideSidebar={true}
               >
                 <DiagnosticPage />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Ruta especial: Post-test final sin sidebar */}
+        <Route
+          path="/student/post-test"
+          element={
+            <ProtectedRoute
+              isAuthenticated={isAuthenticated}
+              userRole={userRole || undefined}
+              requiredRole="estudiante"
+            >
+              <MainLayout
+                userName={userName}
+                userRole="estudiante"
+                onLogout={handleLogout}
+                hideSidebar={true}
+              >
+                <PostTestPage />
               </MainLayout>
             </ProtectedRoute>
           }

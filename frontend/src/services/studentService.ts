@@ -224,7 +224,8 @@ export const studentService = {
    */
   async enviarDiagnostico(
     diagnosticoId: number,
-    respuestas: Record<number, number>
+    respuestas: Record<number, number>,
+    tiemposPorProblema?: Record<number, number>,
   ): Promise<{
     estudiante_id: number;
     perfecto: boolean;
@@ -240,6 +241,7 @@ export const studentService = {
       const response = await apiClient.post('/adaptive/diagnostic/submit', {
         diagnostico_id: diagnosticoId,
         respuestas,
+        tiempos_por_problema: tiemposPorProblema,
       });
       return response.data;
     } catch (error) {
@@ -654,6 +656,55 @@ export const studentService = {
   async getDesafios(): Promise<DesafioEstudiante[]> {
     try {
       const response = await apiClient.get<DesafioEstudiante[]>('/challenges/mis-desafios');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  // ── Post-Test Final ────────────────────────────────────────────────────────
+
+  /** Verifica si el post-test está activo para la org del estudiante y si ya lo completó. */
+  async getPostTestEstado(): Promise<{ activo: boolean; completado: boolean; org_id: number | null }> {
+    try {
+      const response = await apiClient.get('/adaptive/post-test/estado');
+      return response.data;
+    } catch {
+      return { activo: false, completado: false, org_id: null };
+    }
+  },
+
+  /** Genera los 8 problemas del post-test. */
+  async iniciarPostTest(): Promise<{ post_test_id: number; problemas: ProblemaBE[]; mensaje: string }> {
+    try {
+      const response = await apiClient.post('/adaptive/post-test/start');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /** Envía las respuestas del post-test. Acepta tiempos opcionales por problema. */
+  async enviarPostTest(
+    postTestId: number,
+    respuestas: Record<number, number>,
+    tiemposPorProblema?: Record<number, number>,
+  ): Promise<{
+    estudiante_id: number;
+    perfecto: boolean;
+    total_correctos: number;
+    correctos_por_operacion: Record<string, number>;
+    tiempos_por_operacion: Record<string, number>;
+    pre_correctos_por_operacion: Record<string, number> | null;
+    pre_nivel_actual: number | null;
+    mensaje: string;
+  }> {
+    try {
+      const response = await apiClient.post('/adaptive/post-test/submit', {
+        post_test_id: postTestId,
+        respuestas,
+        tiempos_por_problema: tiemposPorProblema,
+      });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

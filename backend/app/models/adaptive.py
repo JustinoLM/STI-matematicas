@@ -304,6 +304,70 @@ class AlertaEstudiante(Base):
         return f"<AlertaEstudiante(id={self.id}, tipo={self.tipo}, activa={self.activa})>"
 
 
+class ResultadoPostTest(Base):
+    """
+    Resultado del post-test final (activado por el admin).
+
+    Misma estructura de 8 problemas que PruebaDiagnostica (niveles 2 y 3),
+    pero los resultados NO modifican el perfil adaptativo del estudiante.
+    Solo se registra para comparación pre-test → post-test.
+    Único por estudiante (UniqueConstraint en estudiante_id).
+    """
+    __tablename__ = "resultado_post_test"
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, unique=True)
+    org_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
+
+    # Ciclo de vida
+    completado = Column(Boolean, default=False, nullable=False)
+    fecha_inicio = Column(DateTime, nullable=True)
+    fecha_fin = Column(DateTime, nullable=True)
+
+    # IDs de los 8 problemas generados
+    problemas_ids = Column(JSON, nullable=True)
+
+    # Resultados por operación (nivel 1 = nivel 2 real, nivel 2 = nivel 3 real)
+    suma_nivel1_correcto = Column(Boolean, nullable=True)
+    suma_nivel2_correcto = Column(Boolean, nullable=True)
+    suma_tiempo_total = Column(Integer, nullable=True)   # segundos
+
+    resta_nivel1_correcto = Column(Boolean, nullable=True)
+    resta_nivel2_correcto = Column(Boolean, nullable=True)
+    resta_tiempo_total = Column(Integer, nullable=True)
+
+    mult_nivel1_correcto = Column(Boolean, nullable=True)
+    mult_nivel2_correcto = Column(Boolean, nullable=True)
+    mult_tiempo_total = Column(Integer, nullable=True)
+
+    div_nivel1_correcto = Column(Boolean, nullable=True)
+    div_nivel2_correcto = Column(Boolean, nullable=True)
+    div_tiempo_total = Column(Integer, nullable=True)
+
+    # Niveles evaluados (solo para referencia, no se aplican)
+    nivel_suma_evaluado = Column(Integer, nullable=True)
+    nivel_resta_evaluado = Column(Integer, nullable=True)
+    nivel_mult_evaluado = Column(Integer, nullable=True)
+    nivel_div_evaluado = Column(Integer, nullable=True)
+
+    # Snapshot de niveles del pre-test (tomado del perfil en el momento del post-test)
+    pre_nivel_suma = Column(Integer, nullable=True)
+    pre_nivel_resta = Column(Integer, nullable=True)
+    pre_nivel_mult = Column(Integer, nullable=True)
+    pre_nivel_div = Column(Integer, nullable=True)
+    pre_nivel_actual = Column(Integer, nullable=True)
+
+    # Totales
+    total_correctos = Column(Integer, nullable=True)
+    perfecto = Column(Boolean, default=False)
+
+    # Relación
+    estudiante = relationship("Estudiante", back_populates="post_test")
+
+    def __repr__(self):
+        return f"<ResultadoPostTest(estudiante_id={self.estudiante_id}, completado={self.completado})>"
+
+
 class EstadisticaEstudiante(Base):
     """
     Estadísticas agregadas del estudiante por fecha.

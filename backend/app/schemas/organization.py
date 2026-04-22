@@ -48,6 +48,7 @@ class OrganizacionResponse(BaseModel):
     pais: Optional[str]
     fecha_creacion: datetime
     activa: bool
+    post_test_activo: bool = False
     total_profesores: int = 0
     total_estudiantes: int = 0
 
