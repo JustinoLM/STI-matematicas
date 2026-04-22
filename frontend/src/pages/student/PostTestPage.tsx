@@ -63,9 +63,6 @@ const OP_KEY_LABEL: Record<string, string> = {
   suma: 'Suma', resta: 'Resta', multiplicacion: 'Multiplicación', division: 'División',
 };
 
-const NIVEL_EMOJI: Record<number, string> = {
-  1: '🌱', 2: '🌿', 3: '🌳', 4: '🏆', 5: '⭐',
-};
 
 function mapearProblema(be: ProblemaBE): ProblemaUI {
   const op = OPERACION_MAP[String(be.operacion).toUpperCase()] ?? 'SUMA';
