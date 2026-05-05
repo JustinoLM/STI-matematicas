@@ -373,8 +373,8 @@ class AdaptiveService:
         # Obtener ratio de dificultad
         ratio = self.RATIOS[perfil.nivel_actual]
         
-        # Generar problemas
-        problemas = await self._generar_problemas_sesion(perfil, distribucion, ratio)
+        # Generar problemas (pasando config del grupo para respetar decimales y rangos)
+        problemas = await self._generar_problemas_sesion(perfil, distribucion, ratio, config_grupo)
         
         # Mezclar aleatoriamente
         random.shuffle(problemas)
@@ -511,43 +511,53 @@ class AdaptiveService:
         self,
         perfil: PerfilEstudiante,
         distribucion: Dict[str, int],
-        ratio: Dict[str, float]
+        ratio: Dict[str, float],
+        config_grupo=None,
     ) -> List:
-        """Genera problemas según distribución y ratio."""
+        """Genera problemas según distribución y ratio.
+
+        Si hay configuración de grupo del profesor, sus valores de
+        decimales_maximos, rango_min y rango_max tienen prioridad sobre
+        los defaults adaptativos.
+        """
         problemas = []
-        
+
+        # Límites desde configuración del profesor (si existe)
+        cfg_decimales = int(config_grupo.decimales_maximos) if config_grupo else None
+        cfg_rango_min = float(config_grupo.rango_min) if config_grupo else None
+        cfg_rango_max = float(config_grupo.rango_max) if config_grupo else None
+
         for op_str, cantidad in distribucion.items():
-            # Convertir string a Operacion
             operacion = self._str_to_operacion(op_str)
             nivel_op = self._get_nivel_operacion(perfil, operacion)
-            
+
             # Dividir en fáciles y desafiantes
             faciles = int(cantidad * ratio["faciles"])
             desafiantes = cantidad - faciles
-            
+
             # Generar fáciles (nivel actual)
             for _ in range(faciles):
                 prob = await self.problem_service._generate_single_problem(
                     nivel=nivel_op,
                     operaciones=[operacion],
-                    decimales_max=min(nivel_op, 3),
-                    rango_min=1,
-                    rango_max=min(100, 50 * nivel_op)
+                    decimales_max=cfg_decimales if cfg_decimales is not None else min(nivel_op, 3),
+                    rango_min=cfg_rango_min if cfg_rango_min is not None else 1,
+                    rango_max=cfg_rango_max if cfg_rango_max is not None else min(100, 50 * nivel_op),
                 )
                 problemas.append(prob)
-            
+
             # Generar desafiantes (nivel + 1)
             for _ in range(desafiantes):
                 nivel_desafiante = min(nivel_op + 1, 5)
                 prob = await self.problem_service._generate_single_problem(
                     nivel=nivel_desafiante,
                     operaciones=[operacion],
-                    decimales_max=min(nivel_desafiante, 3),
-                    rango_min=1,
-                    rango_max=min(100, 50 * nivel_desafiante)
+                    decimales_max=cfg_decimales if cfg_decimales is not None else min(nivel_desafiante, 3),
+                    rango_min=cfg_rango_min if cfg_rango_min is not None else 1,
+                    rango_max=cfg_rango_max if cfg_rango_max is not None else min(100, 50 * nivel_desafiante),
                 )
                 problemas.append(prob)
-        
+
         return problemas
     
     def _str_to_operacion(self, op_str: str) -> Operacion:
