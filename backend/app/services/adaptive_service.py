@@ -523,9 +523,10 @@ class AdaptiveService:
         problemas = []
 
         # Límites desde configuración del profesor (si existe)
+        # Convertir a int porque _random_decimal usa random.randint
         cfg_decimales = int(config_grupo.decimales_maximos) if config_grupo else None
-        cfg_rango_min = float(config_grupo.rango_min) if config_grupo else None
-        cfg_rango_max = float(config_grupo.rango_max) if config_grupo else None
+        cfg_rango_min = int(float(config_grupo.rango_min)) if config_grupo else None
+        cfg_rango_max = int(float(config_grupo.rango_max)) if config_grupo else None
 
         for op_str, cantidad in distribucion.items():
             operacion = self._str_to_operacion(op_str)
