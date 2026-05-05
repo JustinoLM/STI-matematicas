@@ -79,7 +79,7 @@ export function CanvasAnimationModal({
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
 
-  const pasos = generarPasos(operacion, numero1, numero2);
+  const pasos = generarPasos(operacion, numero1, numero2, nivelDificultad);
 
   // Resetear estado al abrir — preservar el estado "guardado" si ya se guardó en esta sesión
   useEffect(() => {
