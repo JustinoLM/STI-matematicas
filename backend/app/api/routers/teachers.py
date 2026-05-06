@@ -300,24 +300,35 @@ async def listar_estudiantes_organizacion(
     q: Optional[str] = Query(None, description="Filtrar por nombre o código"),
 ):
     """
-    Lista todos los estudiantes de la misma organización del profesor.
-    Si el profesor no tiene organización, retorna lista vacía.
-    Si se proporciona `q`, filtra por nombre o código (insensible a mayúsculas).
+    Lista los estudiantes de la organización del profesor.
+
+    Filtrado por secciones:
+    - Si el profesor tiene `secciones_asignadas` (ej. ["6A", "6B"]), solo devuelve
+      estudiantes cuyo `grado_academico` esté en esa lista.
+    - Si `secciones_asignadas` está vacío o es null, devuelve todos los estudiantes
+      de la organización (comportamiento legacy).
     """
     if not profesor.organizacion_id:
         return []
+
+    secciones: list[str] = profesor.secciones_asignadas or []
 
     stmt = (
         select(Estudiante, PerfilEstudiante)
         .outerjoin(PerfilEstudiante, Estudiante.id == PerfilEstudiante.estudiante_id)
         .where(Estudiante.organizacion_id == profesor.organizacion_id)
     )
+
+    # Filtrar por sección solo si el profesor tiene secciones asignadas
+    if secciones:
+        stmt = stmt.where(Estudiante.grado_academico.in_(secciones))
+
     result = await db.execute(stmt)
     rows = result.all()
 
     datos = []
     for e, perfil in rows:
-        # Filtro opcional de búsqueda
+        # Filtro opcional de búsqueda por nombre/código
         if q:
             q_lower = q.lower()
             if q_lower not in e.nombre_completo.lower() and q_lower not in e.codigo_estudiante.lower():

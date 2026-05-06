@@ -6,7 +6,7 @@ Los usuarios son creados por administradores, no hay registro público.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
 import enum
 
@@ -120,6 +120,7 @@ class Profesor(Usuario):
     institucion = Column(String(255), nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
     grado_academico = Column(String(100), nullable=True)  # Ej: "Licenciatura", "Maestría"
+    secciones_asignadas = Column(JSON, nullable=True)  # Ej: ["6A", "6B"] — secciones/grados que enseña
 
     # Relaciones
     grupos = relationship("Grupo", back_populates="profesor")

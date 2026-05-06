@@ -314,6 +314,8 @@ async def listar_todos_usuarios(db: DBSession):
                 "activo": bool(p.activo),
                 "fecha_creacion": p.fecha_creacion.isoformat() if p.fecha_creacion else None,
                 "ultimo_acceso": p.ultimo_acceso.isoformat() if p.ultimo_acceso else None,
+                # Secciones que enseña el profesor (para filtrado de estudiantes)
+                "secciones_asignadas": p.secciones_asignadas or [],
             }
             for p in profesores
         ],
@@ -323,6 +325,7 @@ async def listar_todos_usuarios(db: DBSession):
                 "codigo": e.codigo_estudiante,
                 "nombre_completo": e.nombre_completo,
                 "organizacion_id": e.organizacion_id,
+                "grado_academico": e.grado_academico,
                 "password_plain": e.password_plain,
                 "activo": bool(e.activo),
                 "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
@@ -331,6 +334,65 @@ async def listar_todos_usuarios(db: DBSession):
             }
             for e in estudiantes
         ],
+    }
+
+
+# ─── Admin: Secciones por profesor ───────────────────────────────────────────
+
+class SeccionesProfesorRequest(BaseModel):
+    secciones: list[str]  # Ej: ["6A", "6B"]
+
+
+@router.get("/admin/organizations/{org_id}/grados", response_model=list)
+async def listar_grados_org(org_id: int, db: DBSession):
+    """
+    Devuelve los valores únicos de `grado_academico` de los estudiantes
+    de la organización, ordenados alfabéticamente.
+    Sirve para poblar los checkboxes en la UI del admin.
+    """
+    await _get_org_or_404(org_id, db)
+    result = await db.execute(
+        select(Estudiante.grado_academico)
+        .where(
+            Estudiante.organizacion_id == org_id,
+            Estudiante.grado_academico.is_not(None),
+            Estudiante.grado_academico != "",
+        )
+        .distinct()
+        .order_by(Estudiante.grado_academico)
+    )
+    return [row[0] for row in result.all()]
+
+
+@router.patch("/admin/professors/{prof_id}/secciones", response_model=dict)
+async def actualizar_secciones_profesor(
+    prof_id: int,
+    payload: SeccionesProfesorRequest,
+    db: DBSession,
+):
+    """
+    Actualiza las secciones (grados) que enseña el profesor.
+    Pasar lista vacía [] para eliminar el filtro (ve todos los estudiantes de la org).
+    """
+    result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
+    profesor = result.scalar_one_or_none()
+    if not profesor:
+        raise HTTPException(status_code=404, detail="Profesor no encontrado")
+
+    # Normalizar: quitar duplicados y ordenar
+    secciones_limpias = sorted(set(s.strip() for s in payload.secciones if s.strip()))
+    profesor.secciones_asignadas = secciones_limpias if secciones_limpias else None
+    await db.commit()
+
+    return {
+        "success": True,
+        "profesor_id": prof_id,
+        "secciones_asignadas": profesor.secciones_asignadas or [],
+        "mensaje": (
+            f"Secciones actualizadas: {', '.join(secciones_limpias)}"
+            if secciones_limpias
+            else "Filtro de secciones eliminado (ve todos los estudiantes de la org)"
+        ),
     }
 
 

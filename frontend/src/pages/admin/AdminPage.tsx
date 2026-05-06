@@ -138,6 +138,10 @@ interface UsuarioAdmin {
   activo: boolean;
   fecha_creacion: string | null;
   ultimo_acceso: string | null;
+  // Solo en profesores
+  secciones_asignadas?: string[];
+  // Solo en estudiantes
+  grado_academico?: string;
 }
 
 interface AllUsersResponse {
@@ -206,6 +210,13 @@ const adminService = {
   async bulkImportTeachers(rows: BulkTeacherRow[]): Promise<BulkImportResult> {
     const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/teachers', { profesores: rows });
     return response.data;
+  },
+  async getGradosOrg(orgId: number): Promise<string[]> {
+    const response = await apiClient.get<string[]>(`/admin/organizations/${orgId}/grados`);
+    return response.data;
+  },
+  async actualizarSeccionesProfesor(profId: number, secciones: string[]): Promise<void> {
+    await apiClient.patch(`/admin/professors/${profId}/secciones`, { secciones });
   },
 };
 
@@ -615,6 +626,113 @@ function FormProfesor({ organizaciones }: {
   );
 }
 
+// ─── Panel de secciones de un profesor ───────────────────────────────────────
+
+function SeccionesProfesorPanel({
+  prof,
+  gradosDisponibles,
+  onSaved,
+}: {
+  prof: UsuarioAdmin;
+  gradosDisponibles: string[];
+  onSaved: () => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [seleccionadas, setSeleccionadas] = useState<string[]>(prof.secciones_asignadas ?? []);
+  const [guardando, setGuardando] = useState(false);
+
+  const toggle = (g: string) =>
+    setSeleccionadas(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+
+  const handleGuardar = async () => {
+    setGuardando(true);
+    try {
+      await adminService.actualizarSeccionesProfesor(prof.id, seleccionadas);
+      onSaved();
+      setEditando(false);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const handleCancelar = () => {
+    setSeleccionadas(prof.secciones_asignadas ?? []);
+    setEditando(false);
+  };
+
+  const actuales = prof.secciones_asignadas ?? [];
+
+  return (
+    <div className="mt-1.5">
+      {!editando ? (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-gray-500">Secciones:</span>
+          {actuales.length === 0 ? (
+            <span className="text-xs text-gray-400 italic">Todos los estudiantes de la org</span>
+          ) : (
+            actuales.map(g => (
+              <span key={g} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">{g}</span>
+            ))
+          )}
+          {gradosDisponibles.length > 0 && (
+            <button
+              onClick={() => setEditando(true)}
+              className="text-xs text-blue-500 hover:text-blue-700 underline ml-1"
+            >
+              {actuales.length === 0 ? 'Asignar secciones' : 'Editar'}
+            </button>
+          )}
+          {gradosDisponibles.length === 0 && actuales.length === 0 && (
+            <span className="text-xs text-gray-400 italic">(los estudiantes de la org necesitan grado_academico asignado)</span>
+          )}
+        </div>
+      ) : (
+        <div className="bg-gray-50 rounded-lg p-3 mt-1 border border-gray-200 space-y-2">
+          <p className="text-xs font-medium text-gray-600">
+            Selecciona las secciones que enseña este profesor:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {gradosDisponibles.map(g => {
+              const checked = seleccionadas.includes(g);
+              return (
+                <label key={g} className={[
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-full border cursor-pointer text-sm font-mono transition-colors',
+                  checked
+                    ? 'bg-blue-100 border-blue-400 text-blue-800'
+                    : 'bg-white border-gray-300 text-gray-600 hover:border-blue-300',
+                ].join(' ')}>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() => toggle(g)}
+                  />
+                  {checked && <Check className="h-3 w-3 text-blue-600" />}
+                  {g}
+                </label>
+              );
+            })}
+          </div>
+          {seleccionadas.length === 0 && (
+            <p className="text-xs text-amber-600">
+              ⚠️ Sin secciones → verá todos los estudiantes de la organización.
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs" onClick={handleGuardar} disabled={guardando}>
+              {guardando ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+              Guardar
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleCancelar} disabled={guardando}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tarjeta de Organización (detalle + asignación) ───────────────────────────
 
 function OrgCard({ org, allUsers, onRefresh }: {
@@ -646,6 +764,16 @@ function OrgCard({ org, allUsers, onRefresh }: {
     enabled: expanded,
     staleTime: 0,
   });
+
+  // Grados disponibles en la org (basado en grado_academico de sus estudiantes)
+  const { data: gradosDisponibles = [] } = useQuery({
+    queryKey: ['org-grados', org.id],
+    queryFn: () => adminService.getGradosOrg(org.id),
+    enabled: expanded,
+    staleTime: 30_000,
+  });
+
+  const handleRefetchAll = () => { refetch(); onRefresh(); };
 
   const handleAsignarProf = async (profId: number) => {
     setLoadingId(`prof-${profId}`);
@@ -730,17 +858,31 @@ function OrgCard({ org, allUsers, onRefresh }: {
                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-1">
                   <GraduationCap className="h-4 w-4" /> Profesores ({profsMiembros.length})
                 </h4>
-                <div className="space-y-1">
-                  {profsMiembros.map(p => (
-                    <div key={p.id} className="flex items-center justify-between bg-blue-50 rounded px-3 py-1.5 text-sm">
-                      <span className="font-mono text-xs text-blue-600 mr-2">{p.codigo}</span>
-                      <span className="flex-1">{p.nombre_completo}</span>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                        disabled={loadingId === `prof-${p.id}`} onClick={() => handleQuitarProf(p.id)}>
-                        {loadingId === `prof-${p.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                      </Button>
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {profsMiembros.map(p => {
+                    // Buscar datos del profesor en allUsers para tener secciones_asignadas
+                    const profData = allUsers?.profesores.find(u => u.id === p.id);
+                    return (
+                      <div key={p.id} className="bg-blue-50 rounded px-3 py-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs text-blue-600 mr-2">{p.codigo}</span>
+                          <span className="flex-1">{p.nombre_completo}</span>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                            disabled={loadingId === `prof-${p.id}`} onClick={() => handleQuitarProf(p.id)}>
+                            {loadingId === `prof-${p.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                        {/* Panel de secciones asignadas */}
+                        {profData && (
+                          <SeccionesProfesorPanel
+                            prof={profData}
+                            gradosDisponibles={gradosDisponibles}
+                            onSaved={handleRefetchAll}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                   {profsMiembros.length === 0 && <p className="text-xs text-muted-foreground italic px-1">Sin profesores asignados.</p>}
                 </div>
                 {profsDisponibles.length > 0 && (
@@ -764,16 +906,24 @@ function OrgCard({ org, allUsers, onRefresh }: {
                   <BookOpen className="h-4 w-4" /> Estudiantes ({estsMiembros.length})
                 </h4>
                 <div className="space-y-1">
-                  {estsMiembros.map(e => (
-                    <div key={e.id} className="flex items-center justify-between bg-green-50 rounded px-3 py-1.5 text-sm">
-                      <span className="font-mono text-xs text-green-600 mr-2">{e.codigo}</span>
-                      <span className="flex-1">{e.nombre_completo}</span>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                        disabled={loadingId === `est-${e.id}`} onClick={() => handleQuitarEst(e.id)}>
-                        {loadingId === `est-${e.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-                      </Button>
-                    </div>
-                  ))}
+                  {estsMiembros.map(e => {
+                    const estData = allUsers?.estudiantes.find(u => u.id === e.id);
+                    return (
+                      <div key={e.id} className="flex items-center justify-between bg-green-50 rounded px-3 py-1.5 text-sm">
+                        <span className="font-mono text-xs text-green-600 mr-2">{e.codigo}</span>
+                        <span className="flex-1">{e.nombre_completo}</span>
+                        {estData?.grado_academico && (
+                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-mono mr-2">
+                            {estData.grado_academico}
+                          </span>
+                        )}
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                          disabled={loadingId === `est-${e.id}`} onClick={() => handleQuitarEst(e.id)}>
+                          {loadingId === `est-${e.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    );
+                  })}
                   {estsMiembros.length === 0 && <p className="text-xs text-muted-foreground italic px-1">Sin estudiantes asignados.</p>}
                 </div>
                 {estsDisponibles.length > 0 && (
