@@ -1077,85 +1077,137 @@ function SeccionOrganizaciones() {
 function SeccionVerUsuarios() {
   const [showPasswords, setShowPasswords] = useState(false);
 
-  const { data: allUsers, isLoading, refetch } = useQuery({
+  const { data: allUsers, isLoading: loadingUsers, refetch } = useQuery({
     queryKey: ['admin-all-users-view'],
     queryFn: () => adminService.getAllUsers(),
     staleTime: 0,
   });
+  const { data: orgsData, isLoading: loadingOrgs } = useQuery({
+    queryKey: ['admin-organizaciones-view'],
+    queryFn: () => adminService.getOrganizaciones(),
+    staleTime: 0,
+  });
 
-  const TablaUsuarios = ({
-    usuarios,
-    tipo,
-    color,
-  }: {
-    usuarios: UsuarioAdmin[];
-    tipo: 'estudiante' | 'profesor';
-    color: string;
-  }) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-muted text-left">
-            <th className="px-3 py-2 font-semibold">Código</th>
-            <th className="px-3 py-2 font-semibold">Nombre</th>
-            {tipo === 'profesor' && <th className="px-3 py-2 font-semibold">Institución</th>}
-            <th className="px-3 py-2 font-semibold">Contraseña</th>
-            <th className="px-3 py-2 font-semibold">Creado</th>
-            <th className="px-3 py-2 font-semibold">Último acceso</th>
-            <th className="px-3 py-2 font-semibold">Estado</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {usuarios.map(u => (
-              <tr key={u.id} className="hover:bg-muted/40">
-                <td className="px-3 py-2">
-                  <div className="flex items-center">
-                    <code className={`text-xs px-1.5 py-0.5 rounded font-mono ${color}`}>{u.codigo}</code>
-                    <CopiarBtn texto={u.codigo} />
-                  </div>
-                </td>
-                <td className="px-3 py-2 font-medium">{u.nombre_completo}</td>
-                {tipo === 'profesor' && (
-                  <td className="px-3 py-2 text-muted-foreground text-xs">{u.institucion || '—'}</td>
-                )}
-                <td className="px-3 py-2">
-                  {u.password_plain ? (
-                    <div className="flex items-center gap-1">
-                      <code className="text-xs bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded">
-                        {showPasswords ? u.password_plain : '••••••'}
-                      </code>
-                      <CopiarBtn texto={u.password_plain} />
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {formatFecha(u.fecha_creacion)}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatFecha(u.ultimo_acceso)}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <Badge variant={u.activo ? 'default' : 'secondary'} className="text-xs">
-                    {u.activo ? 'Activo' : 'Inactivo'}
-                  </Badge>
-                </td>
-              </tr>
-          ))}
-        </tbody>
-      </table>
-      {usuarios.length === 0 && (
-        <p className="text-center text-sm text-muted-foreground py-6">Sin {tipo === 'estudiante' ? 'estudiantes' : 'profesores'} registrados.</p>
+  const isLoading = loadingUsers || loadingOrgs;
+
+  // Mapa orgId → nombre
+  const orgNombre = (id: number | null) => {
+    if (!id) return null;
+    return orgsData?.organizaciones.find(o => o.id === id)?.nombre ?? `Org #${id}`;
+  };
+
+  // Filas de la tabla — compartida entre estudiantes y profesores
+  const FilaUsuario = ({ u, tipo }: { u: UsuarioAdmin; tipo: 'estudiante' | 'profesor' }) => (
+    <tr className="hover:bg-muted/40">
+      <td className="px-3 py-2">
+        <div className="flex items-center">
+          <code className={`text-xs px-1.5 py-0.5 rounded font-mono ${tipo === 'estudiante' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+            {u.codigo}
+          </code>
+          <CopiarBtn texto={u.codigo} />
+        </div>
+      </td>
+      <td className="px-3 py-2 font-medium">{u.nombre_completo}</td>
+      {tipo === 'estudiante' && (
+        <td className="px-3 py-2">
+          {u.grado_academico
+            ? <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{u.grado_academico}</span>
+            : <span className="text-xs text-muted-foreground italic">—</span>}
+        </td>
       )}
-    </div>
+      {tipo === 'profesor' && (
+        <td className="px-3 py-2 text-xs text-muted-foreground">{u.institucion || '—'}</td>
+      )}
+      <td className="px-3 py-2">
+        {u.password_plain ? (
+          <div className="flex items-center gap-1">
+            <code className="text-xs bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded">
+              {showPasswords ? u.password_plain : '••••••'}
+            </code>
+            <CopiarBtn texto={u.password_plain} />
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatFecha(u.fecha_creacion)}</div>
+      </td>
+      <td className="px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatFecha(u.ultimo_acceso)}</div>
+      </td>
+      <td className="px-3 py-2">
+        <Badge variant={u.activo ? 'default' : 'secondary'} className="text-xs">
+          {u.activo ? 'Activo' : 'Inactivo'}
+        </Badge>
+      </td>
+    </tr>
   );
+
+  const TablaHeader = ({ tipo }: { tipo: 'estudiante' | 'profesor' }) => (
+    <thead>
+      <tr className="bg-muted text-left text-xs">
+        <th className="px-3 py-1.5 font-semibold">Código</th>
+        <th className="px-3 py-1.5 font-semibold">Nombre</th>
+        {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Sección</th>}
+        {tipo === 'profesor'   && <th className="px-3 py-1.5 font-semibold">Institución</th>}
+        <th className="px-3 py-1.5 font-semibold">Contraseña</th>
+        <th className="px-3 py-1.5 font-semibold">Creado</th>
+        <th className="px-3 py-1.5 font-semibold">Último acceso</th>
+        <th className="px-3 py-1.5 font-semibold">Estado</th>
+      </tr>
+    </thead>
+  );
+
+  // Agrupa estudiantes: orgId → seccion → lista
+  const estudiantesPorOrgYSeccion = (() => {
+    const estudiantes = allUsers?.estudiantes ?? [];
+    // Obtener orgIds únicos (null = sin org), ordenados: con org primero
+    const orgIds = [...new Set(estudiantes.map(e => e.organizacion_id))].sort((a, b) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return (orgNombre(a) ?? '').localeCompare(orgNombre(b) ?? '');
+    });
+    return orgIds.map(orgId => {
+      const deOrg = estudiantes.filter(e => e.organizacion_id === orgId);
+      // Secciones únicas dentro de esta org, ordenadas
+      const secciones = [...new Set(deOrg.map(e => e.grado_academico ?? ''))].sort((a, b) => {
+        if (a === '') return 1;
+        if (b === '') return -1;
+        return a.localeCompare(b);
+      });
+      return {
+        orgId,
+        nombre: orgNombre(orgId) ?? 'Sin organización',
+        secciones: secciones.map(sec => ({
+          nombre: sec || 'Sin sección',
+          usuarios: deOrg
+            .filter(e => (e.grado_academico ?? '') === sec)
+            .sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo)),
+        })),
+      };
+    });
+  })();
+
+  // Agrupa profesores: orgId → lista
+  const profesoresPorOrg = (() => {
+    const profesores = allUsers?.profesores ?? [];
+    const orgIds = [...new Set(profesores.map(p => p.organizacion_id))].sort((a, b) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return (orgNombre(a) ?? '').localeCompare(orgNombre(b) ?? '');
+    });
+    return orgIds.map(orgId => ({
+      orgId,
+      nombre: orgNombre(orgId) ?? 'Sin organización',
+      usuarios: profesores
+        .filter(p => p.organizacion_id === orgId)
+        .sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo)),
+    }));
+  })();
+
+  const totalEst = allUsers?.estudiantes.length ?? 0;
+  const totalProf = allUsers?.profesores.length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -1166,51 +1218,92 @@ function SeccionVerUsuarios() {
           {showPasswords ? 'Ocultar' : 'Mostrar'} contraseñas
         </Button>
         <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <Loader2 className="h-4 w-4 mr-1" />Actualizar
+          <RefreshCw className="h-4 w-4 mr-1" />Actualizar
         </Button>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : (
-        <>
-          {/* Estudiantes */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-green-600" />
-                Estudiantes
-                <Badge variant="secondary">{allUsers?.estudiantes.length ?? 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pb-2">
-              <TablaUsuarios
-                usuarios={allUsers?.estudiantes ?? []}
-                tipo="estudiante"
-                color="bg-green-50 text-green-700"
-              />
-            </CardContent>
-          </Card>
+        <div className="space-y-8">
 
-          {/* Profesores */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <GraduationCap className="h-4 w-4 text-blue-600" />
-                Profesores
-                <Badge variant="secondary">{allUsers?.profesores.length ?? 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pb-2">
-              <TablaUsuarios
-                usuarios={allUsers?.profesores ?? []}
-                tipo="profesor"
-                color="bg-blue-50 text-blue-700"
-              />
-            </CardContent>
-          </Card>
+          {/* ── Estudiantes por organización → sección ── */}
+          <div>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+              <BookOpen className="h-4 w-4 text-green-600" />
+              Estudiantes
+              <Badge variant="secondary">{totalEst}</Badge>
+            </h3>
+            <div className="space-y-5">
+              {estudiantesPorOrgYSeccion.map(org => (
+                <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
+                  {/* Cabecera organización */}
+                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
+                    <Badge variant="outline" className="text-xs ml-auto">
+                      {org.secciones.reduce((s, sec) => s + sec.usuarios.length, 0)} estudiantes
+                    </Badge>
+                  </div>
+                  {/* Secciones */}
+                  {org.secciones.map(sec => (
+                    <div key={sec.nombre} className="border-b border-gray-100 last:border-0">
+                      <div className="bg-green-50/60 px-4 py-1.5 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-green-700 font-mono">{sec.nombre}</span>
+                        <span className="text-xs text-green-600 ml-auto">{sec.usuarios.length} estudiante{sec.usuarios.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <TablaHeader tipo="estudiante" />
+                          <tbody className="divide-y divide-gray-50">
+                            {sec.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="estudiante" />)}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {totalEst === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-4">Sin estudiantes registrados.</p>
+              )}
+            </div>
+          </div>
 
-        </>
+          {/* ── Profesores por organización ── */}
+          <div>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+              <GraduationCap className="h-4 w-4 text-blue-600" />
+              Profesores
+              <Badge variant="secondary">{totalProf}</Badge>
+            </h3>
+            <div className="space-y-3">
+              {profesoresPorOrg.map(org => (
+                <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
+                    <Badge variant="outline" className="text-xs ml-auto">
+                      {org.usuarios.length} profesor{org.usuarios.length !== 1 ? 'es' : ''}
+                    </Badge>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <TablaHeader tipo="profesor" />
+                      <tbody className="divide-y divide-gray-50">
+                        {org.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="profesor" />)}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+              {totalProf === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-4">Sin profesores registrados.</p>
+              )}
+            </div>
+          </div>
+
+        </div>
       )}
     </div>
   );
