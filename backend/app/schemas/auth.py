@@ -23,7 +23,7 @@ class LoginRequest(BaseModel):
     Estudiantes: codigo_estudiante + password
     Profesores: codigo_profesor + password
     """
-    codigo: str = Field(min_length=5, max_length=50, description="Código de estudiante o profesor")
+    codigo: str = Field(min_length=3, max_length=50, description="Código de estudiante o profesor")
     password: str = Field(min_length=6, max_length=100)
 
     class Config:
@@ -37,7 +37,7 @@ class LoginRequest(BaseModel):
 
 class CreateStudentRequest(BaseModel):
     """Request para crear estudiante (solo admin)."""
-    codigo_estudiante: str = Field(min_length=5, max_length=50)
+    codigo_estudiante: str = Field(min_length=3, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
     genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
@@ -61,7 +61,7 @@ class CreateStudentRequest(BaseModel):
 
 class CreateTeacherRequest(BaseModel):
     """Request para crear profesor (solo admin)."""
-    codigo_profesor: str = Field(min_length=5, max_length=50)
+    codigo_profesor: str = Field(min_length=3, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=100)
     institucion: Optional[str] = Field(None, max_length=255)
@@ -202,7 +202,7 @@ class MessageResponse(BaseModel):
 
 class BulkStudentRow(BaseModel):
     """Una fila del archivo de importación masiva de estudiantes."""
-    codigo_estudiante: str = Field(min_length=5, max_length=50)
+    codigo_estudiante: str = Field(min_length=3, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
     genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
@@ -213,7 +213,7 @@ class BulkStudentRow(BaseModel):
 
 class BulkTeacherRow(BaseModel):
     """Una fila del archivo de importación masiva de profesores."""
-    codigo_profesor: str = Field(min_length=5, max_length=50)
+    codigo_profesor: str = Field(min_length=3, max_length=50)
     nombre_completo: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=100)
     institucion: Optional[str] = Field(None, max_length=255)
