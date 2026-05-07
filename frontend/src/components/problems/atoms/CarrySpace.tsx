@@ -19,7 +19,7 @@ export const CarrySpace = forwardRef<HTMLInputElement, CarrySpaceProps>(
       <Input
         ref={ref}
         type="text"
-        inputMode="numeric"
+        inputMode="none"
         maxLength={1}
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -67,7 +67,7 @@ export function BorrowSpaces({ count, width }: BorrowSpacesProps) {
             key={`borrow-${i}`}
             id={`borrow-input-${i}`}
             type="text"
-            inputMode="numeric"
+            inputMode="none"
             value={borrows[i] || ''}
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={handleKeyDown(i)}

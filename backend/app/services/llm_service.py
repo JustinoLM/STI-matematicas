@@ -248,7 +248,8 @@ Genera la pista:"""
         for key, config in cls._TEMAS_CONFIG.items():
             if key in tema or tema in key:
                 return config
-        return cls._TEMAS_CONFIG["tema-piratas"]
+        # Sin fallback — el llamador debe validar que el tema existe
+        raise ValueError(f"Tema '{tema}' no encontrado en _TEMAS_CONFIG")
 
     @staticmethod
     def generar_enunciado_narrativo(

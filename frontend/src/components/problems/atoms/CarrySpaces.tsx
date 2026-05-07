@@ -67,7 +67,7 @@ export function CarrySpaces({ count, width }: CarrySpacesProps) {
             key={`carry-${i}`}
             id={`carry-input-${i}`}
             type="text"
-            inputMode="numeric"
+            inputMode="none"
             value={carries[i] || ''}
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={handleKeyDown(i)}

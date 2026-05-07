@@ -62,7 +62,7 @@ export const DigitInput = forwardRef<HTMLInputElement, DigitInputProps>(
       <Input
         ref={ref}
         type="text"
-        inputMode="numeric"
+        inputMode="none"
         maxLength={1}
         value={value}
         onChange={handleChange}

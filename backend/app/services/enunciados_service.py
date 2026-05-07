@@ -58,6 +58,13 @@ class EnunciadosService:
             raise ValueError(f"Problema {problema_id} no encontrado")
 
         tema = self._normalizar_tema(tema_nombre)
+
+        # Guardia: solo temas narrativos conocidos generan enunciados.
+        # Temas como "Clásico" / "tema-default" NO son narrativos y no deben
+        # generar texto LLM (evita el fallback-a-piratas de _buscar_config_tema).
+        if tema not in LLMPrompts._TEMAS_CONFIG:
+            raise ValueError(f"Tema '{tema}' no es narrativo — sin enunciado")
+
         signature = problema.signature
         nivel = problema.nivel_dificultad
 
