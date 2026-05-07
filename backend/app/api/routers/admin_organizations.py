@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sa_delete, update as sa_update, cast, Date
 from sqlalchemy.orm import selectinload
 
+from typing import Optional
 from pydantic import BaseModel
 
 from app.api.dependencies import DBSession
@@ -293,6 +294,32 @@ async def eliminar_estudiante(est_id: int, db: DBSession):
     return {"success": True, "mensaje": f"Estudiante '{nombre}' eliminado"}
 
 
+class EditarEstudianteRequest(BaseModel):
+    nombre_completo: Optional[str] = None
+    genero: Optional[str] = None
+    grado_academico: Optional[str] = None
+    edad: Optional[int] = None
+
+
+@router.patch("/admin/students/{est_id}", response_model=dict)
+async def editar_estudiante(est_id: int, data: EditarEstudianteRequest, db: DBSession):
+    """Edita campos básicos de un estudiante (nombre, género, sección, edad)."""
+    result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
+    est = result.scalar_one_or_none()
+    if not est:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    if data.nombre_completo is not None:
+        est.nombre_completo = data.nombre_completo
+    if data.genero is not None:
+        est.genero = data.genero
+    if data.grado_academico is not None:
+        est.grado_academico = data.grado_academico
+    if data.edad is not None:
+        est.edad = data.edad
+    await db.commit()
+    return {"ok": True}
+
+
 @router.get("/admin/users", response_model=dict)
 async def listar_todos_usuarios(db: DBSession):
     """Lista todos los profesores y estudiantes para la asignación en AdminPage."""
@@ -326,6 +353,8 @@ async def listar_todos_usuarios(db: DBSession):
                 "nombre_completo": e.nombre_completo,
                 "organizacion_id": e.organizacion_id,
                 "grado_academico": e.grado_academico,
+                "genero": e.genero.value if e.genero else None,
+                "edad": e.edad,
                 "password_plain": e.password_plain,
                 "activo": bool(e.activo),
                 "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,

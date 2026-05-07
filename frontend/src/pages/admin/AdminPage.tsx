@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   UserPlus,
   GraduationCap,
@@ -45,6 +46,7 @@ import {
   CheckCircle2,
   XCircle,
   ClipboardCheck,
+  Pencil,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import apiClient, { getErrorMessage } from '@/services/api';
@@ -140,6 +142,8 @@ interface UsuarioAdmin {
   secciones_asignadas?: string[];
   // Solo en estudiantes
   grado_academico?: string;
+  genero?: string;
+  edad?: number | null;
 }
 
 interface AllUsersResponse {
@@ -215,6 +219,14 @@ const adminService = {
   },
   async actualizarSeccionesProfesor(profId: number, secciones: string[]): Promise<void> {
     await apiClient.patch(`/admin/professors/${profId}/secciones`, { secciones });
+  },
+  async editarEstudiante(estId: number, data: {
+    nombre_completo?: string;
+    genero?: string;
+    grado_academico?: string;
+    edad?: number;
+  }): Promise<void> {
+    await apiClient.patch(`/admin/students/${estId}`, data);
   },
 };
 
@@ -608,6 +620,92 @@ function FormProfesor({ organizaciones }: {
   );
 }
 
+// ─── Modal de edición de estudiante ──────────────────────────────────────────
+
+function EditarEstudianteModal({
+  est,
+  open,
+  onClose,
+  onSaved,
+}: {
+  est: UsuarioAdmin;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [nombre, setNombre] = useState(est.nombre_completo);
+  const [genero, setGenero] = useState(est.genero ?? 'masculino');
+  const [grado, setGrado] = useState(est.grado_academico ?? '');
+  const [edad, setEdad] = useState(est.edad != null ? String(est.edad) : '');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleGuardar = async () => {
+    if (!nombre.trim()) { setError('El nombre no puede estar vacío'); return; }
+    setGuardando(true);
+    setError('');
+    try {
+      await adminService.editarEstudiante(est.id, {
+        nombre_completo: nombre.trim(),
+        genero,
+        grado_academico: grado.trim() || undefined,
+        edad: edad ? Number(edad) : undefined,
+      });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setError(getErrorMessage(e));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Editar estudiante</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Nombre completo</Label>
+            <Input value={nombre} onChange={e => setNombre(e.target.value)} className="h-8 text-sm mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs">Género</Label>
+            <select
+              value={genero}
+              onChange={e => setGenero(e.target.value)}
+              className="mt-1 w-full h-8 text-sm border rounded-md px-2 bg-background"
+            >
+              <option value="masculino">Masculino</option>
+              <option value="femenino">Femenino</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label className="text-xs">Sección</Label>
+              <Input value={grado} onChange={e => setGrado(e.target.value)} placeholder="ej. 6D" className="h-8 text-sm mt-1" />
+            </div>
+            <div className="w-20">
+              <Label className="text-xs">Edad</Label>
+              <Input value={edad} onChange={e => setEdad(e.target.value)} type="number" min={3} max={25} className="h-8 text-sm mt-1" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={guardando}>Cancelar</Button>
+          <Button size="sm" onClick={handleGuardar} disabled={guardando}>
+            {guardando ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Panel de secciones de un profesor ───────────────────────────────────────
 
 function SeccionesProfesorPanel({
@@ -725,6 +823,7 @@ function OrgCard({ org, allUsers, onRefresh }: {
   const [expanded, setExpanded] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [togglingPostTest, setTogglingPostTest] = useState(false);
+  const [editandoEst, setEditandoEst] = useState<UsuarioAdmin | null>(null);
 
   const handleTogglePostTest = async () => {
     setTogglingPostTest(true);
@@ -899,6 +998,10 @@ function OrgCard({ org, allUsers, onRefresh }: {
                             {estData.grado_academico}
                           </span>
                         )}
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700 mr-1"
+                          onClick={() => setEditandoEst(estData ?? null)}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
                           disabled={loadingId === `est-${e.id}`} onClick={() => handleQuitarEst(e.id)}>
                           {loadingId === `est-${e.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
@@ -926,6 +1029,14 @@ function OrgCard({ org, allUsers, onRefresh }: {
             </>
           )}
         </CardContent>
+      )}
+      {editandoEst && (
+        <EditarEstudianteModal
+          est={editandoEst}
+          open={!!editandoEst}
+          onClose={() => setEditandoEst(null)}
+          onSaved={() => { handleRefetchAll(); setEditandoEst(null); }}
+        />
       )}
     </Card>
   );
@@ -1058,6 +1169,7 @@ function SeccionOrganizaciones() {
 
 function SeccionVerUsuarios() {
   const [showPasswords, setShowPasswords] = useState(false);
+  const [editandoEst, setEditandoEst] = useState<UsuarioAdmin | null>(null);
   // Claves colapsadas: "org-{orgId}" y "sec-{orgId}-{secNombre}"
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCollapse = (key: string) =>
@@ -1131,6 +1243,14 @@ function SeccionVerUsuarios() {
           {u.activo ? 'Activo' : 'Inactivo'}
         </Badge>
       </td>
+      <td className="px-3 py-2">
+        {tipo === 'estudiante' && (
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700"
+            onClick={() => setEditandoEst(u)}>
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
+      </td>
     </tr>
   );
 
@@ -1145,6 +1265,7 @@ function SeccionVerUsuarios() {
         <th className="px-3 py-1.5 font-semibold">Creado</th>
         <th className="px-3 py-1.5 font-semibold">Último acceso</th>
         <th className="px-3 py-1.5 font-semibold">Estado</th>
+        <th className="px-3 py-1.5 font-semibold"></th>
       </tr>
     </thead>
   );
@@ -1331,6 +1452,14 @@ function SeccionVerUsuarios() {
           </div>
 
         </div>
+      )}
+      {editandoEst && (
+        <EditarEstudianteModal
+          est={editandoEst}
+          open={!!editandoEst}
+          onClose={() => setEditandoEst(null)}
+          onSaved={() => { refetch(); setEditandoEst(null); }}
+        />
       )}
     </div>
   );
