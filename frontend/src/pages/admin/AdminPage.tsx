@@ -1076,6 +1076,14 @@ function SeccionOrganizaciones() {
 
 function SeccionVerUsuarios() {
   const [showPasswords, setShowPasswords] = useState(false);
+  // Claves colapsadas: "org-{orgId}" y "sec-{orgId}-{secNombre}"
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapse = (key: string) =>
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
 
   const { data: allUsers, isLoading: loadingUsers, refetch } = useQuery({
     queryKey: ['admin-all-users-view'],
@@ -1235,35 +1243,60 @@ function SeccionVerUsuarios() {
               <Badge variant="secondary">{totalEst}</Badge>
             </h3>
             <div className="space-y-5">
-              {estudiantesPorOrgYSeccion.map(org => (
-                <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
-                  {/* Cabecera organización */}
-                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
-                    <Building2 className="h-4 w-4 text-gray-400" />
-                    <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
-                    <Badge variant="outline" className="text-xs ml-auto">
-                      {org.secciones.reduce((s, sec) => s + sec.usuarios.length, 0)} estudiantes
-                    </Badge>
+              {estudiantesPorOrgYSeccion.map(org => {
+                const orgKey = `org-est-${org.orgId ?? 'none'}`;
+                const orgCollapsed = collapsed.has(orgKey);
+                return (
+                  <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
+                    {/* Cabecera organización — clicable */}
+                    <button
+                      onClick={() => toggleCollapse(orgKey)}
+                      className="w-full bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200 hover:bg-gray-100 transition-colors text-left"
+                    >
+                      {orgCollapsed
+                        ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+                        : <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />}
+                      <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
+                      <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
+                      <Badge variant="outline" className="text-xs ml-auto">
+                        {org.secciones.reduce((s, sec) => s + sec.usuarios.length, 0)} estudiantes
+                      </Badge>
+                    </button>
+                    {/* Secciones — visibles solo si org expandida */}
+                    {!orgCollapsed && org.secciones.map(sec => {
+                      const secKey = `sec-est-${org.orgId ?? 'none'}-${sec.nombre}`;
+                      const secCollapsed = collapsed.has(secKey);
+                      return (
+                        <div key={sec.nombre} className="border-b border-gray-100 last:border-0">
+                          {/* Cabecera sección — clicable */}
+                          <button
+                            onClick={() => toggleCollapse(secKey)}
+                            className="w-full bg-green-50/60 px-4 py-1.5 flex items-center gap-2 hover:bg-green-50 transition-colors text-left"
+                          >
+                            {secCollapsed
+                              ? <ChevronDown className="h-3 w-3 text-green-500 shrink-0" />
+                              : <ChevronUp className="h-3 w-3 text-green-500 shrink-0" />}
+                            <span className="text-xs font-semibold text-green-700 font-mono">{sec.nombre}</span>
+                            <span className="text-xs text-green-600 ml-auto">
+                              {sec.usuarios.length} estudiante{sec.usuarios.length !== 1 ? 's' : ''}
+                            </span>
+                          </button>
+                          {!secCollapsed && (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <TablaHeader tipo="estudiante" />
+                                <tbody className="divide-y divide-gray-50">
+                                  {sec.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="estudiante" />)}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {/* Secciones */}
-                  {org.secciones.map(sec => (
-                    <div key={sec.nombre} className="border-b border-gray-100 last:border-0">
-                      <div className="bg-green-50/60 px-4 py-1.5 flex items-center gap-2">
-                        <span className="text-xs font-semibold text-green-700 font-mono">{sec.nombre}</span>
-                        <span className="text-xs text-green-600 ml-auto">{sec.usuarios.length} estudiante{sec.usuarios.length !== 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <TablaHeader tipo="estudiante" />
-                          <tbody className="divide-y divide-gray-50">
-                            {sec.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="estudiante" />)}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
+                );
+              })}
               {totalEst === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-4">Sin estudiantes registrados.</p>
               )}
@@ -1278,25 +1311,37 @@ function SeccionVerUsuarios() {
               <Badge variant="secondary">{totalProf}</Badge>
             </h3>
             <div className="space-y-3">
-              {profesoresPorOrg.map(org => (
-                <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
-                    <Building2 className="h-4 w-4 text-gray-400" />
-                    <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
-                    <Badge variant="outline" className="text-xs ml-auto">
-                      {org.usuarios.length} profesor{org.usuarios.length !== 1 ? 'es' : ''}
-                    </Badge>
+              {profesoresPorOrg.map(org => {
+                const orgKey = `org-prof-${org.orgId ?? 'none'}`;
+                const orgCollapsed = collapsed.has(orgKey);
+                return (
+                  <div key={org.orgId ?? 'sin-org'} className="rounded-xl border border-gray-200 overflow-hidden">
+                    <button
+                      onClick={() => toggleCollapse(orgKey)}
+                      className="w-full bg-gray-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200 hover:bg-gray-100 transition-colors text-left"
+                    >
+                      {orgCollapsed
+                        ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+                        : <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />}
+                      <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
+                      <span className="font-semibold text-sm text-gray-700">{org.nombre}</span>
+                      <Badge variant="outline" className="text-xs ml-auto">
+                        {org.usuarios.length} profesor{org.usuarios.length !== 1 ? 'es' : ''}
+                      </Badge>
+                    </button>
+                    {!orgCollapsed && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <TablaHeader tipo="profesor" />
+                          <tbody className="divide-y divide-gray-50">
+                            {org.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="profesor" />)}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <TablaHeader tipo="profesor" />
-                      <tbody className="divide-y divide-gray-50">
-                        {org.usuarios.map(u => <FilaUsuario key={u.id} u={u} tipo="profesor" />)}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {totalProf === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-4">Sin profesores registrados.</p>
               )}
