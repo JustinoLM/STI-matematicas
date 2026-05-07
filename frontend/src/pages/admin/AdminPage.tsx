@@ -58,8 +58,7 @@ interface CreateStudentPayload {
   password: string;
   organizacion_id?: number;
   grado_academico?: string;
-  anio_nacimiento?: number;
-  mes_nacimiento?: number;
+  edad?: number;
 }
 
 interface BulkStudentRow {
@@ -69,8 +68,7 @@ interface BulkStudentRow {
   password: string;
   organizacion_id?: number;
   grado_academico?: string;
-  anio_nacimiento?: number;
-  mes_nacimiento?: number;
+  edad?: number;
 }
 
 interface BulkTeacherRow {
@@ -297,7 +295,7 @@ function FormEstudiante({ organizaciones }: {
     codigo_estudiante: '', nombre_completo: '',
     genero: 'masculino' as 'masculino' | 'femenino',
     password: '', organizacion_id: '',
-    grado_academico: '', anio_nacimiento: '', mes_nacimiento: '',
+    grado_academico: '', edad: '',
   };
   const [form, setForm] = useState(emptyForm);
   const [resultado, setResultado] = useState<UserCreated | null>(null);
@@ -326,8 +324,7 @@ function FormEstudiante({ organizaciones }: {
       password: form.password,
       organizacion_id: form.organizacion_id ? Number(form.organizacion_id) : undefined,
       grado_academico: form.grado_academico.trim() || undefined,
-      anio_nacimiento: form.anio_nacimiento ? Number(form.anio_nacimiento) : undefined,
-      mes_nacimiento: form.mes_nacimiento ? Number(form.mes_nacimiento) : undefined,
+      edad: form.edad ? Number(form.edad) : undefined,
     });
   };
 
@@ -414,31 +411,16 @@ function FormEstudiante({ organizaciones }: {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="anio-est">Año de nacimiento</Label>
+          <Label htmlFor="edad-est">Edad</Label>
           <Input
-            id="anio-est"
+            id="edad-est"
             type="number"
-            placeholder="2014"
-            min={2000}
-            max={2030}
-            value={form.anio_nacimiento}
-            onChange={e => setForm(f => ({ ...f, anio_nacimiento: e.target.value }))}
+            placeholder="11"
+            min={3}
+            max={25}
+            value={form.edad}
+            onChange={e => setForm(f => ({ ...f, edad: e.target.value }))}
           />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="mes-est">Mes de nacimiento</Label>
-          <select
-            id="mes-est"
-            value={form.mes_nacimiento}
-            onChange={e => setForm(f => ({ ...f, mes_nacimiento: e.target.value }))}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">— Sin especificar —</option>
-            {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((m, i) => (
-              <option key={i + 1} value={i + 1}>{m}</option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -1883,7 +1865,6 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
 
 // ─── Importación Masiva ───────────────────────────────────────────────────────
 
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 
 function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }) {
@@ -1928,8 +1909,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
               password,
               organizacion_id: r['organizacion_id'] ? Number(r['organizacion_id']) : undefined,
               grado_academico: String(r['grado_academico'] || '').trim() || undefined,
-              anio_nacimiento: r['anio_nacimiento'] ? Number(r['anio_nacimiento']) : undefined,
-              mes_nacimiento: r['mes_nacimiento'] ? Number(r['mes_nacimiento']) : undefined,
+              edad: r['edad'] ? Number(r['edad']) : undefined,
             } as BulkStudentRow;
           });
           setFilasEst(parsed);
@@ -1987,9 +1967,9 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
 
     if (tipo === 'estudiantes') {
       const wsData = XLSX.utils.aoa_to_sheet([
-        ['codigo_estudiante', 'nombre', 'apellido', 'genero', 'password', 'organizacion_id', 'grado_academico', 'anio_nacimiento', 'mes_nacimiento'],
-        ['EST001', 'Juan', 'Pérez', 'masculino', 'temp123', organizaciones[0]?.id ?? '', '5to grado', 2014, 3],
-        ['EST002', 'María', 'García', 'femenino', 'temp123', organizaciones[0]?.id ?? '', '5to grado', 2013, 8],
+        ['codigo_estudiante', 'nombre', 'apellido', 'genero', 'password', 'organizacion_id', 'grado_academico', 'edad'],
+        ['EST001', 'Juan', 'Pérez', 'masculino', 'temp123', organizaciones[0]?.id ?? '', '6A', 11],
+        ['EST002', 'María', 'García', 'femenino', 'temp123', organizaciones[0]?.id ?? '', '6A', 11],
       ]);
       XLSX.utils.book_append_sheet(wb, wsData, 'Estudiantes');
     } else {
@@ -2068,7 +2048,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                       <th className="px-3 py-2 text-left font-medium">Nombre</th>
                       <th className="px-3 py-2 text-left font-medium">Género</th>
                       <th className="px-3 py-2 text-left font-medium">Grado</th>
-                      <th className="px-3 py-2 text-left font-medium">Nac.</th>
+                      <th className="px-3 py-2 text-left font-medium">Edad</th>
                       <th className="px-3 py-2 text-left font-medium">Org.</th>
                     </>
                   ) : (
@@ -2094,11 +2074,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                           <td className="px-3 py-1.5">{f.nombre_completo}</td>
                           <td className="px-3 py-1.5">{f.genero}</td>
                           <td className="px-3 py-1.5">{f.grado_academico || '—'}</td>
-                          <td className="px-3 py-1.5">
-                            {f.anio_nacimiento
-                              ? `${f.mes_nacimiento ? MESES[f.mes_nacimiento - 1] + ' ' : ''}${f.anio_nacimiento}`
-                              : '—'}
-                          </td>
+                          <td className="px-3 py-1.5">{f.edad ?? '—'}</td>
                           <td className="px-3 py-1.5">{org ? org.codigo : '—'}</td>
                         </>
                       );

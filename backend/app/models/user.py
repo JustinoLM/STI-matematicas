@@ -75,8 +75,7 @@ class Estudiante(Usuario):
 
     # Datos académicos y personales
     grado_academico = Column(String(50), nullable=True)   # Ej: "5to grado"
-    anio_nacimiento = Column(Integer, nullable=True)      # Ej: 2014
-    mes_nacimiento  = Column(Integer, nullable=True)      # 1-12
+    edad = Column(Integer, nullable=True)  # Edad en años (ej: 11)
 
     # Relaciones
     narrativa = relationship("Narrativa", back_populates="estudiantes")

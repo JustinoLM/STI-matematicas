@@ -88,8 +88,7 @@ class UserRepository:
         password_plain: Optional[str] = None,
         organizacion_id: Optional[int] = None,
         grado_academico: Optional[str] = None,
-        anio_nacimiento: Optional[int] = None,
-        mes_nacimiento: Optional[int] = None,
+        edad: Optional[int] = None,
     ) -> Estudiante:
         """
         Crea un nuevo estudiante.
@@ -106,8 +105,7 @@ class UserRepository:
             genero=genero,
             organizacion_id=organizacion_id,
             grado_academico=grado_academico,
-            anio_nacimiento=anio_nacimiento,
-            mes_nacimiento=mes_nacimiento,
+            edad=edad,
             activo=True
         )
 

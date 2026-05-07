@@ -43,8 +43,7 @@ class CreateStudentRequest(BaseModel):
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
     grado_academico: Optional[str] = Field(None, max_length=50)
-    anio_nacimiento: Optional[int] = Field(None, ge=2000, le=2030)
-    mes_nacimiento: Optional[int] = Field(None, ge=1, le=12)
+    edad: Optional[int] = Field(None, ge=3, le=25)
 
     class Config:
         json_schema_extra = {
@@ -54,9 +53,8 @@ class CreateStudentRequest(BaseModel):
                 "genero": "masculino",
                 "password": "temp123",
                 "organizacion_id": 1,
-                "grado_academico": "5to grado",
-                "anio_nacimiento": 2014,
-                "mes_nacimiento": 3,
+                "grado_academico": "6A",
+                "edad": 11,
             }
         }
 
@@ -118,8 +116,7 @@ class StudentResponse(UserBase):
     genero: Genero
     narrativa_seleccionada_id: Optional[int]
     grado_academico: Optional[str] = None
-    anio_nacimiento: Optional[int] = None
-    mes_nacimiento: Optional[int] = None
+    edad: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -211,8 +208,7 @@ class BulkStudentRow(BaseModel):
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
     grado_academico: Optional[str] = Field(None, max_length=50)
-    anio_nacimiento: Optional[int] = Field(None, ge=2000, le=2030)
-    mes_nacimiento: Optional[int] = Field(None, ge=1, le=12)
+    edad: Optional[int] = Field(None, ge=3, le=25)
 
 
 class BulkTeacherRow(BaseModel):

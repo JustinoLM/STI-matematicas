@@ -133,10 +133,9 @@ class AuthService:
             genero=data.genero,
             organizacion_id=data.organizacion_id,
             grado_academico=data.grado_academico,
-            anio_nacimiento=data.anio_nacimiento,
-            mes_nacimiento=data.mes_nacimiento,
+            edad=data.edad,
         )
-        
+
         return StudentResponse.model_validate(estudiante)
     
     async def create_teacher(self, data: CreateTeacherRequest) -> TeacherResponse:
@@ -185,8 +184,7 @@ class AuthService:
                     genero=row.genero,
                     organizacion_id=row.organizacion_id,
                     grado_academico=row.grado_academico,
-                    anio_nacimiento=row.anio_nacimiento,
-                    mes_nacimiento=row.mes_nacimiento,
+                    edad=row.edad,
                 )
                 creados += 1
             except Exception as e:
