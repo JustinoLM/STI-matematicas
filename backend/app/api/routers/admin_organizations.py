@@ -24,7 +24,18 @@ from app.api.dependencies import DBSession
 from app.models.organization import Organizacion
 from app.models.user import Profesor, Estudiante
 from app.models.group import Grupo, EstudianteGrupo
-from app.models.adaptive import PerfilEstudiante, SesionPractica, EstadoSesion
+from app.models.adaptive import (
+    PerfilEstudiante, SesionPractica, EstadoSesion,
+    AlertaEstudiante, PruebaDiagnostica, ResultadoPostTest, EstadisticaEstudiante,
+)
+from app.models.gamification import (
+    EstudianteDesbloqueable, PersonalizacionEstudiante,
+    EstudianteMedalla, TransaccionPuntos,
+)
+from app.models.problem import Intento
+from app.models.hints_videos import UsoPista, VideoGuardado, VideoTemporal
+from app.models.error import EstudianteError
+from app.models.llm import MensajeMotivacional, AnimacionGuardada
 from app.repositories.gamification_repository import GamificationRepository
 from app.services.ml_service import ml_service
 from app.schemas.organization import (
@@ -273,22 +284,49 @@ async def eliminar_profesor(prof_id: int, db: DBSession):
 
 @router.delete("/admin/students/{est_id}", response_model=dict)
 async def eliminar_estudiante(est_id: int, db: DBSession):
-    """
-    Elimina un estudiante. Cascade manual:
-    lo saca de todos los grupos antes de borrar.
-    """
+    """Elimina un estudiante con cascade manual en el orden correcto."""
     result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
     est = result.scalar_one_or_none()
     if not est:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
     nombre = est.nombre_completo
+    usuario_id = est.id  # mismo id para usuario (joined table)
 
-    # 1) Sacar de todos los grupos
+    # 1) Tablas que referencian sesion_practica
+    await db.execute(sa_delete(UsoPista).where(UsoPista.estudiante_id == est_id))
+    await db.execute(sa_delete(Intento).where(Intento.estudiante_id == est_id))
+    await db.execute(sa_delete(TransaccionPuntos).where(TransaccionPuntos.estudiante_id == est_id))
+    await db.flush()
+
+    # 2) Tablas que referencian perfil_estudiante
+    await db.execute(sa_delete(SesionPractica).where(SesionPractica.estudiante_id == est_id))
+    await db.execute(sa_delete(AlertaEstudiante).where(AlertaEstudiante.estudiante_id == est_id))
+    await db.flush()
+
+    # 3) Perfil adaptativo
+    await db.execute(sa_delete(PerfilEstudiante).where(PerfilEstudiante.estudiante_id == est_id))
+    await db.flush()
+
+    # 4) Resto de tablas que referencian estudiante
+    await db.execute(sa_delete(PruebaDiagnostica).where(PruebaDiagnostica.estudiante_id == est_id))
+    await db.execute(sa_delete(ResultadoPostTest).where(ResultadoPostTest.estudiante_id == est_id))
+    await db.execute(sa_delete(EstadisticaEstudiante).where(EstadisticaEstudiante.estudiante_id == est_id))
+    await db.execute(sa_delete(EstudianteError).where(EstudianteError.estudiante_id == est_id))
+    await db.execute(sa_delete(EstudianteDesbloqueable).where(EstudianteDesbloqueable.estudiante_id == est_id))
+    await db.execute(sa_delete(PersonalizacionEstudiante).where(PersonalizacionEstudiante.estudiante_id == est_id))
+    await db.execute(sa_delete(EstudianteMedalla).where(EstudianteMedalla.estudiante_id == est_id))
+    await db.execute(sa_delete(VideoGuardado).where(VideoGuardado.estudiante_id == est_id))
+    await db.execute(sa_delete(VideoTemporal).where(VideoTemporal.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.estudiante_id == est_id))
     await db.flush()
 
-    # 2) Eliminar el estudiante
+    # 5) Tablas que referencian usuario.id (mismo id)
+    await db.execute(sa_delete(MensajeMotivacional).where(MensajeMotivacional.estudiante_id == usuario_id))
+    await db.execute(sa_delete(AnimacionGuardada).where(AnimacionGuardada.estudiante_id == usuario_id))
+    await db.flush()
+
+    # 6) Finalmente el estudiante (SQLAlchemy borra estudiante + usuario por herencia)
     await db.delete(est)
     await db.commit()
     return {"success": True, "mensaje": f"Estudiante '{nombre}' eliminado"}
