@@ -77,12 +77,15 @@ class MensajesService:
         nivel_general: int,
         tema: Optional[str],
     ) -> str:
+        # Solo pasar el tema al LLM si es un tema narrativo conocido
+        tema_narrativo = tema if tema and tema in LLMPrompts._TEMAS_CONFIG else None
+
         if tipo == "dashboard":
             prompt = LLMPrompts.mensaje_motivacional_dashboard(
-                nombre, genero, nivel_general, tema
+                nombre, genero, nivel_general, tema_narrativo
             )
         else:
-            prompt = LLMPrompts.mensaje_motivacional_progreso(nombre, genero, tema)
+            prompt = LLMPrompts.mensaje_motivacional_progreso(nombre, genero, tema_narrativo)
 
         respuesta = await self.llm_service.generate(
             prompt=prompt,
@@ -97,11 +100,14 @@ class MensajesService:
     @staticmethod
     def _fallback(nombre: str, tipo: str, tema: Optional[str]) -> str:
         primer_nombre = nombre.split()[0] if nombre else "estudiante"
-        # Usar saludo temático si está disponible
+        # Usar saludo temático solo si es un tema narrativo conocido
         saludo_tema = ""
-        if tema:
-            config = LLMPrompts._buscar_config_tema(tema)
-            saludo_tema = config.get("saludo", "")
+        if tema and tema in LLMPrompts._TEMAS_CONFIG:
+            try:
+                config = LLMPrompts._buscar_config_tema(tema)
+                saludo_tema = config.get("saludo", "")
+            except ValueError:
+                saludo_tema = ""
 
         if tipo == "dashboard":
             base = f"¡Bienvenido, {primer_nombre}! ¡Hoy es un gran día para practicar matemáticas!"
