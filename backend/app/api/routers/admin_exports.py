@@ -219,7 +219,7 @@ async def exportar_tienda(
         select(TransaccionPuntos, Estudiante, Organizacion)
         .join(Estudiante, Estudiante.id == TransaccionPuntos.estudiante_id)
         .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
-        .where(TransaccionPuntos.tipo == TipoTransaccion.COMPRA)
+        .where(TransaccionPuntos.tipo == TipoTransaccion.GASTO)
     )
     if org_id:
         stmt = stmt.where(Estudiante.organizacion_id == org_id)
@@ -297,7 +297,7 @@ async def exportar_resumen(db: DBSession):
                 select(TransaccionPuntos.id).where(
                     and_(
                         TransaccionPuntos.estudiante_id.in_(est_ids),
-                        TransaccionPuntos.tipo == TipoTransaccion.COMPRA,
+                        TransaccionPuntos.tipo == TipoTransaccion.GASTO,
                     )
                 )
             )).all()
