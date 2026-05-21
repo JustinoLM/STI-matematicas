@@ -4,7 +4,11 @@
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { useStudentStore } from '@/store/studentStore';
+import { useTeacherStore } from '@/store/teacherStore';
+import { usePracticeStore } from '@/store/practiceStore';
 import { authService } from '@/services/authService';
+import { queryClient } from '@/lib/queryClient';
 
 // Layout
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -45,6 +49,9 @@ import GroupStatsPage from '@/pages/teacher/GroupStatsPage';
 
 function App() {
   const { isAuthenticated, getUserRole, getUserName, login, logout } = useAuthStore();
+  const resetStudent = useStudentStore(s => s.reset);
+  const resetTeacher = useTeacherStore(s => s.reset);
+  const resetPractice = usePracticeStore(s => s.reset);
 
   const userRole = getUserRole();
   const userName = getUserName();
@@ -57,6 +64,11 @@ function App() {
   const handleLogout = () => {
     authService.logout();
     logout();
+    // Limpiar todo el caché y estado de sesión anterior
+    queryClient.clear();
+    resetStudent();
+    resetTeacher();
+    resetPractice();
   };
 
   return (
