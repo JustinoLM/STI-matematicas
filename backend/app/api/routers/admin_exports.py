@@ -2,6 +2,7 @@
 Router de exportación de datos para el panel de administración.
 
 Endpoints:
+  GET /admin/export/estudiantes → listado completo de estudiantes
   GET /admin/export/sesiones   → historial de sesiones de práctica
   GET /admin/export/niveles    → evolución de niveles por estudiante
   GET /admin/export/medallas   → medallas obtenidas
@@ -36,6 +37,43 @@ def _pct(correctos, total) -> str:
     if not total:
         return ""
     return f"{round(correctos / total * 100, 1)}%"
+
+
+# ─── Estudiantes ──────────────────────────────────────────────────────────────
+
+@router.get("/admin/export/estudiantes")
+async def exportar_estudiantes(
+    db: DBSession,
+    org_id: Optional[int] = Query(None),
+):
+    """Listado completo de estudiantes con datos básicos y estado de cuenta."""
+    stmt = (
+        select(Estudiante, Organizacion)
+        .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
+        .order_by(Organizacion.nombre, Estudiante.grado_academico, Estudiante.nombre_completo)
+    )
+    if org_id:
+        stmt = stmt.where(Estudiante.organizacion_id == org_id)
+    rows = (await db.execute(stmt)).all()
+
+    data = [
+        {
+            "codigo_estudiante": est.codigo_estudiante,
+            "nombre_completo": est.nombre_completo,
+            "genero": est.genero.value if est.genero else "",
+            "grado_academico": _fmt(est.grado_academico),
+            "edad": _fmt(est.edad),
+            "organizacion": org.nombre if org else "",
+            "puntos_actuales": est.puntos_totales or 0,
+            "activo": "Sí" if est.activo else "No",
+            "fecha_creacion": _fmt(est.fecha_creacion),
+            "ultimo_acceso": _fmt(est.ultimo_acceso),
+            "password_plain": _fmt(est.password_plain),
+        }
+        for est, org in rows
+    ]
+
+    return {"columnas": list(data[0].keys()) if data else [], "filas": data}
 
 
 # ─── Sesiones ─────────────────────────────────────────────────────────────────
