@@ -2,12 +2,13 @@
 Router de exportación de datos para el panel de administración.
 
 Endpoints:
-  GET /admin/export/estudiantes → listado completo de estudiantes
-  GET /admin/export/sesiones   → historial de sesiones de práctica
-  GET /admin/export/niveles    → evolución de niveles por estudiante
-  GET /admin/export/medallas   → medallas obtenidas
-  GET /admin/export/tienda     → transacciones de la tienda
-  GET /admin/export/resumen    → resumen por organización
+  GET /admin/export/estudiantes  → listado completo de estudiantes
+  GET /admin/export/diagnostico  → comparación pre-test vs post-test por estudiante
+  GET /admin/export/sesiones     → historial de sesiones de práctica
+  GET /admin/export/niveles      → evolución de niveles por estudiante
+  GET /admin/export/medallas     → medallas obtenidas
+  GET /admin/export/tienda       → transacciones de la tienda
+  GET /admin/export/resumen      → resumen por organización
 """
 
 from typing import Optional
@@ -16,7 +17,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import DBSession
-from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante
+from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante, PruebaDiagnostica, ResultadoPostTest
 from app.models.user import Estudiante
 from app.models.organization import Organizacion
 from app.models.gamification import EstudianteMedalla, Medalla, TransaccionPuntos, TipoTransaccion
@@ -74,6 +75,130 @@ async def exportar_estudiantes(
     ]
 
     return {"columnas": list(data[0].keys()) if data else [], "filas": data}
+
+
+# ─── Pre-test vs Post-test ────────────────────────────────────────────────────
+
+@router.get("/admin/export/diagnostico")
+async def exportar_diagnostico(
+    db: DBSession,
+    org_id: Optional[int] = Query(None),
+):
+    """
+    Comparación pre-test (PruebaDiagnostica) vs post-test (ResultadoPostTest)
+    por estudiante. Una fila por estudiante con resultados de ambas pruebas
+    y el delta de mejora por operación.
+    """
+    # Obtener todos los estudiantes de la org
+    stmt_est = (
+        select(Estudiante, Organizacion)
+        .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
+    )
+    if org_id:
+        stmt_est = stmt_est.where(Estudiante.organizacion_id == org_id)
+    stmt_est = stmt_est.order_by(Estudiante.grado_academico, Estudiante.nombre_completo)
+    estudiantes = (await db.execute(stmt_est)).all()
+
+    # Pre-test por estudiante
+    stmt_pre = select(PruebaDiagnostica)
+    if org_id:
+        stmt_pre = stmt_pre.join(Estudiante, Estudiante.id == PruebaDiagnostica.estudiante_id).where(Estudiante.organizacion_id == org_id)
+    pre_tests = {p.estudiante_id: p for p in (await db.execute(stmt_pre)).scalars().all()}
+
+    # Post-test por estudiante
+    stmt_post = select(ResultadoPostTest)
+    if org_id:
+        stmt_post = stmt_post.where(ResultadoPostTest.org_id == org_id)
+    post_tests = {p.estudiante_id: p for p in (await db.execute(stmt_post)).scalars().all()}
+
+    def bool_to_int(v):
+        if v is None: return None
+        return 1 if v else 0
+
+    def correctos_pre(pre, op):
+        """Suma los dos niveles de la operación (0, 1 o 2 correctos)."""
+        if pre is None: return None
+        n1 = bool_to_int(getattr(pre, f"{op}_nivel1_correcto"))
+        n2 = bool_to_int(getattr(pre, f"{op}_nivel2_correcto"))
+        if n1 is None and n2 is None: return None
+        return (n1 or 0) + (n2 or 0)
+
+    def correctos_post(post, op):
+        if post is None or not post.completado: return None
+        n1 = bool_to_int(getattr(post, f"{op}_nivel1_correcto"))
+        n2 = bool_to_int(getattr(post, f"{op}_nivel2_correcto"))
+        if n1 is None and n2 is None: return None
+        return (n1 or 0) + (n2 or 0)
+
+    def delta(pre_val, post_val):
+        if pre_val is None or post_val is None: return ""
+        return post_val - pre_val
+
+    OPERACIONES = ["suma", "resta", "mult", "div"]
+
+    data = []
+    for est, org in estudiantes:
+        pre  = pre_tests.get(est.id)
+        post = post_tests.get(est.id)
+
+        pre_completado  = pre is not None and pre.estado == "completado"
+        post_completado = post is not None and post.completado
+
+        # Total correctos (sobre 8 problemas)
+        pre_total  = sum((correctos_pre(pre, op) or 0)  for op in OPERACIONES) if pre_completado  else None
+        post_total = sum((correctos_post(post, op) or 0) for op in OPERACIONES) if post_completado else None
+
+        row = {
+            "codigo_estudiante":    est.codigo_estudiante,
+            "nombre_estudiante":    est.nombre_completo,
+            "grado":                _fmt(est.grado_academico),
+            "organizacion":         org.nombre if org else "",
+            # — Pre-test —
+            "pre_completado":       "Sí" if pre_completado else "No",
+            "pre_fecha":            _fmt(pre.fecha_fin) if pre_completado else "",
+            "pre_suma_correctos":   _fmt(correctos_pre(pre, "suma"))  if pre_completado else "",
+            "pre_resta_correctos":  _fmt(correctos_pre(pre, "resta")) if pre_completado else "",
+            "pre_mult_correctos":   _fmt(correctos_pre(pre, "mult"))  if pre_completado else "",
+            "pre_div_correctos":    _fmt(correctos_pre(pre, "div"))   if pre_completado else "",
+            "pre_total_correctos":  _fmt(pre_total) if pre_completado else "",
+            "pre_nivel_suma":       _fmt(pre.nivel_suma_asignado)    if pre_completado else "",
+            "pre_nivel_resta":      _fmt(pre.nivel_resta_asignado)   if pre_completado else "",
+            "pre_nivel_mult":       _fmt(pre.nivel_mult_asignado)    if pre_completado else "",
+            "pre_nivel_div":        _fmt(pre.nivel_div_asignado)     if pre_completado else "",
+            # — Post-test —
+            "post_completado":      "Sí" if post_completado else "No",
+            "post_fecha":           _fmt(post.fecha_fin) if post_completado else "",
+            "post_suma_correctos":  _fmt(correctos_post(post, "suma"))  if post_completado else "",
+            "post_resta_correctos": _fmt(correctos_post(post, "resta")) if post_completado else "",
+            "post_mult_correctos":  _fmt(correctos_post(post, "mult"))  if post_completado else "",
+            "post_div_correctos":   _fmt(correctos_post(post, "div"))   if post_completado else "",
+            "post_total_correctos": _fmt(post_total) if post_completado else "",
+            # — Delta (mejora) —
+            "delta_suma":           _fmt(delta(correctos_pre(pre, "suma"),  correctos_post(post, "suma"))),
+            "delta_resta":          _fmt(delta(correctos_pre(pre, "resta"), correctos_post(post, "resta"))),
+            "delta_mult":           _fmt(delta(correctos_pre(pre, "mult"),  correctos_post(post, "mult"))),
+            "delta_div":            _fmt(delta(correctos_pre(pre, "div"),   correctos_post(post, "div"))),
+            "delta_total":          _fmt(delta(pre_total, post_total)),
+            # — Uso del sistema —
+            "sesiones_completadas": 0,  # se llena abajo
+        }
+        data.append((est.id, row))
+
+    # Contar sesiones completadas por estudiante
+    stmt_ses = select(SesionPractica.estudiante_id, SesionPractica.id).where(SesionPractica.estado == EstadoSesion.COMPLETADA)
+    if org_id:
+        stmt_ses = stmt_ses.join(Estudiante, Estudiante.id == SesionPractica.estudiante_id).where(Estudiante.organizacion_id == org_id)
+    sesiones_rows = (await db.execute(stmt_ses)).all()
+    sesiones_count = {}
+    for est_id, _ in sesiones_rows:
+        sesiones_count[est_id] = sesiones_count.get(est_id, 0) + 1
+
+    final_data = []
+    for est_id, row in data:
+        row["sesiones_completadas"] = sesiones_count.get(est_id, 0)
+        final_data.append(row)
+
+    return {"columnas": list(final_data[0].keys()) if final_data else [], "filas": final_data}
 
 
 # ─── Sesiones ─────────────────────────────────────────────────────────────────

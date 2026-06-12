@@ -2275,6 +2275,7 @@ interface ExportDataset { columnas: string[]; filas: Record<string, unknown>[]; 
 
 const ENDPOINTS_EXPORT = [
   { key: 'estudiantes', label: 'Estudiantes',     desc: 'Listado completo de estudiantes con datos básicos y contraseñas.', sheet: 'Estudiantes' },
+  { key: 'diagnostico', label: 'Pre vs Post-test', desc: 'Comparación pre-test / post-test por estudiante con delta de mejora por operación.', sheet: 'Diagnóstico' },
   { key: 'sesiones',  label: 'Sesiones',         desc: 'Historial de sesiones de práctica completadas.',         sheet: 'Sesiones' },
   { key: 'niveles',   label: 'Niveles',           desc: 'Evolución de niveles e instantánea actual.',             sheet: null /* two sheets */ },
   { key: 'medallas',  label: 'Medallas',          desc: 'Medallas obtenidas por los estudiantes.',                sheet: 'Medallas' },
