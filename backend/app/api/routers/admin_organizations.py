@@ -367,6 +367,18 @@ async def listar_todos_usuarios(db: DBSession):
     profesores = profs_result.scalars().all()
     estudiantes = ests_result.scalars().all()
 
+    # Pre-test: PerfilEstudiante.diagnostico_completado
+    perfiles_res = await db.execute(
+        select(PerfilEstudiante.estudiante_id, PerfilEstudiante.diagnostico_completado)
+    )
+    pre_map = {row.estudiante_id: bool(row.diagnostico_completado) for row in perfiles_res}
+
+    # Post-test: ResultadoPostTest donde completado=True
+    post_res = await db.execute(
+        select(ResultadoPostTest.estudiante_id).where(ResultadoPostTest.completado == True)
+    )
+    post_ids = {row.estudiante_id for row in post_res}
+
     return {
         "profesores": [
             {
@@ -398,6 +410,8 @@ async def listar_todos_usuarios(db: DBSession):
                 "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
                 "ultimo_acceso": e.ultimo_acceso.isoformat() if e.ultimo_acceso else None,
                 "puntos_totales": e.puntos_totales,
+                "pre_test_completado": pre_map.get(e.id, False),
+                "post_test_completado": e.id in post_ids,
             }
             for e in estudiantes
         ],

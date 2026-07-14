@@ -144,6 +144,8 @@ interface UsuarioAdmin {
   grado_academico?: string;
   genero?: string;
   edad?: number | null;
+  pre_test_completado?: boolean;
+  post_test_completado?: boolean;
 }
 
 interface AllUsersResponse {
@@ -998,6 +1000,16 @@ function OrgCard({ org, allUsers, onRefresh }: {
                             {estData.grado_academico}
                           </span>
                         )}
+                        {estData?.pre_test_completado && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold mr-1" title="Pre-test completado">
+                            Pre ✓
+                          </span>
+                        )}
+                        {estData?.post_test_completado && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold mr-1" title="Post-test completado">
+                            Post ✓
+                          </span>
+                        )}
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700 mr-1"
                           onClick={() => setEditandoEst(estData ?? null)}>
                           <Pencil className="h-3 w-3" />
@@ -1220,6 +1232,18 @@ function SeccionVerUsuarios() {
       {tipo === 'profesor' && (
         <td className="px-3 py-2 text-xs text-muted-foreground">{u.institucion || '—'}</td>
       )}
+      {tipo === 'estudiante' && (
+        <td className="px-3 py-2">
+          <div className="flex gap-1 flex-wrap">
+            {u.pre_test_completado
+              ? <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold" title="Pre-test completado">Pre ✓</span>
+              : <span className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded" title="Pre-test pendiente">Pre —</span>}
+            {u.post_test_completado && (
+              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold" title="Post-test completado">Post ✓</span>
+            )}
+          </div>
+        </td>
+      )}
       <td className="px-3 py-2">
         {u.password_plain ? (
           <div className="flex items-center gap-1">
@@ -1261,6 +1285,7 @@ function SeccionVerUsuarios() {
         <th className="px-3 py-1.5 font-semibold">Nombre</th>
         {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Sección</th>}
         {tipo === 'profesor'   && <th className="px-3 py-1.5 font-semibold">Institución</th>}
+        {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Pruebas</th>}
         <th className="px-3 py-1.5 font-semibold">Contraseña</th>
         <th className="px-3 py-1.5 font-semibold">Creado</th>
         <th className="px-3 py-1.5 font-semibold">Último acceso</th>
