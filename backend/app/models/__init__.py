@@ -38,6 +38,15 @@ from app.models.adaptive import (
     EstadisticaEstudiante,
 )
 
+# Regla de Tres models (módulo paralelo e independiente)
+from app.models.regla_de_tres import (
+    TipoProporcion,
+    ProblemaReglaTres,
+    PerfilReglaTres,
+    SesionPracticaReglaTres,
+    IntentoReglaTres,
+)
+
 # Gamification models
 from app.models.gamification import (
     CategoriaDesbloqueable,
@@ -115,6 +124,12 @@ __all__ = [
     "EstadoSesion",
     "AlertaEstudiante",
     "EstadisticaEstudiante",
+    # Regla de Tres
+    "TipoProporcion",
+    "ProblemaReglaTres",
+    "PerfilReglaTres",
+    "SesionPracticaReglaTres",
+    "IntentoReglaTres",
     # Gamification
     "CategoriaDesbloqueable",
     "CategoriaMedalla",

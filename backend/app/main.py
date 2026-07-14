@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports
+from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports, regla_de_tres
 from app.core.database import AsyncSessionLocal
 from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
@@ -59,6 +59,7 @@ app.include_router(analisis.router, prefix="/api/analisis", tags=["Análisis Pos
 app.include_router(animaciones.router, prefix="/api/animaciones", tags=["Animaciones Guardadas"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Estadísticas de Grupo"])
 app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaciones"])
+app.include_router(regla_de_tres.router, prefix="/api/regla-de-tres", tags=["Regla de Tres"])
 
 
 # ── Handler global para excepciones no-HTTP ──────────────────────────────────

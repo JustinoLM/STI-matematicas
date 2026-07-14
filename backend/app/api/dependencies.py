@@ -26,6 +26,8 @@ from app.services.videos_service import VideosService
 from app.services.deteccion_errores_service import DeteccionErroresService
 from app.services.analisis_service import AnalisisService
 from app.repositories.animaciones_repository import AnimacionesRepository
+from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
+from app.services.regla_de_tres_service import ReglaDeTresService
 
 
 
@@ -336,3 +338,26 @@ MensajesServiceDep = Annotated[MensajesService, Depends(get_mensajes_service)]
 VideosServiceDep = Annotated[VideosService, Depends(get_videos_service)]
 DeteccionErroresServiceDep = Annotated[DeteccionErroresService, Depends(get_deteccion_errores_service)]
 AnalisisServiceDep = Annotated[AnalisisService, Depends(get_analisis_service)]
+
+
+# ============================================
+# Dependencies de Regla de Tres Service
+# ============================================
+
+async def get_regla_de_tres_repository(
+    db: AsyncSession = Depends(get_db)
+) -> ReglaDeTresRepository:
+    """Dependency para obtener ReglaDeTresRepository."""
+    return ReglaDeTresRepository(db)
+
+
+async def get_regla_de_tres_service(
+    regla_repo: ReglaDeTresRepository = Depends(get_regla_de_tres_repository),
+    gamification_repo: GamificationRepository = Depends(get_gamification_repository)
+) -> ReglaDeTresService:
+    """Dependency para obtener ReglaDeTresService."""
+    return ReglaDeTresService(regla_repo, gamification_repo)
+
+
+# Type alias para ReglaDeTresService
+ReglaDeTresServiceDep = Annotated[ReglaDeTresService, Depends(get_regla_de_tres_service)]

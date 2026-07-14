@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import apiClient, { getErrorMessage } from '@/services/api';
+import { reglaDeTresService, type EstudianteNotaR3 } from '@/services/reglaDeTresService';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -817,15 +818,17 @@ function SeccionesProfesorPanel({
 
 // ─── Tarjeta de Organización (detalle + asignación) ───────────────────────────
 
-function OrgCard({ org, allUsers, onRefresh }: {
+function OrgCard({ org, allUsers, notasR3, onRefresh }: {
   org: OrgCreated;
   allUsers: AllUsersResponse | undefined;
+  notasR3: EstudianteNotaR3[] | undefined;
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [togglingPostTest, setTogglingPostTest] = useState(false);
   const [editandoEst, setEditandoEst] = useState<UsuarioAdmin | null>(null);
+  const notaR3ById = new Map((notasR3 ?? []).map(n => [n.estudiante_id, n]));
 
   const handleTogglePostTest = async () => {
     setTogglingPostTest(true);
@@ -991,6 +994,7 @@ function OrgCard({ org, allUsers, onRefresh }: {
                 <div className="space-y-1">
                   {estsMiembros.map(e => {
                     const estData = allUsers?.estudiantes.find(u => u.id === e.id);
+                    const notaR3 = notaR3ById.get(e.id);
                     return (
                       <div key={e.id} className="flex items-center justify-between bg-green-50 rounded px-3 py-1.5 text-sm">
                         <span className="font-mono text-xs text-green-600 mr-2">{e.codigo}</span>
@@ -1008,6 +1012,11 @@ function OrgCard({ org, allUsers, onRefresh }: {
                         {estData?.post_test_completado && (
                           <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold mr-1" title="Post-test completado">
                             Post ✓
+                          </span>
+                        )}
+                        {notaR3?.tiene_practica && (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-semibold mr-1" title={`Regla de 3: ${notaR3.nota_pct?.toFixed(1)}%`}>
+                            R3 {notaR3.nota_pct?.toFixed(0)}%
                           </span>
                         )}
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700 mr-1"
@@ -1069,6 +1078,9 @@ function SeccionOrganizaciones() {
   });
   const { data: allUsers } = useQuery({
     queryKey: ['admin-all-users'], queryFn: () => adminService.getAllUsers(), staleTime: 0,
+  });
+  const { data: notasR3Data } = useQuery({
+    queryKey: ['admin-regla-de-tres-notas'], queryFn: () => reglaDeTresService.obtenerNotasAdmin(), staleTime: 0,
   });
 
   const mutation = useMutation({
@@ -1165,7 +1177,7 @@ function SeccionOrganizaciones() {
         ) : (
           <div className="space-y-3">
             {(orgsData?.organizaciones ?? []).map(org => (
-              <OrgCard key={org.id} org={org} allUsers={allUsers} onRefresh={handleRefreshAll} />
+              <OrgCard key={org.id} org={org} allUsers={allUsers} notasR3={notasR3Data?.estudiantes} onRefresh={handleRefreshAll} />
             ))}
             {orgsData?.total === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">Aún no hay organizaciones. Crea la primera arriba.</p>
@@ -1201,6 +1213,12 @@ function SeccionVerUsuarios() {
     queryFn: () => adminService.getOrganizaciones(),
     staleTime: 0,
   });
+  const { data: notasR3Data } = useQuery({
+    queryKey: ['admin-regla-de-tres-notas'],
+    queryFn: () => reglaDeTresService.obtenerNotasAdmin(),
+    staleTime: 0,
+  });
+  const notaR3ById = new Map((notasR3Data?.estudiantes ?? []).map(n => [n.estudiante_id, n]));
 
   const isLoading = loadingUsers || loadingOrgs;
 
@@ -1242,6 +1260,21 @@ function SeccionVerUsuarios() {
               <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold" title="Post-test completado">Post ✓</span>
             )}
           </div>
+        </td>
+      )}
+      {tipo === 'estudiante' && (
+        <td className="px-3 py-2">
+          {(() => {
+            const nota = notaR3ById.get(u.id);
+            if (!nota?.tiene_practica) {
+              return <span className="text-xs text-muted-foreground italic">Sin practicar</span>;
+            }
+            return (
+              <Badge variant={nota.nota_pct! >= 60 ? 'default' : 'secondary'} className="text-xs">
+                {nota.correctos}/{nota.total} · {nota.nota_pct!.toFixed(1)}%
+              </Badge>
+            );
+          })()}
         </td>
       )}
       <td className="px-3 py-2">
@@ -1286,6 +1319,7 @@ function SeccionVerUsuarios() {
         {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Sección</th>}
         {tipo === 'profesor'   && <th className="px-3 py-1.5 font-semibold">Institución</th>}
         {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Pruebas</th>}
+        {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Regla de 3</th>}
         <th className="px-3 py-1.5 font-semibold">Contraseña</th>
         <th className="px-3 py-1.5 font-semibold">Creado</th>
         <th className="px-3 py-1.5 font-semibold">Último acceso</th>

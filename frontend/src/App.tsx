@@ -34,6 +34,7 @@ import { AnimacionesPage } from '@/pages/student/AnimacionesPage';
 import { ChallengesPage as StudentChallengesPage } from '@/pages/student/ChallengesPage';
 import { GroupChallengePage } from '@/pages/student/GroupChallengePage';
 import { SettingsPage } from '@/pages/student/SettingsPage';
+import { ReglaDeTresPracticePage } from '@/pages/student/ReglaDeTresPracticePage';
 
 // Teacher
 import TeacherDashboard from '@/pages/teacher/TeacherDashboard';
@@ -46,6 +47,7 @@ import { ChallengesPage as TeacherChallengesPage } from '@/pages/teacher/Challen
 import CreateChallengePage from '@/pages/teacher/CreateChallengePage';
 import { ConfigurationPage } from '@/pages/teacher/ConfigurationPage';
 import GroupStatsPage from '@/pages/teacher/GroupStatsPage';
+import { ReglaDeTresResultsPage } from '@/pages/teacher/ReglaDeTresResultsPage';
 
 function App() {
   const { isAuthenticated, getUserRole, getUserName, login, logout } = useAuthStore();
@@ -177,6 +179,7 @@ function App() {
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="videos" element={<VideosPage />} />
                   <Route path="animaciones" element={<AnimacionesPage />} />
+                  <Route path="regla-de-tres" element={<ReglaDeTresPracticePage />} />
                   <Route path="challenges" element={<StudentChallengesPage />} />
                   <Route path="group-challenge" element={<GroupChallengePage />} />
                   <Route path="settings" element={<SettingsPage />} />
@@ -212,6 +215,7 @@ function App() {
                   <Route path="alerts" element={<AlertsPage />} />
                   <Route path="configuration" element={<ConfigurationPage />} />
                   <Route path="stats" element={<GroupStatsPage />} />
+                  <Route path="regla-de-tres" element={<ReglaDeTresResultsPage />} />
                   <Route path="*" element={<Navigate to="/teacher/dashboard" replace />} />
                 </Routes>
               </MainLayout>

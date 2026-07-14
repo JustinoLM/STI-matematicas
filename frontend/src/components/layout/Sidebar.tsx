@@ -19,6 +19,7 @@ import {
   GraduationCap,
   Clapperboard,
   BarChart2,
+  Scale,
 } from 'lucide-react';
 
 interface NavItem {
@@ -36,6 +37,7 @@ const studentNav: NavItem[] = [
   { title: 'Medallero', href: '/student/badges', icon: Trophy },
   { title: 'Progreso', href: '/student/progress', icon: TrendingUp },
   { title: 'Animaciones', href: '/student/animaciones', icon: Clapperboard },
+  { title: 'Regla de Tres', href: '/student/regla-de-tres', icon: Scale },
   { title: 'Configuración', href: '/student/settings', icon: Settings },
 ];
 
@@ -44,6 +46,7 @@ const teacherNav: NavItem[] = [
   { title: 'Grupos', href: '/teacher/groups', icon: Users },
   { title: 'Estudiantes', href: '/teacher/students', icon: GraduationCap },
   { title: 'Estadísticas', href: '/teacher/stats', icon: BarChart2 },
+  { title: 'Regla de Tres', href: '/teacher/regla-de-tres', icon: Scale },
   { title: 'Desafíos', href: '/teacher/challenges', icon: Target },
   { title: 'Alertas', href: '/teacher/alerts', icon: AlertTriangle },
   { title: 'Configuración', href: '/teacher/configuration', icon: Settings },
