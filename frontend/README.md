@@ -1,8 +1,13 @@
 # Frontend - STI (Sistema de Tutoría Inteligente)
 
+![React](https://img.shields.io/badge/React-18.2-61DAFB.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6.svg)
+![Vite](https://img.shields.io/badge/Vite-5.0-646CFF.svg)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.3-38B2AC.svg)
+
 Interfaz de usuario construida con React + TypeScript + TailwindCSS.
 
-## 🏗️ Arquitectura por Componentes
+## Arquitectura por Componentes
 ```
 src/
 ├── components/       # Componentes reutilizables
@@ -14,7 +19,7 @@ src/
 └── utils/            # Funciones auxiliares
 ```
 
-## 🚀 Inicio Rápido
+## Inicio Rápido
 
 ### 1. Instalar pnpm
 ```bash
@@ -40,7 +45,7 @@ pnpm dev
 
 La aplicación estará disponible en: http://localhost:5173
 
-## 🎨 TailwindCSS y Narrativas
+## TailwindCSS y Narrativas
 
 El proyecto usa TailwindCSS con colores personalizables por narrativa:
 ```css
@@ -68,7 +73,7 @@ lg:  1280px  (Laptops)
 xl:  1920px  (Desktops)
 ```
 
-## 🧪 Testing
+## Testing
 ```bash
 # Ejecutar tests
 pnpm test
@@ -77,7 +82,7 @@ pnpm test
 pnpm test:ui
 ```
 
-## 📝 Linting
+## Linting
 ```bash
 # Lint
 pnpm lint
@@ -86,7 +91,7 @@ pnpm lint
 pnpm lint --fix
 ```
 
-## 🏗️ Build para Producción
+## Build para Producción
 ```bash
 # Build
 pnpm build
@@ -95,12 +100,12 @@ pnpm build
 pnpm preview
 ```
 
-## 🎯 Path Aliases
+## Path Aliases
 ```typescript
-// ❌ Evitar
+// Evitar
 import Button from '../../../components/ui/Button'
 
-// ✅ Usar
+// Usar
 import Button from '@components/ui/Button'
 ```
 
@@ -111,7 +116,7 @@ Aliases disponibles:
 - `@services/*` → `src/services/*`
 - `@types/*` → `src/types/*`
 
-## 🚢 Deployment
+## Deployment
 
 ### Vercel
 ```bash
@@ -121,6 +126,6 @@ vercel --prod
 Variables de entorno en Vercel:
 - `VITE_API_BASE_URL`: URL del backend en producción
 
-## 📄 Licencia
+## Licencia
 
 Proyecto académico - Tesis de grado

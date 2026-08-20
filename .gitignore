@@ -30,6 +30,11 @@ dist/
 # Logs
 *.log
 
+# Testing
+.coverage
+.pytest_cache/
+coverage/
+
 # Claude Code
 .claude/
 *.jsonl

@@ -1,8 +1,14 @@
 # Backend - STI (Sistema de Tutoría Inteligente)
 
+![Python](https://img.shields.io/badge/python-3.11-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1.svg)
+![Poetry](https://img.shields.io/badge/poetry-dependency%20management-60A5FA.svg)
+
 API REST construida con FastAPI para el sistema de tutoría adaptativa.
 
-## 🏗️ Arquitectura de 3 Capas
+## Arquitectura de 3 Capas
 ```
 Routers (API Layer)  →  Service (Business Logic)  →  Repository (Data Access)  →  Database
 ```
@@ -23,7 +29,7 @@ app/
 └── repositories/       # Data access layer
 ```
 
-## 🚀 Inicio Rápido
+## Inicio Rápido
 
 ### 1. Instalar Poetry
 ```bash
@@ -63,7 +69,7 @@ La API estará disponible en:
 - **ReDoc**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
 
-## 🧪 Testing
+## Testing
 ```bash
 # Ejecutar todos los tests
 poetry run pytest
@@ -75,7 +81,7 @@ poetry run pytest --cov=app --cov-report=html
 poetry run pytest tests/test_auth.py
 ```
 
-## 📝 Linting y Formateo
+## Linting y Formateo
 ```bash
 # Formatear código con Black
 poetry run black app/
@@ -87,7 +93,7 @@ poetry run ruff check app/
 poetry run ruff check app/ --fix
 ```
 
-## 📚 Agregar Dependencias
+## Agregar Dependencias
 ```bash
 # Dependencia de producción
 poetry add nombre-paquete
@@ -96,7 +102,7 @@ poetry add nombre-paquete
 poetry add --group dev nombre-paquete
 ```
 
-## 🗄️ Migraciones de Base de Datos
+## Migraciones de Base de Datos
 ```bash
 # Crear nueva migración
 poetry run alembic revision --autogenerate -m "descripción"
@@ -108,19 +114,19 @@ poetry run alembic upgrade head
 poetry run alembic downgrade -1
 ```
 
-## 🔐 Generar SECRET_KEY
+## Generar SECRET_KEY
 ```bash
 openssl rand -hex 32
 ```
 
-## 📖 Documentación de la API
+## Documentación de la API
 
 La documentación se genera automáticamente con FastAPI:
 
 - **Swagger UI** (interactiva): http://localhost:8000/docs
 - **ReDoc** (documentación estática): http://localhost:8000/redoc
 
-## 🚢 Deployment
+## Deployment
 
 ### Railway (Producción)
 
@@ -128,6 +134,6 @@ La documentación se genera automáticamente con FastAPI:
 2. Configurar variables de entorno
 3. Deploy automático en cada push a `main`
 
-## 📄 Licencia
+## Licencia
 
 Proyecto académico - Tesis de grado
