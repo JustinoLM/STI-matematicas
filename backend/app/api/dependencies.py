@@ -28,6 +28,7 @@ from app.services.analisis_service import AnalisisService
 from app.repositories.animaciones_repository import AnimacionesRepository
 from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
 from app.services.regla_de_tres_service import ReglaDeTresService
+from app.services.admin_import_service import AdminImportService
 
 
 
@@ -361,3 +362,18 @@ async def get_regla_de_tres_service(
 
 # Type alias para ReglaDeTresService
 ReglaDeTresServiceDep = Annotated[ReglaDeTresService, Depends(get_regla_de_tres_service)]
+
+
+# ============================================
+# Dependencies de Admin Import Service
+# ============================================
+
+async def get_admin_import_service(
+    db: AsyncSession = Depends(get_db)
+) -> AdminImportService:
+    """Dependency para obtener AdminImportService."""
+    return AdminImportService(db)
+
+
+# Type alias para AdminImportService
+AdminImportServiceDep = Annotated[AdminImportService, Depends(get_admin_import_service)]

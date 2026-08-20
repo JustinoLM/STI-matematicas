@@ -15,16 +15,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # Ollama (LLM Local)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: sti-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
   # pgAdmin (Opcional - GUI para PostgreSQL)
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -42,5 +32,4 @@ services:
 
 volumes:
   postgres_data:
-  ollama_data:
   pgadmin_data:

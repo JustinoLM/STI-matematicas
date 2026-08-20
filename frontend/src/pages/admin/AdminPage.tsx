@@ -85,6 +85,14 @@ interface BulkTeacherRow {
 
 interface BulkImportError { fila: number; codigo: string; mensaje: string; }
 interface BulkImportResult { total: number; creados: number; errores: BulkImportError[]; }
+interface ConteoHoja { hoja: string; procesados: number; creados: number; omitidos: number; }
+interface ImportResumenExcel {
+  organizacion_id: number;
+  organizacion_nombre: string;
+  organizacion_creada: boolean;
+  hojas: ConteoHoja[];
+  advertencias: string[];
+}
 
 interface CreateTeacherPayload {
   codigo_profesor: string;
@@ -214,6 +222,13 @@ const adminService = {
   },
   async bulkImportTeachers(rows: BulkTeacherRow[]): Promise<BulkImportResult> {
     const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/teachers', { profesores: rows });
+    return response.data;
+  },
+  async importarExcelCompleto(archivo: File, organizacionNombre: string): Promise<ImportResumenExcel> {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    formData.append('organizacion_nombre', organizacionNombre);
+    const response = await apiClient.post<ImportResumenExcel>('/admin/import/excel', formData);
     return response.data;
   },
   async getGradosOrg(orgId: number): Promise<string[]> {
@@ -2056,12 +2071,35 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
 
 
 function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }) {
-  const [tipo, setTipo] = useState<'estudiantes' | 'profesores'>('estudiantes');
+  const [tipo, setTipo] = useState<'estudiantes' | 'profesores' | 'excel_completo'>('estudiantes');
   const [filasEst, setFilasEst] = useState<BulkStudentRow[]>([]);
   const [filasProf, setFilasProf] = useState<BulkTeacherRow[]>([]);
   const [resultado, setResultado] = useState<BulkImportResult | null>(null);
   const [importando, setImportando] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  // ── Excel completo (8 hojas, sandbox) ────────────────────────────────────
+  const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
+  const [orgDestino, setOrgDestino] = useState(() => `Sandbox - ${new Date().toISOString().slice(0, 10)}`);
+  const [resumenExcel, setResumenExcel] = useState<ImportResumenExcel | null>(null);
+  const [importandoExcel, setImportandoExcel] = useState(false);
+  const [errorExcel, setErrorExcel] = useState<string | null>(null);
+
+  const handleImportarExcelCompleto = async () => {
+    if (!archivoExcel || !orgDestino.trim()) return;
+    setImportandoExcel(true);
+    setErrorExcel(null);
+    setResumenExcel(null);
+    try {
+      const res = await adminService.importarExcelCompleto(archivoExcel, orgDestino.trim());
+      setResumenExcel(res);
+      setArchivoExcel(null);
+    } catch (err) {
+      setErrorExcel(getErrorMessage(err));
+    } finally {
+      setImportandoExcel(false);
+    }
+  };
 
   const filas = tipo === 'estudiantes' ? filasEst : filasProf;
 
@@ -2197,11 +2235,119 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
         >
           <BookOpen className="h-4 w-4 mr-1.5" /> Profesores
         </Button>
-        <Button variant="outline" size="sm" onClick={descargarPlantilla} className="ml-auto">
-          <Download className="h-4 w-4 mr-1.5" /> Descargar plantilla
+        <Button
+          variant={tipo === 'excel_completo' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setTipo('excel_completo'); setResultado(null); setParseError(null); }}
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Excel completo (sandbox)
         </Button>
+        {tipo !== 'excel_completo' && (
+          <Button variant="outline" size="sm" onClick={descargarPlantilla} className="ml-auto">
+            <Download className="h-4 w-4 mr-1.5" /> Descargar plantilla
+          </Button>
+        )}
       </div>
 
+      {tipo === 'excel_completo' ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            Importa un Excel con el mismo formato que exportamos (Estudiantes, Diagnóstico, Sesiones,
+            Niveles Actuales, Medallas, Tienda). Todo queda aislado en la organización que indiques
+            abajo — se crea si no existe — así que <strong>nunca afecta datos de otras organizaciones</strong>.
+          </div>
+
+          <div>
+            <Label htmlFor="org-destino">Organización destino</Label>
+            <Input
+              id="org-destino"
+              value={orgDestino}
+              onChange={(e) => setOrgDestino(e.target.value)}
+              placeholder="Sandbox - prueba"
+            />
+          </div>
+
+          <label className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 cursor-pointer hover:bg-gray-100 transition-colors">
+            <FileSpreadsheet className="h-10 w-10 text-gray-400" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-700">
+                {archivoExcel ? archivoExcel.name : 'Haz clic para seleccionar el Excel completo'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">.xlsx con las 8 hojas del export</p>
+            </div>
+            <input
+              type="file"
+              accept=".xlsx,.xlsm"
+              className="hidden"
+              onChange={(e) => { setArchivoExcel(e.target.files?.[0] ?? null); setResumenExcel(null); setErrorExcel(null); }}
+            />
+          </label>
+
+          {errorExcel && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              {errorExcel}
+            </div>
+          )}
+
+          <Button
+            onClick={handleImportarExcelCompleto}
+            disabled={!archivoExcel || !orgDestino.trim() || importandoExcel}
+            className="w-full"
+          >
+            {importandoExcel ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</>
+            ) : (
+              <><Upload className="h-4 w-4 mr-2" />Importar a "{orgDestino || '…'}"</>
+            )}
+          </Button>
+
+          {resumenExcel && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                Importado a "{resumenExcel.organizacion_nombre}"
+                {resumenExcel.organizacion_creada ? ' (organización nueva)' : ' (organización existente)'}.
+              </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Hoja</th>
+                      <th className="px-3 py-2 text-left font-medium">Procesados</th>
+                      <th className="px-3 py-2 text-left font-medium">Creados</th>
+                      <th className="px-3 py-2 text-left font-medium">Omitidos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumenExcel.hojas.map((h) => (
+                      <tr key={h.hoja} className="border-b last:border-0">
+                        <td className="px-3 py-1.5 font-medium">{h.hoja}</td>
+                        <td className="px-3 py-1.5">{h.procesados}</td>
+                        <td className="px-3 py-1.5 text-green-700">{h.creados}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{h.omitidos}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {resumenExcel.advertencias.length > 0 && (
+                <div className="rounded-lg border border-amber-200 overflow-hidden">
+                  <p className="px-3 py-2 text-xs font-semibold text-amber-700 bg-amber-50 border-b">
+                    Advertencias ({resumenExcel.advertencias.length})
+                  </p>
+                  <div className="max-h-40 overflow-y-auto">
+                    {resumenExcel.advertencias.map((a, i) => (
+                      <p key={i} className="px-3 py-1.5 text-xs text-gray-600 border-b last:border-0">{a}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* Zona de carga */}
       <label className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 cursor-pointer hover:bg-gray-100 transition-colors">
         <FileSpreadsheet className="h-10 w-10 text-gray-400" />
@@ -2323,6 +2469,8 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

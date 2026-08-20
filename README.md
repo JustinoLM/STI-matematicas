@@ -8,7 +8,7 @@ Este proyecto utiliza una arquitectura **monorepo** con:
 
 - **Backend**: FastAPI + PostgreSQL + SQLAlchemy
 - **Frontend**: React + TypeScript + TailwindCSS
-- **LLM**: Ollama + DeepSeek-R1:7B (local)
+- **LLM**: DeepSeek API (remoto) — `deepseek-chat` (V3) para enunciados y mensajes, `deepseek-reasoner` (R1) para análisis post-práctica
 - **Deploy**: Railway (backend) + Vercel (frontend)
 
 ## 📁 Estructura del Proyecto
@@ -17,7 +17,7 @@ sti-proyecto/
 ├── backend/          # API REST con FastAPI
 ├── frontend/         # Interfaz React
 ├── docs/             # Documentación técnica
-└── docker-compose.yml # PostgreSQL + Ollama local
+└── docker-compose.yml # PostgreSQL (+ pgAdmin opcional)
 ```
 
 ## 🚀 Inicio Rápido
@@ -37,8 +37,8 @@ Ver instrucciones en:
 
 ## 📚 Documentación
 
-- [Arquitectura del Sistema](docs/architecture/README.md)
-- [API Documentation](docs/api/README.md)
+- [Arquitectura del backend](backend/README.md) (capas Router → Service → Repository)
+- Documentación de la API: Swagger UI en `http://localhost:8000/docs` con el servidor corriendo
 
 ## 📄 Licencia
 
