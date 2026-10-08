@@ -5,10 +5,11 @@ Problema: Ejercicios matemáticos generados.
 Intento: Respuestas de estudiantes a problemas.
 """
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -36,7 +37,6 @@ class Problema(Base):
     
     Relaciones:
     - Tiene múltiples Intentos (1:N)
-    - Puede tener un VideoPista asociado (1:1 via signature)
     """
     __tablename__ = "problema"
     
@@ -52,7 +52,6 @@ class Problema(Base):
     
     # Relaciones
     intentos = relationship("Intento", back_populates="problema")
-    desafios_individuales = relationship("DesafioIndividual", back_populates="problema")
     errores_detectados = relationship("EstudianteError", back_populates="problema")
     
     def __repr__(self):

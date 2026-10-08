@@ -8,22 +8,21 @@ Dos jobs:
 """
 
 import asyncio
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
-from app.models.adaptive import PerfilEstudiante, SesionPractica, EstadoSesion
+from app.models.adaptive import EstadoSesion, SesionPractica
 from app.models.config import ConfiguracionSistema
-from app.models.user import Estudiante
 from app.services.ml_service import ml_service
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
 
 CLAVE_ULTIMO_ENTRENAMIENTO = "ml_ultimo_entrenamiento"
-INTERVALO_ENTRENAMIENTO_DIAS = 3
+INTERVALO_ENTRENAMIENTO_DIAS = 1
+HORA_ENTRENAMIENTO_UTC = 3  # el job diario corre a las 03:00 UTC (22:00 hora de Panamá)
 TIMEOUT_SESION_MINUTOS = 90
 
 # ─── Job 1: Entrenamiento ML ──────────────────────────────────────────────────
@@ -31,13 +30,14 @@ TIMEOUT_SESION_MINUTOS = 90
 
 async def job_entrenar_ml() -> None:
     """
-    Verifica si pasaron ≥3 días desde el último entrenamiento y, si es así,
-    entrena el modelo K-Means y reclasifica a todos los estudiantes.
+    Se ejecuta todos los días a las 03:00 UTC (y una vez al arrancar el servidor).
+    Si pasó al menos INTERVALO_ENTRENAMIENTO_DIAS desde el último entrenamiento,
+    entrena el K-means de cada organización y la regresión logística global,
+    guarda los modelos en la BD y reclasifica a todos los estudiantes.
     """
     print("⏰ [Scheduler] Verificando si es necesario entrenar ML...")
 
     async with AsyncSessionLocal() as db:
-        # Leer última fecha de entrenamiento
         result = await db.execute(
             select(ConfiguracionSistema).where(
                 ConfiguracionSistema.clave == CLAVE_ULTIMO_ENTRENAMIENTO
@@ -55,51 +55,17 @@ async def job_entrenar_ml() -> None:
                 )
                 return
 
-        # Cargar todos los perfiles
-        perfiles_result = await db.execute(select(PerfilEstudiante))
-        perfiles = list(perfiles_result.scalars().all())
+        resultado = await ml_service.entrenar_y_clasificar(db)
 
-        # Obtener org_id de cada estudiante
-        est_result = await db.execute(
-            select(Estudiante.id, Estudiante.organizacion_id).where(
-                Estudiante.organizacion_id.isnot(None)
-            )
-        )
-        org_map: dict[int, int] = {row.id: row.organizacion_id for row in est_result}
-
-        # Agrupar perfiles por organización
-        perfiles_por_org: dict[int, list] = defaultdict(list)
-        for p in perfiles:
-            org_id = org_map.get(p.estudiante_id)
-            if org_id:
-                perfiles_por_org[org_id].append(p)
-
-        # Entrenar un modelo por organización
-        orgs_entrenadas = 0
-        for org_id, org_perfiles in perfiles_por_org.items():
-            await asyncio.to_thread(ml_service.entrenar_clustering, org_perfiles, org_id)
-            if ml_service.has_model_for_org(org_id):
-                orgs_entrenadas += 1
-
-        if orgs_entrenadas == 0:
-            validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
+        if not resultado["orgs_entrenadas"] and not resultado["prediccion_entrenada"]:
             print(
-                f"   ↳ No hay suficientes perfiles para entrenar "
-                f"({validos}/{len(perfiles)} válidos, se necesitan ≥10 por organización)."
+                f"   ↳ Datos insuficientes: {resultado['perfiles_validos']}/"
+                f"{resultado['total_perfiles']} perfiles válidos (se necesitan ≥10 por "
+                f"organización) y {resultado['ejemplos_prediccion']} ejemplos para la predicción."
             )
             return
 
-        # Reclasificar todos usando el modelo de su organización
         ahora = datetime.utcnow()
-        for perfil in perfiles:
-            org_id = org_map.get(perfil.estudiante_id)
-            perfil_ml, confianza = ml_service.predecir_perfil(perfil, org_id)
-            perfil.perfil_aprendizaje = perfil_ml
-            perfil.confianza_perfil = round(confianza, 2)
-            perfil.fecha_ultima_clasificacion = ahora
-            perfil.umbral_promocion_personalizado = ml_service.ajustar_umbral_segun_perfil(perfil)
-
-        # Persistir fecha de entrenamiento
         if config:
             config.valor = ahora.isoformat()
             config.actualizado_en = ahora
@@ -109,13 +75,12 @@ async def job_entrenar_ml() -> None:
                 valor=ahora.isoformat(),
                 actualizado_en=ahora,
             ))
-
         await db.commit()
 
-        validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
         print(
-            f"✅ [Scheduler] ML entrenado: {orgs_entrenadas} org(s), "
-            f"{validos} perfiles válidos, {len(perfiles)} estudiantes reclasificados."
+            f"✅ [Scheduler] ML entrenado: {resultado['orgs_entrenadas']} org(s), "
+            f"predicción {'sí' if resultado['prediccion_entrenada'] else 'no'}, "
+            f"{resultado['reclasificados']} estudiantes reclasificados."
         )
 
 
@@ -124,7 +89,8 @@ async def job_entrenar_ml() -> None:
 
 async def job_cerrar_sesiones_huerfanas() -> None:
     """
-    Cierra sesiones de práctica que llevan más de 90 minutos sin actividad.
+    Cierra sesiones de práctica (iniciadas o en progreso) que llevan más de 90
+    minutos sin actividad.
 
     Las marca como ABANDONADA con fecha_fin = ahora. No penaliza al estudiante
     — simplemente libera la sesión para que pueda iniciar una nueva.
@@ -134,7 +100,7 @@ async def job_cerrar_sesiones_huerfanas() -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(SesionPractica).where(
-                SesionPractica.estado == EstadoSesion.EN_PROGRESO,
+                SesionPractica.estado.in_([EstadoSesion.INICIADA, EstadoSesion.EN_PROGRESO]),
                 SesionPractica.fecha_ultima_actividad < cutoff,
             )
         )
@@ -165,13 +131,14 @@ async def start_scheduler() -> None:
     """
     Inicia el scheduler y registra los jobs.
     También ejecuta una verificación inmediata de ML al arrancar
-    (catch-up si el servidor estuvo caído por más de 3 días).
+    (catch-up si el servidor estuvo apagado a las 03:00 UTC).
     """
-    # Job 1: Revisión de entrenamiento ML cada 24 horas
+    # Job 1: Entrenamiento ML diario a hora fija (03:00 UTC)
     _scheduler.add_job(
         job_entrenar_ml,
-        trigger="interval",
-        hours=24,
+        trigger="cron",
+        hour=HORA_ENTRENAMIENTO_UTC,
+        minute=0,
         id="ml_entrenamiento",
         replace_existing=True,
         misfire_grace_time=3600,  # Tolerancia de 1 hora si el job se retrasa
@@ -188,7 +155,10 @@ async def start_scheduler() -> None:
     )
 
     _scheduler.start()
-    print("✅ [Scheduler] Iniciado — ML cada 24h (verif.), sesiones cada 30 min.")
+    print(
+        f"✅ [Scheduler] Iniciado — ML diario {HORA_ENTRENAMIENTO_UTC:02d}:00 UTC, "
+        "sesiones huérfanas cada 30 min."
+    )
 
     # Verificación inmediata de ML (catch-up tras reinicio)
     asyncio.create_task(job_entrenar_ml())

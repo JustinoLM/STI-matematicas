@@ -6,7 +6,8 @@ la fecha del último entrenamiento ML.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime
+
+from sqlalchemy import Column, DateTime, String
 
 from app.core.database import Base
 

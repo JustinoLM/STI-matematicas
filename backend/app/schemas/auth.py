@@ -5,12 +5,12 @@ Login: codigo + password (sin email)
 Usuarios creados por administrador (no registro público).
 """
 
-from typing import Optional
-from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from typing import Optional
 
-from app.models.user import TipoUsuario, Genero
+from pydantic import BaseModel, Field, validator
 
+from app.models.user import Genero, TipoUsuario
 
 # ============================================
 # Schemas de Request (Input)

@@ -5,13 +5,12 @@ Consulta estadísticas de la sesión y genera un análisis pedagógico
 personalizado usando el modelo de razonamiento R1.
 """
 
-from typing import Optional
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
-from app.models.adaptive import SesionPractica, PerfilEstudiante
+from app.models.adaptive import SesionPractica
 from app.models.user import Estudiante
-from app.services.llm_service import LLMService, LLMPrompts
+from app.services.llm_service import LLMPrompts, LLMService
 
 
 class AnalisisService:

@@ -9,30 +9,30 @@ una vista completa del grupo.
 from datetime import datetime, timedelta
 from typing import Optional
 
+from sqlalchemy import Date, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, cast, Date
 
 from app.models.adaptive import (
+    AlertaEstudiante,
+    EstadoSesion,
+    PerfilAprendizaje,
     PerfilEstudiante,
     SesionPractica,
-    EstadoSesion,
-    AlertaEstudiante,
-    PerfilAprendizaje,
 )
-from app.models.user import Estudiante
 from app.models.group import EstudianteGrupo, Grupo
-from app.services.ml_service import ml_service
-from app.services.llm_service import LLMService
+from app.models.user import Estudiante
 from app.schemas.stats import (
-    GrupoStatsResponse,
-    EstudianteStatsItem,
-    DistribucionPerfiles,
-    AlertaResumen,
-    NivelesOperacion,
     ActividadDia,
-    PrecisionSemana,
+    AlertaResumen,
     AnalisisIAResponse,
+    DistribucionPerfiles,
+    EstudianteStatsItem,
+    GrupoStatsResponse,
+    NivelesOperacion,
+    PrecisionSemana,
 )
+from app.services.llm_service import LLMService
+from app.services.ml_service import ml_service
 
 
 class StatsService:

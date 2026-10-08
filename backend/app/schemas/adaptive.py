@@ -4,21 +4,15 @@ Schemas Pydantic para sistema adaptativo y machine learning.
 Define contratos para diagnóstico, perfiles, sesiones y recomendaciones.
 """
 
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field, field_serializer
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Dict, List, Optional
 
-from app.models.adaptive import PerfilAprendizaje, TipoAlerta, EstadoDiagnostico
-
+from pydantic import BaseModel, Field, field_serializer
 
 # ============================================
 # Schemas de Diagnóstico
 # ============================================
-
-class DiagnosticoStart(BaseModel):
-    """Request para iniciar prueba diagnóstica."""
-    pass  # No requiere parámetros, se genera automáticamente
 
 
 class DiagnosticoSubmit(BaseModel):
@@ -157,46 +151,6 @@ class PerfilResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class EstadisticasGrupo(BaseModel):
-    """Estadísticas comparativas con el grupo."""
-    grupo_id: int
-    total_estudiantes: int
-    
-    # Posición del estudiante
-    percentil_velocidad: int  # 0-100
-    percentil_precision: int
-    
-    # Comparativas
-    velocidad_estudiante: float
-    velocidad_promedio_grupo: float
-    velocidad_top_10: float
-    
-    precision_estudiante: float
-    precision_promedio_grupo: float
-    
-    # Ranking
-    posicion_velocidad: int
-    posicion_precision: int
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "grupo_id": 1,
-                "total_estudiantes": 25,
-                "percentil_velocidad": 85,
-                "percentil_precision": 78,
-                "velocidad_estudiante": 25.5,
-                "velocidad_promedio_grupo": 35.2,
-                "velocidad_top_10": 22.0,
-                "precision_estudiante": 0.87,
-                "precision_promedio_grupo": 0.75,
-                "posicion_velocidad": 4,
-                "posicion_precision": 6
-            }
-        }
-    }
-
-
 # ============================================
 # Schemas de Sesión de Práctica
 # ============================================
@@ -210,11 +164,6 @@ class SesionActivaResponse(BaseModel):
     nivel_actual: int
     minutos_transcurridos: int
     fecha_inicio: datetime
-
-
-class SesionStart(BaseModel):
-    """Request para iniciar sesión de práctica."""
-    pass  # Sistema decide todo automáticamente
 
 
 class SesionStartResponse(BaseModel):
@@ -287,9 +236,6 @@ class SesionCompleteResponse(BaseModel):
     cambios_nivel: List[CambioNivel]
     nivel_actual_nuevo: int
     
-    # Comparación con grupo
-    estadisticas_grupo: Optional[EstadisticasGrupo]
-    
     # Feedback
     es_practica_perfecta: bool
     practicas_perfectas_consecutivas: int
@@ -317,7 +263,6 @@ class SesionCompleteResponse(BaseModel):
                     }
                 ],
                 "nivel_actual_nuevo": 3,
-                "estadisticas_grupo": None,
                 "es_practica_perfecta": False,
                 "practicas_perfectas_consecutivas": 0,
                 "mensaje_motivacional": "¡Excelente trabajo! Solo un error en 15 problemas.",
@@ -332,145 +277,15 @@ class SesionCompleteResponse(BaseModel):
 # Schemas de Recomendaciones
 # ============================================
 
-class Recomendacion(BaseModel):
-    """Recomendación de qué practicar."""
-    operacion_sugerida: str
-    nivel_operacion: int
-    nivel_general: int
-    cantidad_problemas: int
-    
-    razon: str
-    mensaje_motivacional: str
-    
-    operaciones_disponibles: List[str]
-    operaciones_bloqueadas: Dict[str, List[str]]  # operación -> prerequisitos faltantes
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "operacion_sugerida": "multiplicacion",
-                "nivel_operacion": 2,
-                "nivel_general": 3,
-                "cantidad_problemas": 15,
-                "razon": "Multiplicación es tu operación más débil",
-                "mensaje_motivacional": "¡Vamos a dominar las multiplicaciones!",
-                "operaciones_disponibles": ["suma", "resta", "multiplicacion"],
-                "operaciones_bloqueadas": {
-                    "division": ["multiplicacion nivel 2"]
-                }
-            }
-        }
-    }
-
 
 # ============================================
 # Schemas de Alertas (para futuro)
 # ============================================
 
-class AlertaResponse(BaseModel):
-    """Response de alerta."""
-    id: int
-    estudiante_id: int
-    tipo: str
-    severidad: str
-    titulo: str
-    mensaje: str
-    activa: bool
-    leida: bool
-    fecha_creacion: datetime
-    
-    model_config = {"from_attributes": True}
-
 
 # ============================================
 # Schemas de Estadísticas
 # ============================================
-
-class HistorialProgresion(BaseModel):
-    """Historial de cambios de nivel."""
-    operacion: str
-    cambios: List[Dict]
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "operacion": "suma",
-                "cambios": [
-                    {
-                        "fecha": "2024-01-15T10:00:00",
-                        "de": 1,
-                        "a": 2,
-                        "razon": "10 consecutivos"
-                    },
-                    {
-                        "fecha": "2024-01-20T14:30:00",
-                        "de": 2,
-                        "a": 3,
-                        "razon": "Velocidad top 10%"
-                    }
-                ]
-            }
-        }
-    }
-
-
-class EstadisticasDetalladas(BaseModel):
-    """Estadísticas completas del estudiante."""
-    estudiante_id: int
-    nombre_completo: str
-    
-    # Niveles actuales
-    niveles: Dict[str, int]
-    nivel_actual: int
-    
-    # Métricas globales
-    total_sesiones: int
-    total_intentos: int
-    precision_global: float
-    velocidad_promedio_global: float
-    
-    # Por operación
-    estadisticas_por_operacion: Dict[str, Dict]
-    
-    # Historial
-    historial_promociones: List[Dict]
-    
-    # Comparación
-    percentiles: Dict[str, int]
-    
-    model_config = {
-        "from_attributes": True,
-        "json_schema_extra": {
-            "example": {
-                "estudiante_id": 1,
-                "nombre_completo": "Juan Pérez",
-                "niveles": {
-                    "suma": 4,
-                    "resta": 3,
-                    "multiplicacion": 2,
-                    "division": 3
-                },
-                "nivel_actual": 4,
-                "total_sesiones": 25,
-                "total_intentos": 375,
-                "precision_global": 0.85,
-                "velocidad_promedio_global": 28.5,
-                "estadisticas_por_operacion": {
-                    "suma": {
-                        "nivel": 4,
-                        "intentos": 100,
-                        "precision": 0.90,
-                        "velocidad": 20.5
-                    }
-                },
-                "historial_promociones": [],
-                "percentiles": {
-                    "velocidad": 85,
-                    "precision": 78
-                }
-            }
-        }
-    }
 
 
 # ============================================

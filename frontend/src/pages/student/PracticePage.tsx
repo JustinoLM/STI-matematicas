@@ -156,6 +156,7 @@ export function PracticePage() {
     null
   );
   const [pistasUsadas, setPistasUsadas] = useState<number[]>([]);
+  const [nivelesDeshabilitados, setNivelesDeshabilitados] = useState<number[]>([]);
   const [cargandoPista, setCargandoPista] = useState(false);
   const [puntosDisponibles, setPuntosDisponibles] = useState(0);
 
@@ -441,6 +442,28 @@ export function PracticePage() {
     }
   }, []);
 
+  // Al abrir el modal, consulta qué niveles de pista permite el profesor
+  useEffect(() => {
+    if (!modalPistaAbierto || !sesionId || !problemaActual) return;
+    let cancelado = false;
+    studentService
+      .getPistasDisponibles(sesionId, problemaActual.id)
+      .then((d) => {
+        if (cancelado) return;
+        setNivelesDeshabilitados(
+          [1, 2, 3].filter(
+            (n) => !d.niveles_disponibles.includes(n) && !d.niveles_usados.includes(n)
+          )
+        );
+      })
+      .catch(() => {
+        if (!cancelado) setNivelesDeshabilitados([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [modalPistaAbierto, sesionId, problemaActual]);
+
   const handleSolicitarPista = useCallback(
     async (nivel: 1 | 2 | 3) => {
       if (!sesionId || !problemaActual || cargandoPista) return;
@@ -454,15 +477,15 @@ export function PracticePage() {
         if (pista.puntos_gastados > 0) {
           setPuntosDisponibles(pista.saldo_nuevo);
         }
-      } catch {
-        // Fallback genérico si el servicio de pistas falla
-        const fallback: Record<number, string> = {
-          1: 'Recuerda alinear los números por el punto decimal antes de operar.',
-          2: 'Comienza desde las unidades (derecha) y avanza hacia la izquierda.',
-          3: 'Revisa cuidadosamente cada paso de la operación.',
-        };
-        setPistaActual({ nivel, contenido: fallback[nivel] });
-        setPistasUsadas((prev) => [...prev, nivel]);
+      } catch (error) {
+        // Se muestra el motivo real (sin puntos, pista deshabilitada, servicio caído...)
+        setPistaActual({
+          nivel,
+          contenido:
+            error instanceof Error && error.message
+              ? error.message
+              : 'No se pudo obtener la pista. Inténtalo de nuevo.',
+        });
       } finally {
         setCargandoPista(false);
       }
@@ -773,6 +796,7 @@ export function PracticePage() {
         onRequestHint={handleSolicitarPista}
         puntosDisponibles={puntosDisponibles}
         pistasUsadas={pistasUsadas}
+        nivelesDeshabilitados={nivelesDeshabilitados}
       />
 
       {/* Display de pista */}

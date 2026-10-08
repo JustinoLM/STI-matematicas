@@ -21,12 +21,11 @@ from app.models import (
     Narrativa,
     Grupo, EstudianteGrupo,
     Problema, ConfiguracionPractica, Intento,
-    PerfilEstudiante, EstadisticaEstudiante,
+    PerfilEstudiante,
     Medalla, EstudianteMedalla,
     CategoriaDesbloqueable, Desbloqueable, EstudianteDesbloqueable, PersonalizacionEstudiante,
-    DesafioGrupal, GrupoDesafio, DesafioIndividual, EstudianteDesafioIndividual,
+    DesafioGrupal, GrupoDesafio,
     ErrorComun, EstudianteError,
-    VideoPista, VideoGuardado,
 )
 
 

@@ -5,18 +5,18 @@ Gestiona perfil adaptativo, problemas, sesiones e intentos — todo
 independiente del sistema de las 4 operaciones base.
 """
 
-from typing import Optional, List
+from typing import List, Optional
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.regla_de_tres import (
+    EstadoSesion,
+    IntentoReglaTres,
     PerfilReglaTres,
     ProblemaReglaTres,
     SesionPracticaReglaTres,
-    IntentoReglaTres,
-    EstadoSesion,
 )
 from app.models.user import Estudiante
 
@@ -105,18 +105,6 @@ class ReglaDeTresRepository:
         await self.db.commit()
         await self.db.refresh(sesion)
         return sesion
-
-    async def get_ultima_sesion_completada(self, estudiante_id: int) -> Optional[SesionPracticaReglaTres]:
-        result = await self.db.execute(
-            select(SesionPracticaReglaTres)
-            .where(
-                SesionPracticaReglaTres.estudiante_id == estudiante_id,
-                SesionPracticaReglaTres.estado == EstadoSesion.COMPLETADA,
-            )
-            .order_by(SesionPracticaReglaTres.fecha_fin.desc())
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
 
     # ============================================
     # Operaciones de Intento

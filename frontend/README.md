@@ -21,15 +21,15 @@ src/
 
 ## Inicio Rápido
 
-### 1. Instalar pnpm
+### 1. Requisitos
 ```bash
-npm install -g pnpm
+node --version   # Node 18 o superior
 ```
 
 ### 2. Instalar dependencias
 ```bash
 cd frontend
-pnpm install
+npm install
 ```
 
 ### 3. Configurar variables de entorno
@@ -40,7 +40,7 @@ cp .env.example .env
 
 ### 4. Iniciar servidor de desarrollo
 ```bash
-pnpm dev
+npm run dev
 ```
 
 La aplicación estará disponible en: http://localhost:5173
@@ -76,28 +76,28 @@ xl:  1920px  (Desktops)
 ## Testing
 ```bash
 # Ejecutar tests
-pnpm test
+npm test
 
 # Con UI
-pnpm test:ui
+npm run test -- --ui
 ```
 
 ## Linting
 ```bash
 # Lint
-pnpm lint
+npm run lint
 
 # Auto-fix
-pnpm lint --fix
+npm run lint -- --fix
 ```
 
 ## Build para Producción
 ```bash
 # Build
-pnpm build
+npm run build
 
 # Preview del build
-pnpm preview
+npm run preview
 ```
 
 ## Path Aliases

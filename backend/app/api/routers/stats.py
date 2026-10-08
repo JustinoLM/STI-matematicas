@@ -9,11 +9,11 @@ Expone:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.api.dependencies import CurrentTeacher
-from app.services.stats_service import StatsService
+from app.core.database import get_db
+from app.schemas.stats import AnalisisIAResponse, GrupoStatsResponse
 from app.services.llm_service import LLMService
-from app.schemas.stats import GrupoStatsResponse, AnalisisIAResponse
+from app.services.stats_service import StatsService
 
 router = APIRouter()
 

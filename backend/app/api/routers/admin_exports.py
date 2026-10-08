@@ -12,15 +12,21 @@ Endpoints:
 """
 
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, select
 
 from app.api.dependencies import DBSession, require_admin
-from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante, PruebaDiagnostica, ResultadoPostTest
-from app.models.user import Estudiante
+from app.models.adaptive import (
+    EstadoSesion,
+    PerfilEstudiante,
+    PruebaDiagnostica,
+    ResultadoPostTest,
+    SesionPractica,
+)
+from app.models.gamification import EstudianteMedalla, Medalla, TipoTransaccion, TransaccionPuntos
 from app.models.organization import Organizacion
-from app.models.gamification import EstudianteMedalla, Medalla, TransaccionPuntos, TipoTransaccion
+from app.models.user import Estudiante
 
 # Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -112,26 +118,32 @@ async def exportar_diagnostico(
     post_tests = {p.estudiante_id: p for p in (await db.execute(stmt_post)).scalars().all()}
 
     def bool_to_int(v):
-        if v is None: return None
+        if v is None:
+            return None
         return 1 if v else 0
 
     def correctos_pre(pre, op):
         """Suma los dos niveles de la operación (0, 1 o 2 correctos)."""
-        if pre is None: return None
+        if pre is None:
+            return None
         n1 = bool_to_int(getattr(pre, f"{op}_nivel1_correcto"))
         n2 = bool_to_int(getattr(pre, f"{op}_nivel2_correcto"))
-        if n1 is None and n2 is None: return None
+        if n1 is None and n2 is None:
+            return None
         return (n1 or 0) + (n2 or 0)
 
     def correctos_post(post, op):
-        if post is None or not post.completado: return None
+        if post is None or not post.completado:
+            return None
         n1 = bool_to_int(getattr(post, f"{op}_nivel1_correcto"))
         n2 = bool_to_int(getattr(post, f"{op}_nivel2_correcto"))
-        if n1 is None and n2 is None: return None
+        if n1 is None and n2 is None:
+            return None
         return (n1 or 0) + (n2 or 0)
 
     def delta(pre_val, post_val):
-        if pre_val is None or post_val is None: return ""
+        if pre_val is None or post_val is None:
+            return ""
         return post_val - pre_val
 
     OPERACIONES = ["suma", "resta", "mult", "div"]

@@ -4,10 +4,22 @@ Modelos para sistema adaptativo y machine learning.
 Incluye perfiles de estudiante, sesiones de práctica, diagnósticos y alertas.
 """
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Numeric, JSON, ForeignKey, Enum, Text, Date
-from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -111,7 +123,6 @@ class PerfilEstudiante(Base):
     # ============================================
     # Sistema de Alertas (para futuras features)
     # ============================================
-    alertas_activas = Column(JSON, default=list)  # Flags de alertas
     # Ejemplo: ["posible_trampa", "rezagado"]
     
     ultima_actividad = Column(DateTime, default=datetime.utcnow)
@@ -247,12 +258,13 @@ class SesionPractica(Base):
     desglose_puntos = Column(JSON, nullable=True)  # Detalle de cómo se calcularon los puntos
     # Ejemplo: {"suma": {"antes": 2, "despues": 3, "razon": "10 consecutivos"}}
     
-    # ML predictions (para futuro análisis)
-    perfil_al_momento = Column(String(50), nullable=True)
-    probabilidad_exito_predicha = Column(Numeric(3, 2), nullable=True)
+    # Contexto con el que se generó la sesión
+    perfil_al_momento = Column(String(50), nullable=True)           # perfil ML del estudiante
+    probabilidad_exito_predicha = Column(Numeric(3, 2), nullable=True)  # prob. de subir de nivel
+    tema_activo = Column(String(50), nullable=True)                 # ej. "tema-piratas"
     
     # ============================================
-    # Detección de Anomalías (para alertas futuras)
+    # Detección de Anomalías
     # ============================================
     velocidad_sospechosa = Column(Boolean, default=False)  # Muy rápido
     patron_sospechoso = Column(Boolean, default=False)  # Patrón inusual
@@ -366,29 +378,3 @@ class ResultadoPostTest(Base):
 
     def __repr__(self):
         return f"<ResultadoPostTest(estudiante_id={self.estudiante_id}, completado={self.completado})>"
-
-
-class EstadisticaEstudiante(Base):
-    """
-    Estadísticas agregadas del estudiante por fecha.
-    
-    Permite tracking histórico del rendimiento y generar gráficos.
-    """
-    __tablename__ = "estadistica_estudiante"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, index=True)
-    fecha = Column(Date, nullable=False, index=True)
-    
-    # Métricas diarias
-    practicas_completadas = Column(Integer, nullable=False, default=0)
-    problemas_resueltos = Column(Integer, nullable=False, default=0)
-    problemas_correctos = Column(Integer, nullable=False, default=0)
-    tiempo_total_minutos = Column(Integer, nullable=False, default=0)
-    pistas_utilizadas = Column(Integer, nullable=False, default=0)
-    
-    # Relación
-    estudiante = relationship("Estudiante", back_populates="estadisticas")
-    
-    def __repr__(self):
-        return f"<EstadisticaEstudiante(id={self.id}, estudiante_id={self.estudiante_id}, fecha={self.fecha})>"

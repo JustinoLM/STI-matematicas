@@ -29,7 +29,6 @@ import { ShopPage } from '@/pages/student/ShopPage';
 import { InventoryPage } from '@/pages/student/InventoryPage';
 import { BadgesPage } from '@/pages/student/BadgesPage';
 import { ProgressPage } from '@/pages/student/ProgressPage';
-import { VideosPage } from '@/pages/student/VideosPage';
 import { AnimacionesPage } from '@/pages/student/AnimacionesPage';
 import { ChallengesPage as StudentChallengesPage } from '@/pages/student/ChallengesPage';
 import { GroupChallengePage } from '@/pages/student/GroupChallengePage';
@@ -177,7 +176,6 @@ function App() {
                   <Route path="inventory" element={<InventoryPage />} />
                   <Route path="badges" element={<BadgesPage />} />
                   <Route path="progress" element={<ProgressPage />} />
-                  <Route path="videos" element={<VideosPage />} />
                   <Route path="animaciones" element={<AnimacionesPage />} />
                   <Route path="regla-de-tres" element={<ReglaDeTresPracticePage />} />
                   <Route path="challenges" element={<StudentChallengesPage />} />

@@ -4,10 +4,10 @@ Schemas Pydantic para gamificación.
 Define contratos para tienda, medallas, puntos y personalización.
 """
 
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Dict, List, Optional
 
+from pydantic import BaseModel
 
 # ============================================
 # Schemas de Desbloqueables (Tienda)
@@ -34,19 +34,6 @@ class DesbloqueableResponse(DesbloqueableBase):
     fecha_compra: Optional[datetime] = None
     
     model_config = {"from_attributes": True}
-
-
-class ComprarItemRequest(BaseModel):
-    """Request para comprar un item."""
-    desbloqueable_id: int
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "desbloqueable_id": 5
-            }
-        }
-    }
 
 
 class ComprarItemResponse(BaseModel):
@@ -171,36 +158,12 @@ class MedallaResponse(MedallaBase):
     model_config = {"from_attributes": True}
 
 
-class MedallaProgresoResponse(BaseModel):
-    """Progreso hacia una medalla no obtenida."""
-    medalla: MedallaResponse
-    progreso_actual: int
-    progreso_requerido: int
-    porcentaje: float
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "medalla": {},
-                "progreso_actual": 250,
-                "progreso_requerido": 500,
-                "porcentaje": 50.0
-            }
-        }
-    }
-
-
 class MedallasResponse(BaseModel):
     """Todas las medallas del estudiante."""
     total_medallas: int
     medallas_obtenidas: int
     medallas: List[MedallaResponse]
     medalla_destacada_id: Optional[int] = None
-
-
-class MedallasProgresoResponse(BaseModel):
-    """Progreso hacia medallas no obtenidas."""
-    progresos: List[MedallaProgresoResponse]
 
 
 # ============================================

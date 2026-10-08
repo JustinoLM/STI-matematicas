@@ -143,7 +143,7 @@ function pasosResta(num1: number, num2: number): PasoAnimacion[] {
   const resultDigits: number[] = [];
 
   for (let i = len - 1; i >= 0; i--) {
-    let d1 = parseInt(n1pad[i]) - borrow;
+    const d1 = parseInt(n1pad[i]) - borrow;
     const d2 = parseInt(n2pad[i]);
     const pos = len - 1 - i - maxDec;
     const colNombre = nombreColumna(pos);

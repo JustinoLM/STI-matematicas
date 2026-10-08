@@ -1,16 +1,16 @@
 """Repositorio para operaciones de profesor."""
 
+from datetime import datetime
 from typing import List, Optional
-from datetime import datetime, timedelta
-from sqlalchemy import select, func, and_, or_
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.user import Profesor
-from app.models.group import Grupo, EstudianteGrupo
-from app.models.adaptive import PerfilEstudiante, AlertaEstudiante
-from app.models.practice_config import ConfiguracionPractica
+from app.models.adaptive import PerfilEstudiante
 from app.models.challenge import DesafioGrupal, GrupoDesafio
+from app.models.group import EstudianteGrupo, Grupo
+from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento
 
 
@@ -51,11 +51,6 @@ class TeacherRepository:
         await self.db.flush()
         return grupo
     
-    async def update_grupo(self, grupo: Grupo) -> Grupo:
-        """Actualiza un grupo."""
-        await self.db.flush()
-        return grupo
-
     async def eliminar_grupo(self, grupo: Grupo):
         """Elimina un grupo y todas sus relaciones de estudiantes."""
         # Primero eliminar relaciones estudiante-grupo
@@ -199,40 +194,6 @@ class TeacherRepository:
         await self.db.flush()
     
     # ==================== ALERTAS ====================
-    
-    async def get_alertas_grupos(self, grupos_ids: List[int]) -> List[AlertaEstudiante]:
-        """Obtiene alertas activas de estudiantes en grupos."""
-        # Obtener estudiantes de grupos
-        result = await self.db.execute(
-            select(EstudianteGrupo.estudiante_id)
-            .where(and_(
-                EstudianteGrupo.grupo_id.in_(grupos_ids),
-                EstudianteGrupo.activo == True
-            ))
-        )
-        estudiantes_ids = [row[0] for row in result.all()]
-        
-        # Obtener alertas
-        result = await self.db.execute(
-            select(AlertaEstudiante)
-            .where(and_(
-                AlertaEstudiante.estudiante_id.in_(estudiantes_ids),
-                AlertaEstudiante.activa == True
-            ))
-            .order_by(AlertaEstudiante.fecha_creacion.desc())
-        )
-        return list(result.scalars().all())
-    
-    async def marcar_alerta_leida(self, alerta_id: int):
-        """Marca alerta como leída."""
-        result = await self.db.execute(
-            select(AlertaEstudiante).where(AlertaEstudiante.id == alerta_id)
-        )
-        alerta = result.scalar_one_or_none()
-        if alerta:
-            alerta.leida = True
-            alerta.fecha_lectura = datetime.utcnow()
-            await self.db.flush()
     
     # ==================== ESTADÍSTICAS ====================
     

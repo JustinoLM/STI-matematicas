@@ -9,9 +9,9 @@ Si el estudiante cambia de tema, se genera un nuevo mensaje ese día.
 from datetime import date
 from typing import Optional
 
-from app.repositories.mensajes_repository import MensajesRepository
-from app.services.llm_service import LLMService, LLMPrompts
 from app.models.user import Estudiante
+from app.repositories.mensajes_repository import MensajesRepository
+from app.services.llm_service import LLMPrompts, LLMService
 
 
 class MensajesService:

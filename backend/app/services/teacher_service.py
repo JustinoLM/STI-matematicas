@@ -1,22 +1,36 @@
 """Service para operaciones del profesor."""
 
-from typing import List, Optional
 from datetime import datetime, timedelta
-from sqlalchemy import select, func, and_
+from typing import List, Optional
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.teacher_repository import TeacherRepository
-from app.models.user import Estudiante
-from app.models.group import EstudianteGrupo
-from app.models.adaptive import PerfilEstudiante, AlertaEstudiante, TipoAlerta, SesionPractica, EstadoSesion
-from app.models.practice_config import ConfiguracionPractica
+from app.models.adaptive import (
+    AlertaEstudiante,
+    EstadoSesion,
+    PerfilEstudiante,
+    SesionPractica,
+    TipoAlerta,
+)
 from app.models.challenge import DesafioGrupal, GrupoDesafio
+from app.models.group import EstudianteGrupo
+from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento
+from app.models.user import Estudiante, Profesor
+from app.repositories.teacher_repository import TeacherRepository
 from app.schemas.teacher import (
-    GrupoCreate, GrupoUpdate, GrupoDetalle, GrupoResumen, EstudianteEnGrupo,
-    ConfiguracionPracticaCreate, ConfiguracionPracticaResponse,
-    DesafioGrupalCreate, DesafioGrupalDetalle, DesafioGrupalResumen, ProgresoGrupoDesafio,
-    EstadisticasGrupo, ProgresoEstudiante, AlertaEstudianteResponse
+    AlertaEstudianteResponse,
+    ConfiguracionPracticaCreate,
+    ConfiguracionPracticaResponse,
+    DesafioGrupalCreate,
+    DesafioGrupalDetalle,
+    EstadisticasGrupo,
+    EstudianteEnGrupo,
+    GrupoCreate,
+    GrupoDetalle,
+    GrupoResumen,
+    ProgresoGrupoDesafio,
 )
 
 
@@ -125,6 +139,16 @@ class TeacherService:
         grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
         if not grupo:
             raise ValueError("Grupo no encontrado")
+
+        # El estudiante debe pertenecer a la organización del profesor
+        org_estudiante = (await self.db.execute(
+            select(Estudiante.organizacion_id).where(Estudiante.id == estudiante_id)
+        )).first()
+        org_profesor = (await self.db.execute(
+            select(Profesor.organizacion_id).where(Profesor.id == profesor_id)
+        )).scalar_one_or_none()
+        if org_estudiante is None or org_profesor is None or org_estudiante[0] != org_profesor:
+            raise ValueError("Estudiante no encontrado en tu organización")
 
         await self.repo.agregar_estudiante_a_grupo(grupo_id, estudiante_id)
         await self.repo.ensure_perfil_estudiante(estudiante_id)
@@ -546,6 +570,8 @@ class TeacherService:
         - INACTIVO: sin actividad > 7 días con ≥ 3 sesiones
         - DIFICULTAD_PERSISTENTE: ≥ 10 sesiones en mismo nivel
         - EXCELENCIA: precisión ≥ 90% con ≥ 5 sesiones
+        - PROMOCION_RAPIDA: ≥ 2 subidas de nivel en las últimas 3 sesiones completadas
+        - POSIBLE_TRAMPA: alertas guardadas al completar cada práctica (ver PracticeService)
         """
         grupos = await self.repo.get_grupos_profesor(profesor_id)
         grupos_ids = [g.id for g in grupos]
@@ -683,5 +709,79 @@ class TeacherService:
                     fecha_creacion=ahora,
                 ))
                 id_contador += 1
+
+        # ── PROMOCION_RAPIDA: 2 o más subidas de nivel en las últimas 3 sesiones ─
+        sesiones_res = await self.db.execute(
+            select(SesionPractica.estudiante_id, SesionPractica.cambios_nivel)
+            .where(and_(
+                SesionPractica.estudiante_id.in_(estudiantes_ids),
+                SesionPractica.estado == EstadoSesion.COMPLETADA,
+            ))
+            .order_by(SesionPractica.estudiante_id, SesionPractica.fecha_fin.desc())
+        )
+        ultimas: dict = {}
+        for est_id, cambios in sesiones_res.all():
+            lista = ultimas.setdefault(est_id, [])
+            if len(lista) < 3:
+                lista.append(cambios or {})
+        for estudiante, _perfil in rows:
+            subidas = sum(
+                1
+                for cambios in ultimas.get(estudiante.id, [])
+                for c in cambios.values()
+                if isinstance(c, dict) and c.get("despues", 0) > c.get("antes", 0)
+            )
+            if subidas >= 2:
+                alertas.append(AlertaEstudianteResponse(
+                    id=id_contador,
+                    estudiante_id=estudiante.id,
+                    codigo_estudiante=estudiante.codigo_estudiante,
+                    nombre_estudiante=estudiante.nombre_completo,
+                    tipo=TipoAlerta.PROMOCION_RAPIDA,
+                    severidad="baja",
+                    titulo="Avance rápido",
+                    mensaje=(
+                        f"Subió de nivel {subidas} veces en sus últimas 3 sesiones. "
+                        f"Podría necesitar retos más exigentes."
+                    ),
+                    datos_contexto={"subidas_ultimas_3_sesiones": subidas},
+                    activa=True,
+                    leida=False,
+                    fecha_creacion=ahora,
+                ))
+                id_contador += 1
+
+        # ── POSIBLE_TRAMPA: alertas persistidas al completar cada práctica ─────
+        # (velocidad sospechosa, patrón perfecto, outlier del grupo). A diferencia
+        # de las anteriores, se calculan en el momento de la sesión y se guardan.
+        severidad_profesor = {"critical": "alta", "warning": "media"}
+        estudiantes_por_id = {est.id: est for est, _ in rows}
+        trampas = await self.db.execute(
+            select(AlertaEstudiante)
+            .where(and_(
+                AlertaEstudiante.estudiante_id.in_(estudiantes_ids),
+                AlertaEstudiante.tipo == TipoAlerta.POSIBLE_TRAMPA,
+                AlertaEstudiante.activa == True,
+            ))
+            .order_by(AlertaEstudiante.fecha_creacion.desc())
+        )
+        for alerta in trampas.scalars().all():
+            estudiante = estudiantes_por_id.get(alerta.estudiante_id)
+            if estudiante is None:
+                continue
+            alertas.append(AlertaEstudianteResponse(
+                id=1_000_000 + alerta.id,
+                estudiante_id=estudiante.id,
+                codigo_estudiante=estudiante.codigo_estudiante,
+                nombre_estudiante=estudiante.nombre_completo,
+                tipo=TipoAlerta.POSIBLE_TRAMPA,
+                severidad=severidad_profesor.get(alerta.severidad, alerta.severidad),
+                titulo=alerta.titulo,
+                mensaje=alerta.mensaje,
+                datos_contexto=alerta.datos_contexto,
+                activa=alerta.activa,
+                leida=alerta.leida,
+                fecha_creacion=alerta.fecha_creacion,
+            ))
 
         return alertas

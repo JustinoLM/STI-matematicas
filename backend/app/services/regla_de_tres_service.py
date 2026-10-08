@@ -6,27 +6,28 @@ Módulo paralelo e independiente al de las 4 operaciones base: nivel único
 """
 
 import random
-from typing import List, Optional
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import List, Optional
+
 from fastapi import HTTPException, status
 
-from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
-from app.repositories.gamification_repository import GamificationRepository
 from app.models.regla_de_tres import (
-    TipoProporcion,
+    EstadoSesion,
+    IntentoReglaTres,
     ProblemaReglaTres,
     SesionPracticaReglaTres,
-    IntentoReglaTres,
-    EstadoSesion,
+    TipoProporcion,
 )
+from app.repositories.gamification_repository import GamificationRepository
+from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
 from app.schemas.regla_de_tres import (
-    ProblemaReglaTresDisplay,
-    SesionReglaTresStartResponse,
-    SubmitRespuestaR3Response,
-    ResumenSesionR3,
     EstudianteNotaR3,
     NotasReglaTresResponse,
+    ProblemaReglaTresDisplay,
+    ResumenSesionR3,
+    SesionReglaTresStartResponse,
+    SubmitRespuestaR3Response,
 )
 
 

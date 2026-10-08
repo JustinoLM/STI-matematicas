@@ -5,88 +5,23 @@ Centraliza todos los modelos para facilitar importaciones.
 """
 
 # Organization models (must be imported BEFORE user to resolve FK)
-from app.models.organization import (
-    Organizacion,
-)
-
-# User and authentication models
-from app.models.user import (
-    TipoUsuario,
-    Usuario,
-    Estudiante,
-    Profesor,
-)
-
-# Problem models
-from app.models.problem import (
-    Operacion,
-    Problema,
-    Intento,
-)
-
 # Adaptive learning models
 from app.models.adaptive import (
-    PerfilAprendizaje,
+    AlertaEstudiante,
     EstadoDiagnostico,
-    TipoAlerta,
+    EstadoSesion,
+    PerfilAprendizaje,
     PerfilEstudiante,
     PruebaDiagnostica,
     ResultadoPostTest,
     SesionPractica,
-    EstadoSesion,
-    AlertaEstudiante,
-    EstadisticaEstudiante,
-)
-
-# Regla de Tres models (módulo paralelo e independiente)
-from app.models.regla_de_tres import (
-    TipoProporcion,
-    ProblemaReglaTres,
-    PerfilReglaTres,
-    SesionPracticaReglaTres,
-    IntentoReglaTres,
-)
-
-# Gamification models
-from app.models.gamification import (
-    CategoriaDesbloqueable,
-    CategoriaMedalla,
-    TipoTransaccion,
-    Desbloqueable,
-    EstudianteDesbloqueable,
-    PersonalizacionEstudiante,
-    Medalla,
-    EstudianteMedalla,
-    TransaccionPuntos,
-)
-
-# Group models
-from app.models.group import (
-    Grupo,
-    EstudianteGrupo,
-)
-
-# Hint (old video-pista system, referenced by Narrativa)
-from app.models.hint import (
-    VideoPista,
-)
-
-# Narrative models
-from app.models.narrative import (
-    Narrativa,
-)
-
-# Practice Configuration models
-from app.models.practice_config import (
-    ConfiguracionPractica,
+    TipoAlerta,
 )
 
 # Challenge models
 from app.models.challenge import (
     DesafioGrupal,
     GrupoDesafio,
-    DesafioIndividual,
-    EstudianteDesafioIndividual,
 )
 
 # Error / Buggy Model
@@ -95,11 +30,66 @@ from app.models.error import (
     EstudianteError,
 )
 
-# System configuration
-from app.models.config import ConfiguracionSistema
+# Gamification models
+from app.models.gamification import (
+    CategoriaDesbloqueable,
+    CategoriaMedalla,
+    Desbloqueable,
+    EstudianteDesbloqueable,
+    EstudianteMedalla,
+    Medalla,
+    PersonalizacionEstudiante,
+    TipoTransaccion,
+    TransaccionPuntos,
+)
 
+# Group models
+from app.models.group import (
+    EstudianteGrupo,
+    Grupo,
+)
+
+# System configuration
 # ML model persistence
 from app.models.ml_model import ModeloML
+
+# Hint (old video-pista system, referenced by Narrativa)
+# Narrative models
+from app.models.narrative import (
+    Narrativa,
+)
+from app.models.organization import (
+    Organizacion,
+)
+
+# Practice Configuration models
+from app.models.practice_config import (
+    ConfiguracionPractica,
+)
+
+# Problem models
+from app.models.problem import (
+    Intento,
+    Operacion,
+    Problema,
+)
+
+# Regla de Tres models (módulo paralelo e independiente)
+from app.models.regla_de_tres import (
+    IntentoReglaTres,
+    PerfilReglaTres,
+    ProblemaReglaTres,
+    SesionPracticaReglaTres,
+    TipoProporcion,
+)
+
+# User and authentication models
+from app.models.user import (
+    Estudiante,
+    Profesor,
+    TipoUsuario,
+    Usuario,
+)
 
 __all__ = [
     # Organization
@@ -123,7 +113,6 @@ __all__ = [
     "SesionPractica",
     "EstadoSesion",
     "AlertaEstudiante",
-    "EstadisticaEstudiante",
     # Regla de Tres
     "TipoProporcion",
     "ProblemaReglaTres",
@@ -144,7 +133,6 @@ __all__ = [
     "Grupo",
     "EstudianteGrupo",
     # Hint (old video-pista system)
-    "VideoPista",
     # Narrative
     "Narrativa",
     # Practice Configuration
@@ -152,34 +140,35 @@ __all__ = [
     # Challenges
     "DesafioGrupal",
     "GrupoDesafio",
-    "DesafioIndividual",
-    "EstudianteDesafioIndividual",
     # Error / Buggy Model
     "ErrorComun",
     "EstudianteError",
     # ML model persistence
     "ModeloML",
-    # Hints and Videos
+    # Pistas
     "NivelPista",
     "TipoError",
-    "FuenteVideo",
-    "PistaGenerica",
     "UsoPista",
-    "VideoEducativo",
-    "VideoGuardado",
-    "VideoTemporal",
     "GeneracionLLM",
+    # LLM
+    "EnunciadoTematico",
+    "MensajeMotivacional",
+    "AnimacionGuardada",
 ]
 
-# Hints and Videos models
-from app.models.hints_videos import (
+# Pistas
+# Configuración del sistema (registra la tabla en Base.metadata)
+from app.models.config import ConfiguracionSistema  # noqa: F401
+from app.models.hints import (
+    GeneracionLLM,
     NivelPista,
     TipoError,
-    FuenteVideo,
-    PistaGenerica,
     UsoPista,
-    VideoEducativo,
-    VideoGuardado,
-    VideoTemporal,
-    GeneracionLLM,
+)
+
+# Caché de LLM y animaciones guardadas
+from app.models.llm import (
+    AnimacionGuardada,
+    EnunciadoTematico,
+    MensajeMotivacional,
 )

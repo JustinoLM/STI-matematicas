@@ -4,11 +4,11 @@ Schemas Pydantic para gestión de prácticas e intentos.
 Define contratos para sesiones, progreso y estadísticas.
 """
 
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Dict, List, Optional
 
+from pydantic import BaseModel
 
 # ============================================
 # Schemas de Progreso de Sesión

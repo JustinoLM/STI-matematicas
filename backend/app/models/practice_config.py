@@ -1,7 +1,8 @@
 """Modelo de configuración de prácticas por grupo."""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, JSON, Numeric, Boolean
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, Numeric
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

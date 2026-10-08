@@ -7,9 +7,10 @@ sus propios problemas. No se relaciona con Operacion, PerfilEstudiante,
 PruebaDiagnostica ni ResultadoPostTest.
 """
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, JSON, ForeignKey, Enum
 import enum
+from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, Numeric, String
 
 from app.core.database import Base
 from app.models.adaptive import EstadoSesion

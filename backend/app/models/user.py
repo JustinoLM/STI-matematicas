@@ -5,10 +5,11 @@ Sistema de autenticación basado en códigos únicos (no emails).
 Los usuarios son creados por administradores, no hay registro público.
 """
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, UniqueConstraint, JSON
-from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
+
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -81,7 +82,6 @@ class Estudiante(Usuario):
     perfil = relationship("PerfilEstudiante", back_populates="estudiante", uselist=False)
     grupos = relationship("EstudianteGrupo", back_populates="estudiante")
     intentos = relationship("Intento", back_populates="estudiante")
-    estadisticas = relationship("EstadisticaEstudiante", back_populates="estudiante")
     medallas = relationship("EstudianteMedalla", back_populates="estudiante")
     desbloqueables = relationship("EstudianteDesbloqueable", back_populates="estudiante")
     diagnostico = relationship("PruebaDiagnostica", back_populates="estudiante", uselist=False)
@@ -124,7 +124,6 @@ class Profesor(Usuario):
     grupos = relationship("Grupo", back_populates="profesor")
     configuraciones = relationship("ConfiguracionPractica", back_populates="aplicada_por_profesor")
     desafios_grupales = relationship("DesafioGrupal", back_populates="profesor")
-    desafios_individuales = relationship("DesafioIndividual", back_populates="profesor")
     organizacion = relationship("Organizacion", back_populates="profesores", foreign_keys=[organizacion_id])
 
     # Configuración de herencia

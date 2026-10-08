@@ -19,7 +19,6 @@ class Narrativa(Base):
     
     Relaciones:
     - Tiene múltiples Estudiantes que la seleccionaron (1:N)
-    - Tiene múltiples Videos de pista adaptados a ella (1:N)
     """
     __tablename__ = "narrativa"
     
@@ -30,7 +29,6 @@ class Narrativa(Base):
     
     # Relaciones
     estudiantes = relationship("Estudiante", back_populates="narrativa")
-    videos_pista = relationship("VideoPista", back_populates="narrativa")
     
     def __repr__(self):
         return f"<Narrativa(id={self.id}, nombre={self.nombre})>"

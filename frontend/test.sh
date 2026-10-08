@@ -21,7 +21,7 @@ fi
 
 # 1. Linting
 echo -e "${YELLOW}📋 Paso 1/3: Linting con ESLint...${NC}"
-pnpm lint || {
+npm run lint || {
     echo -e "${RED}❌ Linting falló${NC}"
     exit 1
 }
@@ -30,7 +30,7 @@ echo ""
 
 # 2. Tests
 echo -e "${YELLOW}📋 Paso 2/3: Ejecutando tests con Vitest...${NC}"
-pnpm test --run || {
+npm test -- --run || {
     echo -e "${RED}❌ Tests fallaron${NC}"
     exit 1
 }
@@ -39,7 +39,7 @@ echo ""
 
 # 3. Build
 echo -e "${YELLOW}📋 Paso 3/3: Build de producción...${NC}"
-pnpm build || {
+npm run build || {
     echo -e "${RED}❌ Build falló${NC}"
     exit 1
 }

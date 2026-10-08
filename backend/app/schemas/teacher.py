@@ -1,12 +1,12 @@
 """Schemas para APIs del profesor."""
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from app.models.adaptive import TipoAlerta
-
 
 # ==================== GRUPOS ====================
 
@@ -14,12 +14,6 @@ class GrupoCreate(BaseModel):
     """Crear grupo."""
     nombre: str = Field(..., max_length=255)
     codigo_grupo: str = Field(..., max_length=50)
-
-
-class GrupoUpdate(BaseModel):
-    """Actualizar grupo."""
-    nombre: Optional[str] = Field(None, max_length=255)
-    activo: Optional[bool] = None
 
 
 class EstudianteEnGrupo(BaseModel):
@@ -151,24 +145,6 @@ class DesafioGrupalDetalle(BaseModel):
         from_attributes = True
 
 
-class DesafioGrupalResumen(BaseModel):
-    """Resumen de desafío para listado."""
-    id: int
-    nombre: str
-    tipo: str
-    objetivo_cantidad: int
-    parametro_adicional: Optional[int]
-    recompensa_puntos: Optional[int]
-    fecha_creacion: datetime
-    fecha_limite: Optional[datetime]
-    completado: bool
-    cantidad_grupos: int
-    grupos_completados: int
-
-    class Config:
-        from_attributes = True
-
-
 # ==================== MONITOREO ====================
 
 class EstadisticasGrupo(BaseModel):
@@ -196,36 +172,6 @@ class EstadisticasGrupo(BaseModel):
     estudiantes_sobresalientes: int
 
 
-class ProgresoEstudiante(BaseModel):
-    """Progreso individual de estudiante."""
-    estudiante_id: int
-    codigo_estudiante: str
-    nombre_completo: str
-    
-    # Niveles
-    nivel_actual: int
-    nivel_suma: int
-    nivel_resta: int
-    nivel_multiplicacion: int
-    nivel_division: int
-    
-    # Métricas
-    precision_ultimos_15: float
-    velocidad_promedio: float
-    consecutivas_correctas: int
-    
-    # Actividad
-    total_sesiones: int
-    ultima_actividad: datetime
-    dias_sin_practicar: int
-    
-    # Alertas activas
-    alertas_activas: List[str]
-
-    class Config:
-        from_attributes = True
-
-
 class AlertaEstudianteResponse(BaseModel):
     """Alerta del sistema."""
     id: int
@@ -247,36 +193,5 @@ class AlertaEstudianteResponse(BaseModel):
 
 # ==================== BÚSQUEDA ====================
 
-class BuscarEstudianteRequest(BaseModel):
-    """Request de búsqueda."""
-    query: str = Field(..., min_length=2)
-
-
-class EstudianteSearchResult(BaseModel):
-    """Resultado de búsqueda de estudiante."""
-    estudiante_id: int
-    codigo_estudiante: str
-    nombre_completo: str
-    grupos: List[str]  # Nombres de grupos
-    nivel_actual: int
-    ultima_actividad: datetime
-
-    class Config:
-        from_attributes = True
-
 
 # ==================== REPORTES ====================
-
-class GenerarReporteRequest(BaseModel):
-    """Request para generar reporte PDF."""
-    grupo_id: int
-    incluir_estadisticas: bool = True
-    incluir_progreso_individual: bool = True
-    incluir_alertas: bool = True
-
-
-class ReporteResponse(BaseModel):
-    """Respuesta con URL del reporte."""
-    url: str
-    nombre_archivo: str
-    fecha_generacion: datetime

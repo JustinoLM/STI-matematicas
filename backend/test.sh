@@ -20,7 +20,7 @@ if [ ! -f "pyproject.toml" ]; then
 fi
 
 # 1. Linting
-echo -e "${YELLOW}📋 Paso 1/3: Linting con Ruff...${NC}"
+echo -e "${YELLOW}📋 Paso 1/2: Linting con Ruff...${NC}"
 poetry run ruff check app/ || {
     echo -e "${RED}❌ Linting falló${NC}"
     exit 1
@@ -28,17 +28,8 @@ poetry run ruff check app/ || {
 echo -e "${GREEN}✅ Linting exitoso${NC}"
 echo ""
 
-# 2. Formateo
-echo -e "${YELLOW}📋 Paso 2/3: Verificando formato con Black...${NC}"
-poetry run black --check app/ || {
-    echo -e "${RED}❌ Formato incorrecto. Ejecuta: poetry run black app/${NC}"
-    exit 1
-}
-echo -e "${GREEN}✅ Formato correcto${NC}"
-echo ""
-
-# 3. Tests
-echo -e "${YELLOW}📋 Paso 3/3: Ejecutando tests con pytest...${NC}"
+# 2. Tests
+echo -e "${YELLOW}📋 Paso 2/2: Ejecutando tests con pytest...${NC}"
 poetry run pytest tests/ -v --cov=app --cov-report=term-missing || {
     echo -e "${RED}❌ Tests fallaron${NC}"
     exit 1

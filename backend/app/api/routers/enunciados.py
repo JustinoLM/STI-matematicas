@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from app.api.dependencies import CurrentStudent, EnunciadosServiceDep
 
-
 router = APIRouter()
 
 

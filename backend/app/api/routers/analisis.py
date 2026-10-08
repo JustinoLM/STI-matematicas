@@ -6,7 +6,7 @@ GET /api/analisis/{sesion_id}
   → Solo el propio estudiante puede ver el análisis de su sesión.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.dependencies import (

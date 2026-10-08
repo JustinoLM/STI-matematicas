@@ -4,9 +4,10 @@ Modelos de gamificación.
 Sistema de puntos, medallas, desbloqueables y personalización.
 """
 
-from datetime import datetime
 import enum
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Enum
+from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

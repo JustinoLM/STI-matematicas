@@ -8,16 +8,16 @@ Endpoints:
 - GET  /regla-de-tres/admin/notas              Notas de todos los estudiantes (admin)
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.api.dependencies import CurrentStudent, CurrentTeacher, DBSession, ReglaDeTresServiceDep
 from app.models.user import Estudiante
 from app.schemas.regla_de_tres import (
+    NotasReglaTresResponse,
     SesionReglaTresStartResponse,
     SubmitRespuestaR3Request,
     SubmitRespuestaR3Response,
-    NotasReglaTresResponse,
 )
 
 router = APIRouter()

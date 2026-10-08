@@ -9,43 +9,46 @@ Endpoints (todos bajo /admin/organizations — sin auth por ahora):
 - PUT    /admin/organizations/{id}/students/{est_id}      Asignar/quitar org a estudiante
 """
 
-import asyncio
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete as sa_delete, update as sa_update, cast, Date
-from sqlalchemy.orm import selectinload
-
-from typing import Optional
 from pydantic import BaseModel
+from sqlalchemy import Date, cast, func, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import DBSession, require_admin
-from app.models.organization import Organizacion
-from app.models.user import Profesor, Estudiante
-from app.models.group import Grupo, EstudianteGrupo
 from app.models.adaptive import (
-    PerfilEstudiante, SesionPractica, EstadoSesion,
-    AlertaEstudiante, PruebaDiagnostica, ResultadoPostTest, EstadisticaEstudiante,
+    AlertaEstudiante,
+    EstadoSesion,
+    PerfilEstudiante,
+    PruebaDiagnostica,
+    ResultadoPostTest,
+    SesionPractica,
 )
-from app.models.gamification import (
-    EstudianteDesbloqueable, PersonalizacionEstudiante,
-    EstudianteMedalla, TransaccionPuntos,
-)
-from app.models.problem import Intento
-from app.models.hints_videos import UsoPista, VideoGuardado, VideoTemporal
 from app.models.error import EstudianteError
-from app.models.llm import MensajeMotivacional, AnimacionGuardada
+from app.models.gamification import (
+    EstudianteDesbloqueable,
+    EstudianteMedalla,
+    PersonalizacionEstudiante,
+    TransaccionPuntos,
+)
+from app.models.group import EstudianteGrupo, Grupo
+from app.models.hints import UsoPista
+from app.models.llm import AnimacionGuardada, MensajeMotivacional
+from app.models.organization import Organizacion
+from app.models.problem import Intento
+from app.models.user import Estudiante, Profesor
 from app.repositories.gamification_repository import GamificationRepository
-from app.services.ml_service import ml_service
 from app.schemas.organization import (
     CreateOrganizacionRequest,
-    OrganizacionResponse,
-    OrganizacionListResponse,
-    OrganizacionDetalleResponse,
     MiembroResponse,
-    AsignarOrganizacionRequest,
+    OrganizacionDetalleResponse,
+    OrganizacionListResponse,
+    OrganizacionResponse,
 )
+from app.services.ml_service import ml_service
 
 # Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -312,13 +315,10 @@ async def eliminar_estudiante(est_id: int, db: DBSession):
     # 4) Resto de tablas que referencian estudiante
     await db.execute(sa_delete(PruebaDiagnostica).where(PruebaDiagnostica.estudiante_id == est_id))
     await db.execute(sa_delete(ResultadoPostTest).where(ResultadoPostTest.estudiante_id == est_id))
-    await db.execute(sa_delete(EstadisticaEstudiante).where(EstadisticaEstudiante.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteError).where(EstudianteError.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteDesbloqueable).where(EstudianteDesbloqueable.estudiante_id == est_id))
     await db.execute(sa_delete(PersonalizacionEstudiante).where(PersonalizacionEstudiante.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteMedalla).where(EstudianteMedalla.estudiante_id == est_id))
-    await db.execute(sa_delete(VideoGuardado).where(VideoGuardado.estudiante_id == est_id))
-    await db.execute(sa_delete(VideoTemporal).where(VideoTemporal.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.estudiante_id == est_id))
     await db.flush()
 
@@ -547,7 +547,12 @@ async def estado_ml(db: DBSession):
     orgs = orgs_result.all()
 
     orgs_con_modelo = [
-        {"id": org.id, "nombre": org.nombre}
+        {
+            "id": org.id,
+            "nombre": org.nombre,
+            # Centroides (unidades originales) y perfil asignado a cada clúster
+            "clusters": ml_service.describir_clusters(org.id),
+        }
         for org in orgs
         if ml_service.has_model_for_org(org.id)
     ]
@@ -555,7 +560,7 @@ async def estado_ml(db: DBSession):
     return {
         "orgs_con_modelo": orgs_con_modelo,
         "total_orgs_entrenadas": len(orgs_con_modelo),
-        "prediccion_entrenado": ml_service.prediccion_model is not None,
+        "prediccion_entrenado": ml_service.prediccion_entrenada,
         "umbrales_por_perfil": {
             perfil.value: umbral
             for perfil, umbral in ml_service.UMBRALES_POR_PERFIL.items()
@@ -566,80 +571,35 @@ async def estado_ml(db: DBSession):
 @router.post("/admin/ml/entrenar", response_model=dict)
 async def entrenar_modelos_ml(db: DBSession):
     """
-    Entrena (o re-entrena) el modelo de clustering K-Means por organización.
-
-    Cada org obtiene su propio modelo entrenado solo con sus estudiantes.
-    Requiere mínimo 10 estudiantes con datos suficientes (≥3 sesiones) por org.
+    Entrena (o re-entrena) los modelos de ML y reclasifica a los estudiantes:
+    - K-means de perfiles de aprendizaje, uno por organización (mín. 10 perfiles con
+      ≥ 3 sesiones por organización).
+    - Regresión logística global de preparación para subir de nivel (mín. 20
+      ejemplos históricos y 3 de cada clase).
+    Los modelos se guardan en la BD para sobrevivir a los reinicios.
     """
-    from collections import defaultdict
+    resultado = await ml_service.entrenar_y_clasificar(db)
 
-    # 1. Cargar todos los perfiles y el org_id de cada estudiante
-    result = await db.execute(select(PerfilEstudiante))
-    perfiles: list[PerfilEstudiante] = list(result.scalars().all())
-
-    est_result = await db.execute(
-        select(Estudiante.id, Estudiante.organizacion_id).where(
-            Estudiante.organizacion_id.isnot(None)
-        )
-    )
-    org_map: dict[int, int] = {row.id: row.organizacion_id for row in est_result}
-
-    # 2. Agrupar por organización
-    perfiles_por_org: dict[int, list] = defaultdict(list)
-    for p in perfiles:
-        oid = org_map.get(p.estudiante_id)
-        if oid:
-            perfiles_por_org[oid].append(p)
-
-    # 3. Entrenar un modelo por organización y persistir en BD
-    orgs_entrenadas = 0
-    for org_id, org_perfiles in perfiles_por_org.items():
-        await asyncio.to_thread(ml_service.entrenar_clustering, org_perfiles, org_id)
-        if ml_service.has_model_for_org(org_id):
-            orgs_entrenadas += 1
-            # Persistir en PostgreSQL para sobrevivir reinicios
-            n_validos = sum(
-                1 for p in org_perfiles if ml_service._tiene_datos_suficientes(p)
-            )
-            await ml_service.save_org_model_to_db(org_id, db, perfiles_entrenados=n_validos)
-
-    if orgs_entrenadas == 0:
-        perfiles_validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
+    if not resultado["orgs_entrenadas"] and not resultado["prediccion_entrenada"]:
         return {
             "success": False,
             "mensaje": (
-                "No hay suficientes perfiles para entrenar ninguna organización. "
-                f"Se necesitan ≥10 por org. Válidos totales: {perfiles_validos}/{len(perfiles)}."
+                "No hay suficientes datos para entrenar. Clustering: se necesitan ≥10 perfiles "
+                f"válidos por org (válidos totales: {resultado['perfiles_validos']}/"
+                f"{resultado['total_perfiles']}). Predicción: "
+                f"{resultado['ejemplos_prediccion']} ejemplos."
             ),
-            "total_perfiles": len(perfiles),
-            "perfiles_validos": perfiles_validos,
+            **resultado,
         }
 
-    # 4. Reclasificar todos usando el modelo de su organización
-    reclasificados = 0
-    ahora = datetime.utcnow()
-    for perfil in perfiles:
-        org_id = org_map.get(perfil.estudiante_id)
-        perfil_ml, confianza = ml_service.predecir_perfil(perfil, org_id)
-        perfil.perfil_aprendizaje = perfil_ml
-        perfil.confianza_perfil = round(confianza, 2)
-        perfil.fecha_ultima_clasificacion = ahora
-        perfil.umbral_promocion_personalizado = ml_service.ajustar_umbral_segun_perfil(perfil)
-        reclasificados += 1
-
-    await db.commit()
-
-    perfiles_validos = sum(1 for p in perfiles if ml_service._tiene_datos_suficientes(p))
     return {
         "success": True,
         "mensaje": (
-            f"{orgs_entrenadas} organización(es) entrenadas. "
-            f"{reclasificados} estudiantes reclasificados."
+            f"{resultado['orgs_entrenadas']} organización(es) entrenadas; predicción "
+            f"{'entrenada' if resultado['prediccion_entrenada'] else 'sin datos suficientes'}. "
+            f"{resultado['reclasificados']} estudiantes reclasificados."
         ),
-        "orgs_entrenadas": orgs_entrenadas,
-        "total_perfiles": len(perfiles),
-        "perfiles_validos": perfiles_validos,
-        "reclasificados": reclasificados,
+        **resultado,
     }
 
 

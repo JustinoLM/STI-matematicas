@@ -40,7 +40,7 @@ export function StudentDashboard() {
     retry: false,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   void colorActivoId; // asegurar re-render al cambiar color (temaActivoId ya se usa arriba)
 
   const cardGlow = {

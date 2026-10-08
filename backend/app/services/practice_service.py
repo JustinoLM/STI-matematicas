@@ -4,30 +4,35 @@ Service para gestión de prácticas e intentos.
 Lógica de negocio para sesiones, progreso y detección de anomalías.
 """
 
+import logging
 import statistics
-from typing import Optional, List, Dict, Tuple
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
+
 from fastapi import HTTPException, status
 
-from app.repositories.practice_repository import PracticeRepository
+from app.models.adaptive import EstadoSesion, SesionPractica, TipoAlerta
+from app.models.problem import TipoSesion
 from app.repositories.adaptive_repository import AdaptiveRepository
+from app.repositories.practice_repository import PracticeRepository
 from app.repositories.problem_repository import ProblemRepository
-from app.models.adaptive import SesionPractica, EstadoSesion, AlertaEstudiante, TipoAlerta
-from app.models.problem import Intento, Problema, TipoSesion
 from app.schemas.practice import (
-    SessionProgressResponse,
-    NextProblemResponse,
-    SubmitProblemResponse,
-    SessionHistoryResponse,
-    SessionHistoryItem,
-    SessionSummaryResponse,
-    ProblemaSummary,
-    GlobalStatsResponse,
-    StatsPerOperation,
     AlertaSospechosa,
-    SuspiciousActivityResponse
+    GlobalStatsResponse,
+    NextProblemResponse,
+    ProblemaSummary,
+    SessionHistoryItem,
+    SessionHistoryResponse,
+    SessionProgressResponse,
+    SessionSummaryResponse,
+    StatsPerOperation,
+    SubmitProblemResponse,
+    SuspiciousActivityResponse,
 )
+from app.services.deteccion_errores_service import DeteccionErroresService
+
+logger = logging.getLogger(__name__)
 
 
 class PracticeService:
@@ -36,6 +41,14 @@ class PracticeService:
     # Constantes
     MAX_INTENTOS_POR_PROBLEMA = 3
     TIMEOUT_HORAS = 4
+
+    # Detección de anomalías
+    UMBRAL_VELOCIDAD_SOSPECHOSA = 3.0      # s/problema promedio con multiplicación o división
+    UMBRAL_VARIANZA_PATRON_PERFECTO = 2.0  # varianza de tiempos de una práctica perfecta
+    MIN_ACIERTOS_PATRON_PERFECTO = 5
+    MIN_SESIONES_REFERENCIA_OUTLIER = 10   # sesiones de la organización para comparar
+    SIGMAS_OUTLIER = 3.0                   # media − 3 desviaciones estándar
+    DIAS_REFERENCIA_OUTLIER = 30
     
     def __init__(
         self,
@@ -330,6 +343,12 @@ class PracticeService:
             sesion_id=sesion_id
         )
         
+        # Tipo de error: se clasifica cada intento incorrecto y se resuelve al acertar
+        if es_correcto:
+            await self._resolver_errores(estudiante_id, problema_id)
+        else:
+            await self._registrar_error(estudiante_id, problema, respuesta_dec)
+
         intentos_restantes = self.MAX_INTENTOS_POR_PROBLEMA - (intentos_previos + 1)
         debe_avanzar = es_correcto or intentos_restantes == 0
         
@@ -652,9 +671,48 @@ class PracticeService:
         return resultado
     
     # ============================================
+    # Tipo de error por intento
+    # ============================================
+
+    async def _registrar_error(self, estudiante_id: int, problema, respuesta: Decimal) -> None:
+        """Clasifica el intento incorrecto y lo guarda. Un fallo aquí no interrumpe la práctica."""
+        try:
+            tipo = DeteccionErroresService.detectar_tipo_error(problema, respuesta)
+            await self.practice_repo.registrar_error_estudiante(
+                estudiante_id=estudiante_id,
+                problema_id=problema.id,
+                codigo_error=tipo.value,
+                nombre_error=DeteccionErroresService.obtener_descripcion_error(tipo),
+                operacion=problema.operacion.value,
+            )
+        except Exception:
+            logger.exception("No se pudo registrar el tipo de error del intento")
+
+    async def _resolver_errores(self, estudiante_id: int, problema_id: int) -> None:
+        try:
+            await self.practice_repo.resolver_errores_problema(estudiante_id, problema_id)
+        except Exception:
+            logger.exception("No se pudo marcar como resueltos los errores del problema")
+
+    # ============================================
     # Detección de Tramposos
     # ============================================
     
+    async def revisar_sesion_completada(self, sesion_id: int) -> List[Dict]:
+        """
+        Revisa una sesión recién completada y registra las alertas que correspondan.
+        Se llama desde /adaptive/practice/complete, después de calcular la velocidad
+        y la precisión de la sesión. Nunca interrumpe la finalización de la práctica.
+        """
+        try:
+            sesion = await self.practice_repo.get_sesion(sesion_id)
+            if not sesion:
+                return []
+            return await self.detectar_anomalias_sesion(sesion)
+        except Exception:
+            logger.exception("Falló la detección de anomalías de la sesión %s", sesion_id)
+            return []
+
     async def detectar_anomalias_sesion(self, sesion: SesionPractica) -> List[Dict]:
         """Detecta anomalías en una sesión completada."""
         if sesion.estado != EstadoSesion.COMPLETADA:
@@ -693,9 +751,9 @@ class PracticeService:
         
         velocidad = float(sesion.velocidad_promedio)
         operaciones = sesion.operaciones_incluidas or {}
-        tiene_mult_o_div = any(op in ["+", "×", "÷"] for op in operaciones.keys())
+        tiene_mult_o_div = any(op in ["×", "÷"] for op in operaciones.keys())
         
-        if tiene_mult_o_div and velocidad < 3.0:
+        if tiene_mult_o_div and velocidad < self.UMBRAL_VELOCIDAD_SOSPECHOSA:
             return {
                 "tipo": "velocidad_sospechosa",
                 "severidad": "warning",
@@ -704,7 +762,7 @@ class PracticeService:
                 "datos": {
                     "velocidad_promedio": velocidad,
                     "operaciones": list(operaciones.keys()),
-                    "umbral_sospechoso": 3.0
+                    "umbral_sospechoso": self.UMBRAL_VELOCIDAD_SOSPECHOSA
                 }
             }
         
@@ -728,12 +786,12 @@ class PracticeService:
         
         tiempos = [i.tiempo_resolucion for i in intentos if i.es_correcto]
         
-        if len(tiempos) < 5:
+        if len(tiempos) < self.MIN_ACIERTOS_PATRON_PERFECTO:
             return None
         
         varianza = statistics.variance(tiempos) if len(tiempos) > 1 else 0
         
-        if varianza < 2.0:
+        if varianza < self.UMBRAL_VARIANZA_PATRON_PERFECTO:
             return {
                 "tipo": "patron_perfecto",
                 "severidad": "critical",
@@ -743,14 +801,52 @@ class PracticeService:
                     "total_problemas": len(tiempos),
                     "varianza_tiempo": varianza,
                     "tiempos": tiempos,
-                    "umbral_sospechoso": 2.0
+                    "umbral_sospechoso": self.UMBRAL_VARIANZA_PATRON_PERFECTO
                 }
             }
         
         return None
     
     async def _detectar_outlier_velocidad(self, sesion: SesionPractica) -> Optional[Dict]:
-        """Detecta si el estudiante es outlier respecto a su grupo."""
+        """
+        Detecta si la velocidad de la sesión es un outlier respecto a la organización:
+        velocidad < media − 3 desviaciones estándar de las sesiones completadas en los
+        últimos DIAS_REFERENCIA_OUTLIER días (mínimo MIN_SESIONES_REFERENCIA_OUTLIER).
+        """
+        if not sesion.velocidad_promedio:
+            return None
+        org_id = await self.practice_repo.get_organizacion_id(sesion.estudiante_id)
+        if not org_id:
+            return None
+
+        desde = datetime.utcnow() - timedelta(days=self.DIAS_REFERENCIA_OUTLIER)
+        velocidades = await self.practice_repo.get_velocidades_sesiones_organizacion(
+            org_id, sesion.id, desde
+        )
+        if len(velocidades) < self.MIN_SESIONES_REFERENCIA_OUTLIER:
+            return None
+
+        media = statistics.mean(velocidades)
+        desviacion = statistics.stdev(velocidades)
+        limite = media - self.SIGMAS_OUTLIER * desviacion
+        velocidad = float(sesion.velocidad_promedio)
+        if desviacion > 0 and velocidad < limite:
+            return {
+                "tipo": "outlier_velocidad",
+                "severidad": "warning",
+                "titulo": "Velocidad atípica respecto al grupo",
+                "mensaje": (
+                    f"Promedio de {velocidad:.1f} seg por problema; el grupo promedia "
+                    f"{media:.1f} seg (límite inferior {max(limite, 0):.1f} seg)"
+                ),
+                "datos": {
+                    "velocidad_promedio": velocidad,
+                    "media_grupo": media,
+                    "desviacion_grupo": desviacion,
+                    "sesiones_referencia": len(velocidades),
+                    "sigmas": self.SIGMAS_OUTLIER,
+                },
+            }
         return None
     
     async def _crear_alerta(self, estudiante_id: int, sesion_id: int, alerta_data: Dict) -> None:
@@ -760,27 +856,20 @@ class PracticeService:
             "patron_perfecto": TipoAlerta.POSIBLE_TRAMPA,
             "outlier_velocidad": TipoAlerta.POSIBLE_TRAMPA
         }
-        
-        perfil = await self.adaptive_repo.get_perfil(estudiante_id)
-        
-        alerta = AlertaEstudiante(
+
+        await self.adaptive_repo.create_alerta(
             estudiante_id=estudiante_id,
-            perfil_id=perfil.estudiante_id if perfil else estudiante_id,
             tipo=tipo_map.get(alerta_data["tipo"], TipoAlerta.POSIBLE_TRAMPA),
-            severidad=alerta_data["severidad"],
             titulo=alerta_data["titulo"],
             mensaje=alerta_data["mensaje"],
+            severidad=alerta_data["severidad"],
             datos_contexto={
                 **alerta_data["datos"],
+                "tipo_deteccion": alerta_data["tipo"],
                 "sesion_id": sesion_id
             },
-            activa=True,
-            leida=False,
-            fecha_creacion=datetime.utcnow()
         )
-        
-        await self.adaptive_repo.create_alerta(alerta)
-    
+
     async def get_suspicious_activity(self, estudiante_id: int) -> SuspiciousActivityResponse:
         """Obtiene todas las alertas de un estudiante."""
         alertas_db = await self.adaptive_repo.get_alertas_activas(estudiante_id)

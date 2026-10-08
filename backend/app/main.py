@@ -6,8 +6,25 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.routers import (
+    adaptive,
+    admin_exports,
+    admin_import,
+    admin_organizations,
+    analisis,
+    animaciones,
+    auth,
+    challenges,
+    enunciados,
+    gamification,
+    hints,
+    mensajes,
+    practices,
+    regla_de_tres,
+    stats,
+    teachers,
+)
 from app.core.config import settings
-from app.api.routers import auth, problems, adaptive, practices, gamification, hints_videos, teachers, admin_organizations, challenges, enunciados, mensajes, analisis, animaciones, stats, admin_exports, regla_de_tres, admin_import
 from app.core.database import AsyncSessionLocal
 from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
@@ -45,11 +62,10 @@ app.add_middleware(
 
 # Registrar routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
-app.include_router(problems.router, prefix="/api/problems", tags=["Problemas"])
 app.include_router(adaptive.router, prefix="/api/adaptive", tags=["Sistema Adaptativo"])
 app.include_router(practices.router, prefix="/api/practices", tags=["Prácticas e Intentos"])
 app.include_router(gamification.router, prefix="/api/gamification", tags=["Gamificación"])
-app.include_router(hints_videos.router, prefix="/api", tags=["Pistas y Videos"])
+app.include_router(hints.router, prefix="/api", tags=["Pistas"])
 app.include_router(teachers.router, prefix="/api/teachers", tags=["Profesores"])
 app.include_router(admin_organizations.router, prefix="/api", tags=["Admin - Organizaciones"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["Desafíos"])
@@ -117,7 +133,7 @@ async def startup_event():
     print("=" * 60)
     print(f"Environment: {settings.ENVIRONMENT}")
     print(f"Debug: {settings.DEBUG}")
-    print(f"API Docs: http://localhost:8000/docs")
+    print("API Docs: http://localhost:8000/docs")
     print("=" * 60)
 
     # Cargar modelos ML desde PostgreSQL (sobreviven reinicios del servidor)

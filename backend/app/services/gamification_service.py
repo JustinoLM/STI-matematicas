@@ -4,36 +4,33 @@ Service para lógica de gamificación.
 Gestiona puntos, medallas, compras y personalización.
 """
 
-from typing import Optional, List, Dict, Tuple
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 from fastapi import HTTPException, status
 
-from app.repositories.gamification_repository import GamificationRepository
-from app.repositories.adaptive_repository import AdaptiveRepository
+from app.models.adaptive import PerfilEstudiante, SesionPractica
 from app.models.gamification import (
     CategoriaDesbloqueable,
-    Desbloqueable,
     Medalla,
-    CategoriaMedalla,
 )
-from app.models.adaptive import SesionPractica, PerfilEstudiante
+from app.repositories.adaptive_repository import AdaptiveRepository
+from app.repositories.gamification_repository import GamificationRepository
 from app.schemas.gamification import (
-    DesbloqueableResponse,
     ComprarItemResponse,
-    TiendaResponse,
-    SaldoPuntosResponse,
-    HistorialPuntosResponse,
-    TransaccionPuntosResponse,
+    DesbloqueableResponse,
     DesglosePuntosResponse,
+    HistorialPuntosResponse,
+    MedallaNuevaResponse,
     MedallaResponse,
     MedallasResponse,
-    MedallaProgresoResponse,
-    MedallasProgresoResponse,
     PersonalizacionResponse,
     RecompensasSesionResponse,
-    MedallaNuevaResponse,
+    SaldoPuntosResponse,
     TemaInicialResponse,
     TemasInicialesResponse,
+    TiendaResponse,
+    TransaccionPuntosResponse,
 )
 
 
@@ -443,6 +440,7 @@ class GamificationService:
     async def set_medalla_destacada(self, estudiante_id: int, medalla_id: Optional[int]) -> None:
         """Establece la medalla destacada en el dashboard del estudiante."""
         from sqlalchemy import select
+
         from app.models.gamification import PersonalizacionEstudiante
 
         result = await self.gamification_repo.db.execute(
@@ -552,10 +550,10 @@ class GamificationService:
             return total_problemas >= cantidad_req
         
         elif tipo == "exploracion_temas":
-            # Completar práctica con cada tema
+            # Completar al menos una práctica con cada tema narrativo
             temas_req = criterio.get("temas_requeridos", 6)
-            # TODO: Implementar cuando tengamos tracking de temas por sesión
-            return False
+            practicados = await self.adaptive_repo.contar_temas_narrativos_practicados(estudiante_id)
+            return practicados >= temas_req
         
         elif tipo == "racha":
             # Mejor racha histórica de sesiones perfectas consecutivas
@@ -570,8 +568,10 @@ class GamificationService:
             return len(items_poseidos) >= cantidad_req
 
         elif tipo == "desafio_grupal":
-            # Participar en desafíos (preparado para futuro)
-            return False
+            # Desafíos grupales completados por su grupo en los que participó
+            cantidad_req = criterio.get("cantidad", 1)
+            participados = await self.adaptive_repo.contar_desafios_grupales_participados(estudiante_id)
+            return participados >= cantidad_req
 
         return False
     

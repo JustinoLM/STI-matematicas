@@ -14,33 +14,29 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from fastapi.security import OAuth2PasswordRequestForm
 
+from app.api.dependencies import (
+    AuthServiceDep,
+    CurrentStudent,
+    CurrentTeacher,
+    CurrentUser,
+    require_admin,
+)
 from app.core.config import settings
 from app.core.security import create_admin_token
-from app.api.dependencies import (
-    require_admin,
-    get_current_active_user,
-    get_current_student,
-    get_current_teacher,
-    AuthServiceDep,
-    CurrentUser,
-    CurrentStudent,
-    CurrentTeacher
-)
 from app.schemas.auth import (
-    LoginRequest,
-    CreateStudentRequest,
-    CreateTeacherRequest,
-    TokenResponse,
-    StudentResponse,
-    TeacherResponse,
-    ChangePasswordRequest,
-    MessageResponse,
-    UserBase,
+    BulkImportResult,
     BulkImportStudentsRequest,
     BulkImportTeachersRequest,
-    BulkImportResult,
+    ChangePasswordRequest,
+    CreateStudentRequest,
+    CreateTeacherRequest,
+    LoginRequest,
+    MessageResponse,
+    StudentResponse,
+    TeacherResponse,
+    TokenResponse,
+    UserBase,
 )
 
 router = APIRouter()

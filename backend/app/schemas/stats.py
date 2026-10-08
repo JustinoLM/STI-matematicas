@@ -5,7 +5,8 @@ Incluye datos por estudiante, distribución de perfiles ML,
 alertas activas y respuesta de análisis IA.
 """
 
-from typing import List, Optional
+from typing import List
+
 from pydantic import BaseModel
 
 

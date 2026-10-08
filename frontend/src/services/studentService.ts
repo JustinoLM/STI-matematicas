@@ -157,38 +157,6 @@ export interface ColeccionAnimacionesResponse {
   maximo: number;
 }
 
-// ─── Tipos de videos ──────────────────────────────────────────────────────────
-
-export interface VideoEducativoResponse {
-  id: number;
-  titulo: string;
-  descripcion: string | null;
-  duracion_segundos: number;
-  url: string;
-  thumbnail_url: string | null;
-  fuente: string;           // "youtube" | "generado"
-  tipo_error: string;
-  operacion: string;
-  nivel_dificultad: number;
-  guardado: boolean;
-  fecha_guardado: string | null;
-  visto: boolean;
-  progreso_segundos: number;
-}
-
-export interface GaleriaVideosResponse {
-  total: number;
-  maximo: number;           // 10
-  videos: VideoEducativoResponse[];
-}
-
-export interface GuardarVideoResponse {
-  exito: boolean;
-  mensaje: string;
-  videos_guardados_total: number;
-  video_eliminado: VideoEducativoResponse | null;
-}
-
 // ─── Servicio ────────────────────────────────────────────────────────────────
 
 export const studentService = {
@@ -570,6 +538,20 @@ export const studentService = {
     }
   },
 
+  async getPistasDisponibles(
+    sesionId: number,
+    problemaId: number
+  ): Promise<{ niveles_disponibles: number[]; niveles_usados: number[] }> {
+    try {
+      const response = await apiClient.get('/hints/available', {
+        params: { sesion_id: sesionId, problema_id: problemaId },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
   // ── Animaciones guardadas ──────────────────────────────────────────────────
 
   async guardarAnimacion(
@@ -605,42 +587,6 @@ export const studentService = {
   async eliminarAnimacion(id: number): Promise<void> {
     try {
       await apiClient.delete(`/animaciones/${id}`);
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
-    }
-  },
-
-  // ── Videos educativos ───────────────────────────────────────────────────────
-
-  async getGaleriaVideos(): Promise<GaleriaVideosResponse> {
-    try {
-      const response = await apiClient.get<GaleriaVideosResponse>('/videos/gallery');
-      return response.data;
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
-    }
-  },
-
-  async guardarVideo(videoId: number): Promise<GuardarVideoResponse> {
-    try {
-      const response = await apiClient.post<GuardarVideoResponse>(`/videos/${videoId}/save`);
-      return response.data;
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
-    }
-  },
-
-  async actualizarProgresoVideo(
-    videoId: number,
-    progresoSegundos: number,
-    completo: boolean = false
-  ): Promise<void> {
-    try {
-      await apiClient.put(`/videos/${videoId}/progress`, {
-        video_id: videoId,
-        progreso_segundos: progresoSegundos,
-        completo,
-      });
     } catch (error) {
       throw new Error(getErrorMessage(error));
     }

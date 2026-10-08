@@ -1,26 +1,35 @@
 """
 Service de Machine Learning para sistema adaptativo.
 
-Implementa clustering de perfiles y predicción de preparación.
+Implementa clustering de perfiles (K-means por organización) y predicción de
+preparación para subir de nivel (regresión logística global).
 
 Persistencia: los modelos entrenados se guardan como bytes (pickle) en la
 tabla `modelo_ml` de PostgreSQL para sobrevivir reinicios del servidor
 (Railway recrea el filesystem en cada deploy).
 """
 
+import asyncio
+import bisect
 import pickle
+from collections import defaultdict
 from datetime import datetime
+from itertools import permutations
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import silhouette_score
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.adaptive import PerfilAprendizaje, PerfilEstudiante
+from app.models.adaptive import EstadoSesion, PerfilAprendizaje, PerfilEstudiante, SesionPractica
 from app.models.ml_model import ModeloML
+from app.models.problem import Intento
+from app.models.user import Estudiante
 
 
 class MLService:
@@ -29,19 +38,24 @@ class MLService:
 
     Componentes:
     1. Clustering de perfiles (K-means, k=4) — entrenado por organización
-    2. Predicción de preparación (Regresión Logística) — global
+    2. Predicción de preparación (Regresión Logística) — global, entrenada con el
+       histórico de sesiones (ver `construir_historico`)
 
     Los modelos residen en memoria (_org_models, prediccion_model).
     Se persisten en PostgreSQL y se recargan en el startup del servidor.
     """
 
-    # Perfiles identificados por clustering
-    PERFILES = {
-        0: PerfilAprendizaje.RAPIDO_PRECISO,
-        1: PerfilAprendizaje.CUIDADOSO_METODICO,
-        2: PerfilAprendizaje.IMPULSIVO,
-        3: PerfilAprendizaje.EN_DESARROLLO,
-    }
+    # Perfiles que se asignan a los 4 clústeres. El número de clúster que
+    # devuelve K-means es arbitrario (depende de la inicialización), así que la
+    # correspondencia clúster → perfil se calcula a partir de los centroides
+    # (ver `_asignar_perfiles_a_clusters`), no de un diccionario fijo.
+    N_CLUSTERS = 4
+    PERFILES_ORDEN = (
+        PerfilAprendizaje.RAPIDO_PRECISO,
+        PerfilAprendizaje.CUIDADOSO_METODICO,
+        PerfilAprendizaje.IMPULSIVO,
+        PerfilAprendizaje.EN_DESARROLLO,
+    )
 
     # Umbrales personalizados por perfil
     UMBRALES_POR_PERFIL = {
@@ -55,7 +69,7 @@ class MLService:
     def __init__(self):
         # Modelos por organización: {org_id: (KMeans, StandardScaler)}
         self._org_models: Dict[int, tuple] = {}
-        self.prediccion_model: Optional[LogisticRegression] = None
+        self.prediccion_model: Optional[Pipeline] = None
 
     # ============================================================
     # Clustering de Perfiles (por organización)
@@ -101,7 +115,7 @@ class MLService:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        modelo = KMeans(n_clusters=4, random_state=42, n_init=10)
+        modelo = KMeans(n_clusters=self.N_CLUSTERS, random_state=42, n_init=10)
         modelo.fit(X_scaled)
 
         # Guardar en memoria
@@ -142,9 +156,98 @@ class MLService:
         confianza = (
             1.0 - (distancia_min / distancia_max) if distancia_max > 0 else 1.0
         )
-        perfil_aprendizaje = self.PERFILES.get(cluster, PerfilAprendizaje.NO_CLASIFICADO)
+        perfil_aprendizaje = self._asignar_perfiles_a_clusters(modelo).get(
+            int(cluster), PerfilAprendizaje.NO_CLASIFICADO
+        )
 
         return perfil_aprendizaje, confianza
+
+    def _asignar_perfiles_a_clusters(self, modelo: KMeans) -> Dict[int, PerfilAprendizaje]:
+        """
+        Asigna un perfil de aprendizaje a cada clúster interpretando sus centroides.
+
+        Los centroides están en el espacio estandarizado de las features
+        [velocidad, precisión, varianza, log(sesiones), nivel]. Con z_prec (precisión)
+        y z_vel (tiempo por problema, mayor = más lento):
+
+        - Rápido y preciso:     precisión alta, tiempo bajo   → z_prec − z_vel
+        - Cuidadoso y metódico: precisión alta, tiempo alto   → z_prec + z_vel
+        - Impulsivo:            precisión baja, tiempo bajo   → −z_prec − z_vel
+        - En desarrollo:        precisión baja, tiempo alto   → −z_prec + z_vel
+
+        Se elige la asignación uno a uno (clúster ↔ perfil) que maximiza la suma
+        de puntajes; con 4 clústeres se prueban las 24 permutaciones. El resultado
+        depende solo de los centroides, no del número arbitrario de cada clúster.
+        """
+        centros = np.asarray(modelo.cluster_centers_)
+        if centros.shape[0] != len(self.PERFILES_ORDEN):
+            return {}
+        z_vel = centros[:, 0]
+        z_prec = centros[:, 1]
+        puntajes = np.column_stack(
+            [z_prec - z_vel, z_prec + z_vel, -z_prec - z_vel, -z_prec + z_vel]
+        )
+        mejor = max(
+            permutations(range(len(self.PERFILES_ORDEN))),
+            key=lambda perm: sum(puntajes[c, perm[c]] for c in range(len(perm))),
+        )
+        return {c: self.PERFILES_ORDEN[mejor[c]] for c in range(len(mejor))}
+
+    def describir_clusters(self, org_id: int) -> List[Dict]:
+        """Centroides (en unidades originales) y perfil asignado a cada clúster de una org."""
+        modelo, scaler = self._get_org_model(org_id)
+        if modelo is None or scaler is None:
+            return []
+        asignacion = self._asignar_perfiles_a_clusters(modelo)
+        centros = scaler.inverse_transform(modelo.cluster_centers_)
+        return [
+            {
+                "cluster": c,
+                "perfil": asignacion.get(c, PerfilAprendizaje.NO_CLASIFICADO).value,
+                "velocidad_promedio": float(fila[0]),
+                "precision": float(fila[1]),
+                "desviacion_velocidad": float(fila[2]),
+                "sesiones": float(np.expm1(fila[3])),
+                "nivel_actual": float(fila[4]),
+            }
+            for c, fila in enumerate(centros)
+        ]
+
+    def evaluar_k(
+        self,
+        estudiantes: List[PerfilEstudiante],
+        k_min: int = 3,
+        k_max: int = 6,
+    ) -> List[Dict]:
+        """
+        Evalúa distintos valores de k con las mismas features y normalización
+        que el entrenamiento. Devuelve, por cada k válido, la inercia (método del
+        codo) y el coeficiente de silueta. No modifica ningún modelo.
+
+        Un k solo es válido si hay más muestras que clústeres (la silueta lo exige).
+        """
+        features = [
+            self._extraer_features_perfil(p)
+            for p in estudiantes
+            if self._tiene_datos_suficientes(p)
+        ]
+        if len(features) < 2:
+            return []
+        X_scaled = StandardScaler().fit_transform(np.array(features))
+        resultados = []
+        for k in range(k_min, k_max + 1):
+            if len(features) <= k:
+                continue
+            km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X_scaled)
+            resultados.append(
+                {
+                    "k": k,
+                    "muestras": len(features),
+                    "inercia": float(km.inertia_),
+                    "silueta": float(silhouette_score(X_scaled, km.labels_)),
+                }
+            )
+        return resultados
 
     def _extraer_features_perfil(self, perfil: PerfilEstudiante) -> List[float]:
         """
@@ -201,51 +304,169 @@ class MLService:
             return PerfilAprendizaje.EN_DESARROLLO, 0.55
 
     # ============================================================
-    # Predicción de Preparación
+    # Predicción de Preparación (regresión logística)
     # ============================================================
 
-    def entrenar_prediccion(self, historico: List[Dict]) -> None:
+    # Definición de "éxito": el estudiante sube de nivel (nivel general o de
+    # alguna operación) en la sesión actual o en alguna de las siguientes
+    # VENTANA_EXITO_SESIONES - 1 sesiones completadas.
+    VENTANA_EXITO_SESIONES = 3
+    MIN_EJEMPLOS_PREDICCION = 20
+    MIN_EJEMPLOS_POR_CLASE = 3
+    FEATURES_PREDICCION = (
+        "nivel_actual",
+        "precision",
+        "velocidad",
+        "sesiones_en_nivel",
+        "perfectas_consecutivas",
+        "dias_desde_promocion",
+    )
+
+    @property
+    def prediccion_entrenada(self) -> bool:
+        return self.prediccion_model is not None
+
+    @staticmethod
+    def _hubo_subida(cambios_nivel) -> bool:
+        """True si el registro `cambios_nivel` de una sesión contiene alguna subida."""
+        if not cambios_nivel:
+            return False
+        return any(
+            isinstance(c, dict) and c.get("despues", 0) > c.get("antes", 0)
+            for c in cambios_nivel.values()
+        )
+
+    def _ejemplos_de_estudiante(self, sesiones: List, intentos: List[Tuple]) -> List[Dict]:
         """
-        Entrena modelo de predicción de preparación.
+        Construye los ejemplos de entrenamiento de un estudiante.
 
         Args:
-            historico: Lista de ejemplos históricos con estructura:
-                {
-                    'nivel_actual': int,
-                    'consecutivas': int,
-                    'precision': float,
-                    'velocidad': float,
-                    'sesiones_en_nivel': int,
-                    'dias_desde_promocion': int,
-                    'exito': bool  # Target
-                }
+            sesiones: sesiones completadas, de la más antigua a la más reciente.
+                Cada una con `nivel_actual_inicio`, `fecha_inicio`,
+                `es_practica_perfecta` y `cambios_nivel`.
+            intentos: tuplas (timestamp, es_correcto, tiempo_resolucion) ordenadas.
+
+        Cada sesión k ≥ 1 es un ejemplo cuyas features describen al estudiante
+        ANTES de empezarla. La etiqueta `exito` es 1 si hubo una subida de nivel
+        en las sesiones k..k+VENTANA-1; es 0 solo si esa ventana está completa
+        (así no se etiqueta como fracaso a quien aún no tuvo tiempo de subir).
         """
-        if len(historico) < 20:
-            print(f"⚠️  Insuficientes datos históricos: {len(historico)}/20")
-            return
+        n = len(sesiones)
+        subidas = [self._hubo_subida(s.cambios_nivel) for s in sesiones]
+        marcas = [i[0] for i in intentos]
+        ejemplos: List[Dict] = []
 
-        X = []
-        y = []
+        inicio_racha_nivel = 0   # índice de la primera sesión del nivel_actual vigente
+        perfectas = 0            # racha de prácticas perfectas antes de la sesión k
+        for k, sesion in enumerate(sesiones):
+            if k > 0:
+                if sesion.nivel_actual_inicio != sesiones[k - 1].nivel_actual_inicio:
+                    inicio_racha_nivel = k
+                perfectas = perfectas + 1 if sesiones[k - 1].es_practica_perfecta else 0
+            if k == 0:
+                continue
 
-        for ejemplo in historico:
-            features = [
-                ejemplo["nivel_actual"],
-                ejemplo["consecutivas"],
-                ejemplo["precision"],
-                ejemplo["velocidad"],
-                ejemplo["sesiones_en_nivel"],
-                ejemplo["dias_desde_promocion"],
+            previos = intentos[: bisect.bisect_left(marcas, sesion.fecha_inicio)]
+            ult15 = previos[-15:]
+            ult20 = previos[-20:]
+            precision = (
+                sum(1 for _, ok, _ in ult15 if ok) / len(ult15) if ult15 else 0.5
+            )
+            velocidad = (
+                sum(t for _, _, t in ult20) / len(ult20) if ult20 else 30.0
+            )
+            dias = max((sesion.fecha_inicio - sesiones[inicio_racha_nivel].fecha_inicio).days, 0)
+
+            ventana = subidas[k : k + self.VENTANA_EXITO_SESIONES]
+            if any(ventana):
+                exito = True
+            elif k + self.VENTANA_EXITO_SESIONES <= n:
+                exito = False
+            else:
+                continue  # ventana incompleta y sin subida: no se puede etiquetar
+
+            ejemplos.append(
+                {
+                    "nivel_actual": int(sesion.nivel_actual_inicio or 1),
+                    "precision": float(precision),
+                    "velocidad": float(velocidad),
+                    "sesiones_en_nivel": k - inicio_racha_nivel,
+                    "perfectas_consecutivas": perfectas,
+                    "dias_desde_promocion": dias,
+                    "exito": exito,
+                }
+            )
+        return ejemplos
+
+    async def construir_historico(self, session: AsyncSession) -> List[Dict]:
+        """Reconstruye, desde las sesiones e intentos guardados, el histórico de entrenamiento."""
+        sesiones_res = await session.execute(
+            select(SesionPractica)
+            .where(
+                SesionPractica.estado == EstadoSesion.COMPLETADA,
+                SesionPractica.fecha_fin.isnot(None),
+            )
+            .order_by(SesionPractica.estudiante_id, SesionPractica.fecha_inicio)
+        )
+        intentos_res = await session.execute(
+            select(
+                Intento.estudiante_id,
+                Intento.timestamp,
+                Intento.es_correcto,
+                Intento.tiempo_resolucion,
+            ).order_by(Intento.estudiante_id, Intento.timestamp)
+        )
+
+        sesiones_por_est: Dict[int, List] = defaultdict(list)
+        for sesion in sesiones_res.scalars().all():
+            sesiones_por_est[sesion.estudiante_id].append(sesion)
+        intentos_por_est: Dict[int, List[Tuple]] = defaultdict(list)
+        for est_id, ts, ok, t in intentos_res.all():
+            intentos_por_est[est_id].append((ts, bool(ok), t or 0))
+
+        historico: List[Dict] = []
+        for est_id, sesiones in sesiones_por_est.items():
+            historico.extend(self._ejemplos_de_estudiante(sesiones, intentos_por_est.get(est_id, [])))
+        return historico
+
+    def entrenar_prediccion(self, historico: List[Dict]) -> bool:
+        """
+        Entrena la regresión logística global de preparación para subir de nivel.
+
+        Requiere al menos MIN_EJEMPLOS_PREDICCION ejemplos y MIN_EJEMPLOS_POR_CLASE
+        de cada clase (éxito / no éxito). Las features se estandarizan dentro de un
+        Pipeline y las clases se balancean, porque las subidas son menos frecuentes
+        que las sesiones sin subida.
+
+        Returns:
+            True si se entrenó un modelo nuevo.
+        """
+        positivos = sum(1 for e in historico if e["exito"])
+        negativos = len(historico) - positivos
+        if (
+            len(historico) < self.MIN_EJEMPLOS_PREDICCION
+            or min(positivos, negativos) < self.MIN_EJEMPLOS_POR_CLASE
+        ):
+            print(
+                f"⚠️  Predicción: datos insuficientes ({len(historico)} ejemplos, "
+                f"{positivos} con éxito y {negativos} sin éxito)."
+            )
+            return False
+
+        X = np.array([[e[f] for f in self.FEATURES_PREDICCION] for e in historico], dtype=float)
+        y = np.array([1 if e["exito"] else 0 for e in historico])
+
+        self.prediccion_model = Pipeline(
+            [
+                ("escala", StandardScaler()),
+                (
+                    "logistica",
+                    LogisticRegression(random_state=42, max_iter=1000, class_weight="balanced"),
+                ),
             ]
-            X.append(features)
-            y.append(1 if ejemplo["exito"] else 0)
-
-        X = np.array(X)
-        y = np.array(y)
-
-        self.prediccion_model = LogisticRegression(random_state=42, max_iter=1000)
-        self.prediccion_model.fit(X, y)
-
-        print(f"✅ Predicción entrenada con {len(historico)} ejemplos")
+        ).fit(X, y)
+        print(f"✅ Predicción entrenada con {len(historico)} ejemplos ({positivos} con éxito)")
+        return True
 
     def predecir_exito_nivel_siguiente(
         self,
@@ -253,31 +474,28 @@ class MLService:
         dias_desde_promocion: int,
     ) -> float:
         """
-        Predice probabilidad de éxito en siguiente nivel.
-
-        Returns:
-            Probabilidad entre 0.0 y 1.0
+        Probabilidad (0-1) de que el estudiante suba de nivel en las próximas
+        VENTANA_EXITO_SESIONES sesiones. Con el modelo entrenado usa la regresión
+        logística; si aún no hay modelo, la heurística de respaldo.
         """
         if not self.prediccion_model:
             return self._heuristica_exito(perfil)
 
-        features = [
-            perfil.nivel_actual,
-            perfil.consecutivas_correctas_suma,
-            float(perfil.precision_ultimos_15 or 0.5),
-            float(perfil.velocidad_promedio or 30.0),
-            perfil.sesiones_en_nivel_actual,
-            dias_desde_promocion,
-        ]
-
-        X = np.array([features])
-        probabilidad = self.prediccion_model.predict_proba(X)[0][1]
-        return probabilidad
+        features = {
+            "nivel_actual": perfil.nivel_actual,
+            "precision": float(perfil.precision_ultimos_15 or 0.5),
+            "velocidad": float(perfil.velocidad_promedio or 30.0),
+            "sesiones_en_nivel": perfil.sesiones_en_nivel_actual or 0,
+            "perfectas_consecutivas": perfil.practicas_perfectas_consecutivas or 0,
+            "dias_desde_promocion": dias_desde_promocion,
+        }
+        X = np.array([[features[f] for f in self.FEATURES_PREDICCION]], dtype=float)
+        return float(self.prediccion_model.predict_proba(X)[0][1])
 
     def _heuristica_exito(self, perfil: PerfilEstudiante) -> float:
         """Heurística simple cuando no hay modelo entrenado."""
         precision = float(perfil.precision_ultimos_15 or 0.5)
-        sesiones = perfil.sesiones_en_nivel_actual
+        sesiones = perfil.sesiones_en_nivel_actual or 0
 
         prob_base = precision
         if sesiones >= 5:
@@ -288,35 +506,73 @@ class MLService:
         return min(prob_base, 1.0)
 
     # ============================================================
+    # Entrenamiento completo (job diario y endpoint de administración)
+    # ============================================================
+
+    async def entrenar_y_clasificar(self, db: AsyncSession) -> Dict:
+        """
+        Entrena y guarda en la BD: el K-means de cada organización y la regresión
+        logística global; luego reclasifica a todos los estudiantes. Hace commit.
+        """
+        perfiles = list((await db.execute(select(PerfilEstudiante))).scalars().all())
+        org_map: Dict[int, int] = {
+            row.id: row.organizacion_id
+            for row in await db.execute(
+                select(Estudiante.id, Estudiante.organizacion_id).where(
+                    Estudiante.organizacion_id.isnot(None)
+                )
+            )
+        }
+        perfiles_por_org: Dict[int, List] = defaultdict(list)
+        for p in perfiles:
+            org_id = org_map.get(p.estudiante_id)
+            if org_id:
+                perfiles_por_org[org_id].append(p)
+
+        # 1. K-means por organización
+        orgs_entrenadas = 0
+        for org_id, org_perfiles in perfiles_por_org.items():
+            await asyncio.to_thread(self.entrenar_clustering, org_perfiles, org_id)
+            if self.has_model_for_org(org_id):
+                orgs_entrenadas += 1
+                n_validos = sum(1 for p in org_perfiles if self._tiene_datos_suficientes(p))
+                await self.save_org_model_to_db(org_id, db, perfiles_entrenados=n_validos)
+
+        # 2. Regresión logística global
+        historico = await self.construir_historico(db)
+        prediccion_entrenada = await asyncio.to_thread(self.entrenar_prediccion, historico)
+        if prediccion_entrenada:
+            await self.save_prediccion_to_db(db)
+
+        # 3. Reclasificar a todos con el modelo de su organización
+        reclasificados = 0
+        if orgs_entrenadas:
+            ahora = datetime.utcnow()
+            for perfil in perfiles:
+                perfil_ml, confianza = self.predecir_perfil(perfil, org_map.get(perfil.estudiante_id))
+                perfil.perfil_aprendizaje = perfil_ml
+                perfil.confianza_perfil = round(confianza, 2)
+                perfil.fecha_ultima_clasificacion = ahora
+                perfil.umbral_promocion_personalizado = self.ajustar_umbral_segun_perfil(perfil)
+                reclasificados += 1
+
+        await db.commit()
+        return {
+            "orgs_entrenadas": orgs_entrenadas,
+            "total_perfiles": len(perfiles),
+            "perfiles_validos": sum(1 for p in perfiles if self._tiene_datos_suficientes(p)),
+            "reclasificados": reclasificados,
+            "ejemplos_prediccion": len(historico),
+            "prediccion_entrenada": prediccion_entrenada,
+        }
+
+    # ============================================================
     # Personalización de Umbrales
     # ============================================================
 
     def ajustar_umbral_segun_perfil(self, perfil: PerfilEstudiante) -> int:
         """Retorna umbral personalizado según perfil ML."""
         return self.UMBRALES_POR_PERFIL.get(perfil.perfil_aprendizaje, 10)
-
-    def calcular_umbral_dinamico(
-        self,
-        perfil: PerfilEstudiante,
-        percentil_velocidad: Optional[int] = None,
-    ) -> int:
-        """
-        Calcula umbral dinámico combinando perfil ML y percentil de grupo.
-
-        Returns:
-            Umbral personalizado (3-15)
-        """
-        umbral_base = self.ajustar_umbral_segun_perfil(perfil)
-
-        if percentil_velocidad is not None:
-            if percentil_velocidad >= 90:
-                return 3
-            elif percentil_velocidad >= 80:
-                return 5
-            elif percentil_velocidad >= 70:
-                return 7
-
-        return umbral_base
 
     # ============================================================
     # Persistencia en PostgreSQL (métodos async)
@@ -363,36 +619,6 @@ class MLService:
 
         await session.flush()
         print(f"✅ Org {org_id}: Clustering guardado en BD")
-
-    async def load_org_model_from_db(
-        self, org_id: int, session: AsyncSession
-    ) -> bool:
-        """
-        Carga el modelo de clustering de una org desde PostgreSQL a memoria.
-
-        Returns:
-            True si se cargó correctamente, False si no había fila.
-        """
-        result = await session.execute(
-            select(ModeloML).where(
-                ModeloML.nombre == "clustering",
-                ModeloML.org_id == org_id,
-            )
-        )
-        fila = result.scalar_one_or_none()
-
-        if not fila:
-            return False
-
-        try:
-            modelo = pickle.loads(fila.modelo_bytes)
-            scaler = pickle.loads(fila.scaler_bytes)
-            self._org_models[org_id] = (modelo, scaler)
-            print(f"✅ Org {org_id}: Clustering cargado desde BD")
-            return True
-        except Exception as e:
-            print(f"⚠️  Error deserializando clustering org {org_id}: {e}")
-            return False
 
     async def save_prediccion_to_db(self, session: AsyncSession) -> None:
         """Persiste el modelo global de predicción en PostgreSQL."""

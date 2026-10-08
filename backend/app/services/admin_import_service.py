@@ -15,31 +15,30 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from openpyxl.worksheet.worksheet import Worksheet
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
-from app.models.organization import Organizacion
-from app.models.user import Estudiante, TipoUsuario
 from app.models.adaptive import (
+    EstadoDiagnostico,
+    EstadoSesion,
     PerfilEstudiante,
     PruebaDiagnostica,
     ResultadoPostTest,
     SesionPractica,
-    EstadoDiagnostico,
-    EstadoSesion,
 )
 from app.models.gamification import (
-    Medalla,
-    EstudianteMedalla,
     Desbloqueable,
     EstudianteDesbloqueable,
-    TransaccionPuntos,
+    EstudianteMedalla,
+    Medalla,
     TipoTransaccion,
+    TransaccionPuntos,
 )
-from app.schemas.admin_import import ImportResumen, ConteoHoja
-
+from app.models.organization import Organizacion
+from app.models.user import Estudiante, TipoUsuario
+from app.schemas.admin_import import ConteoHoja, ImportResumen
 
 # ============================================
 # Utilidades de parseo (columnas planas -> tipos Python)

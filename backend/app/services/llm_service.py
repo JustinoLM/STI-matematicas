@@ -1,14 +1,14 @@
 """
 Service para comunicación con DeepSeek API.
 
-Reemplaza ollama_service.py — usa DeepSeek API directamente (compatible con OpenAI).
+Usa la API de DeepSeek directamente (compatible con OpenAI).
 - V3 (deepseek-chat): mensajes, enunciados, motivación
 - R1 (deepseek-reasoner): análisis post-práctica
 """
 
+from typing import Dict, Optional
+
 import httpx
-import time
-from typing import Optional, Dict
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -25,6 +25,8 @@ class LLMService:
         self.model = self.model_v3                       # alias por compatibilidad
         self.timeout = 60
         self._client: Optional[httpx.AsyncClient] = None
+        # Tokens totales (prompt + respuesta) de la última llamada exitosa
+        self.ultimo_total_tokens: Optional[int] = None
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -83,6 +85,7 @@ class LLMService:
             )
             response.raise_for_status()
             data = response.json()
+            self.ultimo_total_tokens = (data.get("usage") or {}).get("total_tokens")
             return data["choices"][0]["message"]["content"]
 
         except httpx.TimeoutException:
@@ -106,27 +109,6 @@ class LLMService:
                 detail=f"Error inesperado con LLM: {str(e)}",
             )
 
-    async def check_health(self) -> Dict:
-        """Verifica que la API de DeepSeek esté disponible."""
-        try:
-            # Llamada mínima para verificar conectividad
-            await self.generate(
-                prompt="Responde solo 'ok'",
-                max_tokens=5,
-            )
-            return {
-                "status": "healthy",
-                "provider": "deepseek",
-                "model_v3": self.model_v3,
-                "model_r1": self.model_r1,
-            }
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "provider": "deepseek",
-                "error": str(e),
-            }
-
     async def close(self):
         """Cierra el cliente HTTP."""
         if self._client and not self._client.is_closed:
@@ -148,15 +130,27 @@ class LLMPrompts:
         operando1: float,
         operando2: float,
         resultado: float,
-        respuesta_incorrecta: float,
+        respuesta_incorrecta: Optional[float] = None,
+        respuestas_previas: Optional[list] = None,
+        tipo_error: Optional[str] = None,
     ) -> str:
         """Prompt para generar pista nivel 3 — V3."""
+        contexto = ""
+        if respuestas_previas:
+            lista = ", ".join(str(r) for r in respuestas_previas)
+            contexto += f"\nRespuestas incorrectas que ya intentó (de la más antigua a la más reciente): {lista}"
+        elif respuesta_incorrecta is not None:
+            contexto += f"\nLa respuesta del estudiante fue: {respuesta_incorrecta}"
+        if tipo_error:
+            contexto += f"\nTipo de error más probable en su último intento: {tipo_error}"
+        if not contexto:
+            contexto = "\nTodavía no ha enviado ninguna respuesta."
+
         return f"""Eres un tutor de matemáticas para niños de 5to grado (10-11 años).
 
 Un estudiante está resolviendo: {operando1} {operacion} {operando2}
 
-La respuesta correcta es: {resultado}
-La respuesta del estudiante fue: {respuesta_incorrecta}
+La respuesta correcta es: {resultado}{contexto}
 
 Tu tarea: Genera una pista que casi revele la respuesta pero sin darla directamente.
 
@@ -164,6 +158,7 @@ Reglas:
 - Máximo 2-3 oraciones
 - Usa lenguaje simple para niños de 10-11 años
 - No uses la palabra "respuesta correcta" ni reveles el número exacto
+- Si conoces el tipo de error, oriéntala a corregir justo ese error
 - Guía hacia el proceso correcto
 - Sé alentador y positivo
 
@@ -298,41 +293,6 @@ Ejemplo del estilo buscado (tema piratas, suma):
 "El Capitán Barbanegra encontró un cofre con {operando1} monedas de oro en la isla del tesoro. Su tripulación capturó otro barco con {operando2} monedas más. ¿Cuántas monedas tienen en total?"
 
 Genera SOLO el enunciado narrativo (sin comillas ni explicaciones):"""
-
-    @classmethod
-    def generar_multiples_variaciones(
-        cls,
-        operacion: str,
-        operando1: float,
-        operando2: float,
-        tema: str,
-        num_variaciones: int = 3,
-    ) -> str:
-        """Prompt para generar múltiples variaciones a la vez — V3."""
-        config = cls._buscar_config_tema(tema)
-        vocab_str = ", ".join(config["objetos"][:4])
-
-        return f"""Genera {num_variaciones} enunciados narrativos DIFERENTES para este problema matemático:
-
-Tema: {config['nombre']} — {config['contexto']}
-Operación: {operacion} con los números {operando1} y {operando2}
-Vocabulario clave: {vocab_str}
-
-Reglas:
-- Cada enunciado debe ser ÚNICO (diferente personaje, situación o lugar)
-- Máximo 2 oraciones cada uno, termina con pregunta
-- Usa los números exactos {operando1} y {operando2}
-- NO menciones la operación directamente
-- Lenguaje sencillo para niños de 10-11 años
-
-Formato ESTRICTO:
-VARIACION_1: [enunciado]
-VARIACION_2: [enunciado]
-VARIACION_3: [enunciado]
-
-Genera ahora:"""
-
-    # ── Mensajes motivacionales ──────────────────────────────────────────────
 
     @classmethod
     def mensaje_motivacional_dashboard(

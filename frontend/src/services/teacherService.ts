@@ -272,15 +272,6 @@ export const teacherService = {
   /**
    * Buscar estudiantes por nombre o código.
    */
-  async buscarEstudiantes(query: string): Promise<any[]> {
-    try {
-      const response = await apiClient.post('/teachers/students/search', { query });
-      return response.data;
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
-    }
-  },
-
   /**
    * Obtener progreso detallado de un estudiante (legacy).
    */

@@ -4,13 +4,16 @@ Repository para operaciones de gestión de prácticas.
 Gestiona sesiones, progreso, historial y estadísticas.
 """
 
-from typing import Optional, List, Dict
-from sqlalchemy import select, func, and_, or_, desc, case, distinct
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante
+from sqlalchemy import and_, case, desc, distinct, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.adaptive import EstadoSesion, SesionPractica
+from app.models.error import ErrorComun, EstudianteError
 from app.models.problem import Intento, Problema
+from app.models.user import Estudiante
 
 
 class PracticeRepository:
@@ -97,24 +100,6 @@ class PracticeRepository:
         sesion.progreso_actual += 1
         sesion.estado = EstadoSesion.EN_PROGRESO
         await self.update_sesion(sesion)
-    
-    async def get_intentos_sesion_actual(
-        self,
-        sesion_id: int,
-        problema_id: int
-    ) -> List[Intento]:
-        """Obtiene intentos del problema actual en la sesión."""
-        result = await self.db.execute(
-            select(Intento)
-            .where(
-                and_(
-                    Intento.sesion_id == sesion_id,
-                    Intento.problema_id == problema_id
-                )
-            )
-            .order_by(Intento.timestamp.asc())
-        )
-        return list(result.scalars().all())
     
     async def count_intentos_problema(
         self,
@@ -328,16 +313,6 @@ class PracticeRepository:
     # Detección de Anomalías
     # ============================================
     
-    async def get_velocidades_grupo(self, grupo_id: int) -> List[float]:
-        """
-        Obtiene velocidades promedio de todos los estudiantes del grupo.
-        
-        Usado para detectar outliers.
-        """
-        # TODO: Implementar cuando tengamos relación estudiante-grupo
-        # Por ahora retorna lista vacía
-        return []
-    
     async def get_stats_por_operacion(self, estudiante_id: int) -> Dict:
         """
         Estadísticas de intentos agrupadas por operación.
@@ -377,3 +352,90 @@ class PracticeRepository:
         sesion.patron_sospechoso = patron_sospechoso
         sesion.velocidad_sospechosa = velocidad_sospechosa
         await self.update_sesion(sesion)
+
+    # ============================================
+    # Errores detectados por intento
+    # ============================================
+
+    async def registrar_error_estudiante(
+        self,
+        estudiante_id: int,
+        problema_id: int,
+        codigo_error: str,
+        nombre_error: str,
+        descripcion: Optional[str] = None,
+        operacion: Optional[str] = None,
+    ) -> EstudianteError:
+        """Guarda el error detectado; crea la entrada del catálogo `error_comun` si no existe."""
+        result = await self.db.execute(select(ErrorComun).where(ErrorComun.codigo == codigo_error))
+        error = result.scalar_one_or_none()
+        if error is None:
+            error = ErrorComun(
+                codigo=codigo_error,
+                nombre=nombre_error,
+                descripcion=descripcion,
+                operacion_asociada=operacion,
+            )
+            self.db.add(error)
+            await self.db.flush()
+
+        registro = EstudianteError(
+            estudiante_id=estudiante_id,
+            error_id=error.id,
+            problema_id=problema_id,
+        )
+        self.db.add(registro)
+        await self.db.commit()
+        return registro
+
+    async def resolver_errores_problema(self, estudiante_id: int, problema_id: int) -> None:
+        """Marca como resueltos los errores previos del estudiante en ese problema."""
+        result = await self.db.execute(
+            select(EstudianteError).where(
+                and_(
+                    EstudianteError.estudiante_id == estudiante_id,
+                    EstudianteError.problema_id == problema_id,
+                    EstudianteError.resuelto == False,  # noqa: E712
+                )
+            )
+        )
+        pendientes = result.scalars().all()
+        if not pendientes:
+            return
+        ahora = datetime.utcnow()
+        for e in pendientes:
+            e.resuelto = True
+            e.fecha_resolucion = ahora
+        await self.db.commit()
+
+    # ============================================
+    # Comparación con el grupo (detección de outliers)
+    # ============================================
+
+    async def get_velocidades_sesiones_organizacion(
+        self,
+        organizacion_id: int,
+        excluir_sesion_id: int,
+        desde: datetime,
+    ) -> List[float]:
+        """Velocidad promedio (s/problema) de las sesiones completadas de una organización."""
+        result = await self.db.execute(
+            select(SesionPractica.velocidad_promedio)
+            .join(Estudiante, Estudiante.id == SesionPractica.estudiante_id)
+            .where(
+                and_(
+                    Estudiante.organizacion_id == organizacion_id,
+                    SesionPractica.estado == EstadoSesion.COMPLETADA,
+                    SesionPractica.id != excluir_sesion_id,
+                    SesionPractica.fecha_fin >= desde,
+                    SesionPractica.velocidad_promedio.isnot(None),
+                )
+            )
+        )
+        return [float(v) for (v,) in result.all() if v is not None]
+
+    async def get_organizacion_id(self, estudiante_id: int) -> Optional[int]:
+        result = await self.db.execute(
+            select(Estudiante.organizacion_id).where(Estudiante.id == estudiante_id)
+        )
+        return result.scalar_one_or_none()

@@ -5,6 +5,7 @@ Utiliza Pydantic Settings para validar y gestionar variables de entorno.
 """
 
 from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,15 +45,6 @@ class Settings(BaseSettings):
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MODEL_V3: str = "deepseek-chat"        # rápido, mensajes y enunciados
     DEEPSEEK_MODEL_R1: str = "deepseek-reasoner"    # razonamiento, análisis post-práctica
-
-    # Cloudinary (almacenamiento de videos/imágenes)
-    CLOUDINARY_CLOUD_NAME: str = ""
-    CLOUDINARY_API_KEY: str = ""
-    CLOUDINARY_API_SECRET: str = ""
-
-    # Videos Configuration
-    VIDEO_TEMP_LIFETIME_HOURS: int = 24
-    MAX_VIDEOS_GUARDADOS: int = 10
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [

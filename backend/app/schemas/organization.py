@@ -2,10 +2,10 @@
 Schemas Pydantic para organizaciones / colegios.
 """
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
 # ============================================
 # Schemas de Request
@@ -28,11 +28,6 @@ class CreateOrganizacionRequest(BaseModel):
                 "pais": "Panamá",
             }
         }
-
-
-class AsignarOrganizacionRequest(BaseModel):
-    """Asignar o quitar organización a un usuario."""
-    organizacion_id: Optional[int] = None  # null = quitar asignación
 
 
 # ============================================

@@ -6,20 +6,20 @@ calculando el progreso en tiempo real desde SesionPractica (misma
 lógica que el panel del profesor para garantizar consistencia).
 """
 
-from typing import List
 from datetime import datetime
+from typing import List
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
-from app.core.database import get_db
 from app.api.dependencies import CurrentStudent
+from app.core.database import get_db
+from app.models.adaptive import EstadoSesion, SesionPractica
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.group import EstudianteGrupo, Grupo
-from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante
 from app.models.user import Estudiante
-from app.schemas.challenge import DesafioEstudianteResponse, ContribuidorInfo
+from app.schemas.challenge import ContribuidorInfo, DesafioEstudianteResponse
 
 router = APIRouter()
 

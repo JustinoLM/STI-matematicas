@@ -7,8 +7,19 @@ Tablas de caché para contenido generado con DeepSeek:
 - AnimacionGuardada: colección de animaciones paso a paso (máx 10 por estudiante)
 """
 
-from datetime import datetime, date
-from sqlalchemy import Column, String, Integer, Text, DateTime, Date, ForeignKey, Index, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from app.core.database import Base
 

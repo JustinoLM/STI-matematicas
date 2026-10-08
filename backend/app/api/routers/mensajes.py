@@ -5,18 +5,19 @@ GET /api/mensajes/{tipo}  — Obtiene mensaje del dashboard o progreso
 """
 
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.api.dependencies import (
     CurrentStudent,
-    get_mensajes_service,
     get_adaptive_service,
     get_gamification_service,
+    get_mensajes_service,
 )
-from app.services.mensajes_service import MensajesService
 from app.services.adaptive_service import AdaptiveService
 from app.services.gamification_service import GamificationService
+from app.services.mensajes_service import MensajesService
 
 router = APIRouter()
 

@@ -6,24 +6,29 @@ Creación de usuarios: solo admin
 """
 
 from datetime import timedelta
-from typing import Optional
+
 from fastapi import HTTPException, status
 
-from app.core.security import verify_password, get_password_hash, create_access_token, decode_access_token
 from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    verify_password,
+)
+from app.models.user import Estudiante, Profesor, Usuario
 from app.repositories.user_repository import UserRepository
-from app.models.user import Usuario, Estudiante, Profesor
 from app.schemas.auth import (
-    CreateStudentRequest,
-    CreateTeacherRequest,
-    TokenResponse,
-    UserBase,
-    StudentResponse,
-    TeacherResponse,
+    BulkImportError,
+    BulkImportResult,
     BulkImportStudentsRequest,
     BulkImportTeachersRequest,
-    BulkImportResult,
-    BulkImportError,
+    CreateStudentRequest,
+    CreateTeacherRequest,
+    StudentResponse,
+    TeacherResponse,
+    TokenResponse,
+    UserBase,
 )
 
 

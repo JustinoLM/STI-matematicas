@@ -19,6 +19,8 @@ interface HintModalProps {
   onRequestHint: (nivel: 1 | 2 | 3) => void;
   puntosDisponibles: number;
   pistasUsadas: number[];
+  /** Niveles que el profesor deshabilitó para el grupo */
+  nivelesDeshabilitados?: number[];
 }
 
 export function HintModal({
@@ -27,6 +29,7 @@ export function HintModal({
   onRequestHint,
   puntosDisponibles,
   pistasUsadas,
+  nivelesDeshabilitados = [],
 }: HintModalProps) {
   const niveles = [
     {
@@ -72,12 +75,13 @@ export function HintModal({
           {niveles.map((nivel) => {
             const Icon = nivel.icon;
             const yaUsada = pistasUsadas.includes(nivel.nivel);
+            const deshabilitada = nivelesDeshabilitados.includes(nivel.nivel);
             const puedeComprar = nivel.costo === 0 || puntosDisponibles >= nivel.costo;
 
             return (
               <Card
                 key={nivel.nivel}
-                className={`${yaUsada ? 'opacity-50' : ''} ${nivel.color} border-2`}
+                className={`${yaUsada || deshabilitada ? 'opacity-50' : ''} ${nivel.color} border-2`}
               >
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
@@ -97,7 +101,12 @@ export function HintModal({
                         </div>
                       )}
                       
-                      {yaUsada ? (
+                      {deshabilitada ? (
+                        <Button variant="outline" disabled size="sm">
+                          <Lock className="h-4 w-4 mr-2" />
+                          Desactivada por tu profesor
+                        </Button>
+                      ) : yaUsada ? (
                         <Button variant="outline" disabled size="sm">
                           Ya usada
                         </Button>

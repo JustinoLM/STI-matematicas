@@ -81,11 +81,8 @@ poetry run pytest --cov=app --cov-report=html
 poetry run pytest tests/test_auth.py
 ```
 
-## Linting y Formateo
+## Linting
 ```bash
-# Formatear código con Black
-poetry run black app/
-
 # Lint con Ruff
 poetry run ruff check app/
 

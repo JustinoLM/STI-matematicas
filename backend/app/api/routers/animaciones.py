@@ -6,13 +6,12 @@ GET  /animaciones/coleccion → lista las animaciones guardadas
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.api.dependencies import CurrentStudent, DBSession
-from app.repositories.animaciones_repository import AnimacionesRepository, MAX_ANIMACIONES
+from app.repositories.animaciones_repository import MAX_ANIMACIONES, AnimacionesRepository
 
 router = APIRouter()
 

@@ -322,22 +322,13 @@ export interface ProgresoEstudiante {
   }[];
 }
 
-// ==================== HINTS & VIDEOS ====================
+// ==================== PISTAS ====================
 export type NivelPista = 1 | 2 | 3;
 
 export interface Pista {
   nivel: NivelPista;
   contenido: string;
   costo_puntos: number;
-}
-
-export interface VideoEducativo {
-  id: number;
-  titulo: string;
-  descripcion?: string;
-  duracion_segundos: number;
-  url: string;
-  thumbnail_url?: string;
 }
 
 // ==================== SHOP ====================

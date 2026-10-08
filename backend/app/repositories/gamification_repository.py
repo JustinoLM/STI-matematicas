@@ -4,20 +4,21 @@ Repository para operaciones de gamificación.
 Gestiona desbloqueables, medallas, puntos y personalización.
 """
 
-from typing import Optional, List, Dict
-from sqlalchemy import select, func, and_, or_, desc
+from datetime import datetime
+from typing import List, Optional
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timedelta
 
 from app.models.gamification import (
     CategoriaDesbloqueable,
     Desbloqueable,
     EstudianteDesbloqueable,
-    PersonalizacionEstudiante,
-    Medalla,
     EstudianteMedalla,
-    TransaccionPuntos,
+    Medalla,
+    PersonalizacionEstudiante,
     TipoTransaccion,
+    TransaccionPuntos,
 )
 from app.models.user import Estudiante
 
@@ -156,23 +157,6 @@ class GamificationRepository:
         )
         return list(result.scalars().all())
     
-    async def get_desbloqueables_por_categoria(
-        self,
-        categoria: CategoriaDesbloqueable
-    ) -> List[Desbloqueable]:
-        """Obtiene desbloqueables de una categoría específica."""
-        result = await self.db.execute(
-            select(Desbloqueable)
-            .where(
-                and_(
-                    Desbloqueable.categoria == categoria,
-                    Desbloqueable.activo == True
-                )
-            )
-            .order_by(Desbloqueable.orden)
-        )
-        return list(result.scalars().all())
-    
     async def get_desbloqueable(self, desbloqueable_id: int) -> Optional[Desbloqueable]:
         """Obtiene un desbloqueable por ID."""
         result = await self.db.execute(
@@ -254,13 +238,6 @@ class GamificationRepository:
         )
         return list(result.scalars().all())
     
-    async def get_medalla(self, medalla_id: int) -> Optional[Medalla]:
-        """Obtiene una medalla por ID."""
-        result = await self.db.execute(
-            select(Medalla).where(Medalla.id == medalla_id)
-        )
-        return result.scalar_one_or_none()
-    
     async def estudiante_tiene_medalla(
         self,
         estudiante_id: int,
@@ -309,27 +286,6 @@ class GamificationRepository:
         await self.db.refresh(relacion)
         
         return relacion
-    
-    async def marcar_medalla_notificada(
-        self,
-        estudiante_id: int,
-        medalla_id: int
-    ) -> None:
-        """Marca una medalla como notificada."""
-        result = await self.db.execute(
-            select(EstudianteMedalla)
-            .where(
-                and_(
-                    EstudianteMedalla.estudiante_id == estudiante_id,
-                    EstudianteMedalla.medalla_id == medalla_id
-                )
-            )
-        )
-        relacion = result.scalar_one_or_none()
-        
-        if relacion:
-            relacion.notificada = True
-            await self.db.commit()
     
     # ============================================
     # Gestión de Personalización

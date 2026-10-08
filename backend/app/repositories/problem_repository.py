@@ -4,13 +4,13 @@ Repository para operaciones de base de datos de problemas.
 Gestiona problemas matemáticos, configuraciones y intentos.
 """
 
-from typing import List, Optional
-from sqlalchemy import select, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
+from typing import Optional
 
-from app.models.problem import Problema, Intento, Operacion, TipoSesion
-from app.models.practice_config import ConfiguracionPractica
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.problem import Intento, Operacion, Problema, TipoSesion
 
 
 class ProblemRepository:
@@ -64,66 +64,9 @@ class ProblemRepository:
         )
         return result.scalar_one_or_none()
     
-    async def get_random_problems(
-        self,
-        nivel_dificultad: int,
-        operaciones: List[Operacion],
-        limit: int = 10
-    ) -> List[Problema]:
-        """Obtiene problemas aleatorios según criterios."""
-        result = await self.db.execute(
-            select(Problema)
-            .where(
-                and_(
-                    Problema.nivel_dificultad == nivel_dificultad,
-                    Problema.operacion.in_([op.value for op in operaciones])
-                )
-            )
-            .order_by(func.random())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-    
     # ============================================
     # Operaciones de Configuración
     # ============================================
-    
-    async def create_configuracion(
-        self,
-        grupo_id: int,
-        nivel_dificultad: int,
-        operaciones_permitidas: List[str],
-        decimales_maximos: int,
-        rango_min: int,
-        rango_max: int,
-        aplicada_por: int
-    ) -> ConfiguracionPractica:
-        """Crea una nueva configuración de práctica."""
-        configuracion = ConfiguracionPractica(
-            grupo_id=grupo_id,
-            nivel_dificultad=nivel_dificultad,
-            operaciones_permitidas=operaciones_permitidas,
-            decimales_maximos=decimales_maximos,
-            rango_min=rango_min,
-            rango_max=rango_max,
-            aplicada_por=aplicada_por
-        )
-        
-        self.db.add(configuracion)
-        await self.db.commit()
-        await self.db.refresh(configuracion)
-        
-        return configuracion
-    
-    async def get_configuracion_activa(self, grupo_id: int) -> Optional[ConfiguracionPractica]:
-        """Obtiene la configuración activa de un grupo."""
-        result = await self.db.execute(
-            select(ConfiguracionPractica)
-            .where(ConfiguracionPractica.grupo_id == grupo_id)
-            .order_by(ConfiguracionPractica.fecha_creacion.desc())
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
     
     # ============================================
     # Operaciones de Intentos
@@ -158,34 +101,3 @@ class ProblemRepository:
         
         return intento
     
-    async def get_intentos_estudiante(
-        self,
-        estudiante_id: int,
-        limit: int = 50
-    ) -> List[Intento]:
-        """Obtiene los últimos intentos de un estudiante."""
-        result = await self.db.execute(
-            select(Intento)
-            .where(Intento.estudiante_id == estudiante_id)
-            .order_by(Intento.timestamp.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-    
-    async def get_intentos_por_problema(
-        self,
-        estudiante_id: int,
-        problema_id: int
-    ) -> List[Intento]:
-        """Obtiene todos los intentos de un estudiante en un problema específico."""
-        result = await self.db.execute(
-            select(Intento)
-            .where(
-                and_(
-                    Intento.estudiante_id == estudiante_id,
-                    Intento.problema_id == problema_id
-                )
-            )
-            .order_by(Intento.timestamp.asc())
-        )
-        return list(result.scalars().all())

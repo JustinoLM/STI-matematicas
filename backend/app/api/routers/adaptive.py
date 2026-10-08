@@ -9,28 +9,28 @@ Endpoints:
 - GET /profile - Obtener perfil
 """
 
-from fastapi import APIRouter, Depends
-from typing import Dict
-from decimal import Decimal
+from typing import Optional
+
+from fastapi import APIRouter
 
 from app.api.dependencies import (
-    CurrentStudent,
     AdaptiveServiceDep,
-    GamificationServiceDep
+    CurrentStudent,
+    GamificationServiceDep,
+    PracticeServiceDep,
 )
 from app.schemas.adaptive import (
-    DiagnosticoSubmit,
     DiagnosticoResultado,
-    SesionStartResponse,
+    DiagnosticoSubmit,
+    PerfilResponse,
+    PostTestEstado,
+    PostTestResultado,
+    PostTestSubmit,
     SesionActivaResponse,
     SesionComplete,
     SesionCompleteResponse,
-    PerfilResponse,
-    PostTestEstado,
-    PostTestSubmit,
-    PostTestResultado,
+    SesionStartResponse,
 )
-from typing import Optional
 
 router = APIRouter()
 
@@ -143,7 +143,8 @@ async def completar_practica(
     sesion_complete: SesionComplete,
     current_student: CurrentStudent,
     adaptive_service: AdaptiveServiceDep,
-    gamification_service: GamificationServiceDep
+    gamification_service: GamificationServiceDep,
+    practice_service: PracticeServiceDep,
 ):
     """
     Completa una sesión de práctica y evalúa cambios de nivel.
@@ -155,12 +156,20 @@ async def completar_practica(
     4. Clasifica perfil con ML (si tiene suficientes datos)
     5. Retorna feedback y cambios de nivel
     6. Otorga puntos al estudiante
+    7. Revisa anomalías de la sesión y registra alertas para el profesor
     """
-    resultado = await adaptive_service.completar_sesion(sesion_complete.sesion_id)
+    resultado = await adaptive_service.completar_sesion(
+        sesion_complete.sesion_id, current_student.id
+    )
     await gamification_service.registrar_puntos_sesion(
         sesion_id=sesion_complete.sesion_id,
         estudiante_id=current_student.id
     )
+
+    # 7. Detecta anomalías (velocidad sospechosa, patrón perfecto, outlier del grupo)
+    #    y registra las alertas; no interrumpe la respuesta si falla.
+    await practice_service.revisar_sesion_completada(sesion_complete.sesion_id)
+
     return resultado
 
 

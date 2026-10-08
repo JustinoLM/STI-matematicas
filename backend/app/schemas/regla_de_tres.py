@@ -5,12 +5,11 @@ Define contratos para práctica adaptativa, evaluación de respuestas
 y notas por estudiante (profesor/admin).
 """
 
-from typing import Optional, List
-from pydantic import BaseModel, Field, field_serializer
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import List, Optional
 
-from app.models.regla_de_tres import TipoProporcion
+from pydantic import BaseModel, Field, field_serializer
 
 
 def _format_decimal(value: Decimal) -> str:

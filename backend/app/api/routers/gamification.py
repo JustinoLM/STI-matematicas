@@ -16,23 +16,21 @@ Endpoints:
 - GET /session/{id}/rewards - Recompensas de sesión
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentStudent, GamificationServiceDep
 from app.schemas.gamification import (
-    SaldoPuntosResponse,
-    HistorialPuntosResponse,
-    TiendaResponse,
-    DesbloqueableResponse,
-    ComprarItemRequest,
-    ComprarItemResponse,
-    MedallasResponse,
-    MedallasProgresoResponse,
-    PersonalizacionResponse,
     ActualizarPersonalizacionRequest,
-    TemasInicialesResponse,
-    SeleccionTemaInicialRequest,
+    ComprarItemResponse,
+    DesbloqueableResponse,
+    HistorialPuntosResponse,
+    MedallasResponse,
+    PersonalizacionResponse,
     RecompensasSesionResponse,
+    SaldoPuntosResponse,
+    SeleccionTemaInicialRequest,
+    TemasInicialesResponse,
+    TiendaResponse,
 )
 
 router = APIRouter()
@@ -163,21 +161,6 @@ async def quitar_medalla_destacada(
     """Quita la medalla destacada del dashboard."""
     await gamification_service.set_medalla_destacada(current_student.id, None)
     return {"ok": True}
-
-
-@router.get("/medals/progress", response_model=MedallasProgresoResponse)
-async def get_progreso_medallas(
-    current_student: CurrentStudent,
-    gamification_service: GamificationServiceDep
-):
-    """
-    Obtiene el progreso hacia medallas no obtenidas.
-    
-    Muestra cuánto falta para obtener cada medalla.
-    Ejemplo: "250/500 problemas resueltos para medalla '500 Club'"
-    """
-    # TODO: Implementar cálculo de progreso
-    return MedallasProgresoResponse(progresos=[])
 
 
 # ============================================

@@ -5,11 +5,11 @@ Autenticación basada en códigos únicos (codigo_estudiante, codigo_profesor).
 """
 
 from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
-from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
+from app.models.user import Estudiante, Profesor, TipoUsuario, Usuario
 
 
 class UserRepository:
@@ -18,27 +18,6 @@ class UserRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def get_by_codigo(self, codigo: str) -> Optional[Usuario]:
-        """
-        Busca un usuario por su código (estudiante o profesor).
-        Para estudiantes puede haber varios con el mismo código en distintas
-        organizaciones — devuelve el primero encontrado (la contraseña se
-        verifica en auth_service usando get_all_students_by_codigo).
-        """
-        # Buscar como estudiante (puede haber más de uno → se resuelve en auth_service)
-        result = await self.db.execute(
-            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
-        )
-        estudiante = result.scalars().first()
-        if estudiante:
-            return estudiante
-
-        # Intentar buscar como profesor
-        result = await self.db.execute(
-            select(Profesor).where(Profesor.codigo_profesor == codigo)
-        )
-        return result.scalar_one_or_none()
-
     async def get_all_students_by_codigo(self, codigo: str) -> list[Estudiante]:
         """Devuelve TODOS los estudiantes con ese código (pueden ser de distintas orgs)."""
         result = await self.db.execute(
@@ -62,13 +41,6 @@ class UserRepository:
         # Intentar como profesor
         result = await self.db.execute(
             select(Profesor).where(Profesor.id == user_id)
-        )
-        return result.scalar_one_or_none()
-    
-    async def get_student_by_codigo(self, codigo: str) -> Optional[Estudiante]:
-        """Busca un estudiante específicamente por código."""
-        result = await self.db.execute(
-            select(Estudiante).where(Estudiante.codigo_estudiante == codigo)
         )
         return result.scalar_one_or_none()
     
@@ -154,20 +126,6 @@ class UserRepository:
         user = await self.get_by_id(user_id)
         if user:
             user.password_hash = new_password_hash
-            await self.db.commit()  # COMMIT
-    
-    async def deactivate_user(self, user_id: int) -> None:
-        """Desactiva un usuario (soft delete)."""
-        user = await self.get_by_id(user_id)
-        if user:
-            user.activo = False
-            await self.db.commit()  # COMMIT
-    
-    async def activate_user(self, user_id: int) -> None:
-        """Activa un usuario."""
-        user = await self.get_by_id(user_id)
-        if user:
-            user.activo = True
             await self.db.commit()  # COMMIT
     
     async def codigo_estudiante_exists(self, codigo: str, organizacion_id: Optional[int] = None) -> bool:

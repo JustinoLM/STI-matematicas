@@ -1,38 +1,3 @@
-from typing import Annotated
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database import get_db
-from app.core.security import decode_access_token
-from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
-from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
-from app.repositories.adaptive_repository import AdaptiveRepository
-from app.repositories.problem_repository import ProblemRepository
-from app.services.problem_service import ProblemService
-from app.services.adaptive_service import AdaptiveService
-from app.repositories.practice_repository import PracticeRepository
-from app.services.practice_service import PracticeService
-from app.repositories.gamification_repository import GamificationRepository
-from app.services.gamification_service import GamificationService
-from app.repositories.hints_videos_repository import HintsVideosRepository
-from app.repositories.enunciados_repository import EnunciadoTematicoRepository
-from app.repositories.mensajes_repository import MensajesRepository
-from app.services.llm_service import LLMService
-from app.services.hints_service import HintsService
-from app.services.enunciados_service import EnunciadosService
-from app.services.mensajes_service import MensajesService
-from app.services.videos_service import VideosService
-from app.services.deteccion_errores_service import DeteccionErroresService
-from app.services.analisis_service import AnalisisService
-from app.repositories.animaciones_repository import AnimacionesRepository
-from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
-from app.services.regla_de_tres_service import ReglaDeTresService
-from app.services.admin_import_service import AdminImportService
-
-
-
 """
 Dependencies de FastAPI para inyección de dependencias.
 
@@ -40,18 +5,35 @@ Proporciona sesión de BD, usuario actual, y verificación de roles.
 """
 
 from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
-from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
-
+from app.core.security import decode_access_token
+from app.models.user import Estudiante, Profesor, Usuario
+from app.repositories.adaptive_repository import AdaptiveRepository
+from app.repositories.enunciados_repository import EnunciadoTematicoRepository
+from app.repositories.gamification_repository import GamificationRepository
+from app.repositories.hints_repository import HintsRepository
+from app.repositories.mensajes_repository import MensajesRepository
+from app.repositories.practice_repository import PracticeRepository
 from app.repositories.problem_repository import ProblemRepository
+from app.repositories.regla_de_tres_repository import ReglaDeTresRepository
+from app.repositories.user_repository import UserRepository
+from app.services.adaptive_service import AdaptiveService
+from app.services.admin_import_service import AdminImportService
+from app.services.analisis_service import AnalisisService
+from app.services.auth_service import AuthService
+from app.services.enunciados_service import EnunciadosService
+from app.services.gamification_service import GamificationService
+from app.services.hints_service import HintsService
+from app.services.llm_service import LLMService
+from app.services.mensajes_service import MensajesService
+from app.services.practice_service import PracticeService
 from app.services.problem_service import ProblemService
-
+from app.services.regla_de_tres_service import ReglaDeTresService
 
 # OAuth2 scheme para extraer token del header Authorization
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -203,8 +185,6 @@ async def get_problem_service(
 
 
 
-# Type alias para ProblemService
-ProblemServiceDep = Annotated[ProblemService, Depends(get_problem_service)]
 
 
 # ============================================
@@ -279,14 +259,14 @@ GamificationServiceDep = Annotated[GamificationService, Depends(get_gamification
 
 
 # ============================================
-# Dependencies de Hints & Videos Services
+# Dependencies de Hints y servicios de LLM
 # ============================================
 
-async def get_hints_videos_repository(
+async def get_hints_repository(
     db: AsyncSession = Depends(get_db)
-) -> HintsVideosRepository:
-    """Dependency para obtener HintsVideosRepository."""
-    return HintsVideosRepository(db)
+) -> HintsRepository:
+    """Dependency para obtener HintsRepository."""
+    return HintsRepository(db)
 
 
 async def get_llm_service() -> LLMService:
@@ -295,13 +275,13 @@ async def get_llm_service() -> LLMService:
 
 
 async def get_hints_service(
-    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository),
+    hints_repo: HintsRepository = Depends(get_hints_repository),
     gamification_repo: GamificationRepository = Depends(get_gamification_repository),
     adaptive_repo: AdaptiveRepository = Depends(get_adaptive_repository),
     llm_service: LLMService = Depends(get_llm_service)
 ) -> HintsService:
     """Dependency para obtener HintsService."""
-    return HintsService(hints_videos_repo, gamification_repo, adaptive_repo, llm_service)
+    return HintsService(hints_repo, gamification_repo, adaptive_repo, llm_service)
 
 
 async def get_enunciados_repository(
@@ -334,18 +314,6 @@ async def get_mensajes_service(
     return MensajesService(mensajes_repo, llm_service)
 
 
-async def get_videos_service(
-    hints_videos_repo: HintsVideosRepository = Depends(get_hints_videos_repository)
-) -> VideosService:
-    """Dependency para obtener VideosService."""
-    return VideosService(hints_videos_repo)
-
-
-async def get_deteccion_errores_service() -> DeteccionErroresService:
-    """Dependency para obtener DeteccionErroresService."""
-    return DeteccionErroresService()
-
-
 async def get_analisis_service(
     db: AsyncSession = Depends(get_db),
     llm_service: LLMService = Depends(get_llm_service),
@@ -358,8 +326,6 @@ async def get_analisis_service(
 HintsServiceDep = Annotated[HintsService, Depends(get_hints_service)]
 EnunciadosServiceDep = Annotated[EnunciadosService, Depends(get_enunciados_service)]
 MensajesServiceDep = Annotated[MensajesService, Depends(get_mensajes_service)]
-VideosServiceDep = Annotated[VideosService, Depends(get_videos_service)]
-DeteccionErroresServiceDep = Annotated[DeteccionErroresService, Depends(get_deteccion_errores_service)]
 AnalisisServiceDep = Annotated[AnalisisService, Depends(get_analisis_service)]
 
 

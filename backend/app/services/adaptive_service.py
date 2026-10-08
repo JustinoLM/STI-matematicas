@@ -5,28 +5,32 @@ Lógica central de diagnóstico, generación de prácticas, ajuste de niveles.
 """
 
 import random
-from typing import List, Dict, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
+from typing import Dict, List, Optional
+
 from fastapi import HTTPException, status
 
+from app.models.adaptive import (
+    EstadoDiagnostico,
+    EstadoSesion,
+    PerfilEstudiante,
+    ResultadoPostTest,
+    SesionPractica,
+)
+from app.models.problem import Operacion
 from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.problem_repository import ProblemRepository
-from app.services.ml_service import ml_service
-from app.services.problem_service import ProblemService
-from app.models.adaptive import PerfilEstudiante, PruebaDiagnostica, ResultadoPostTest, SesionPractica, EstadoDiagnostico
-from app.models.user import Estudiante
-from app.models.problem import Operacion, TipoSesion
 from app.schemas.adaptive import (
-    DiagnosticoResultado,
-    SesionStartResponse,
-    SesionCompleteResponse,
     CambioNivel,
+    DiagnosticoResultado,
     PerfilResponse,
-    Recomendacion,
-    EstadisticasGrupo
+    SesionCompleteResponse,
+    SesionStartResponse,
 )
 from app.schemas.problem import ProblemaDisplay
+from app.services.ml_service import ml_service
+from app.services.problem_service import ProblemService
 
 
 class AdaptiveService:
@@ -170,13 +174,6 @@ class AdaptiveService:
             "division": []
         }
         
-        tiempos = {
-            "suma": 0,
-            "resta": 0,
-            "multiplicacion": 0,
-            "division": 0
-        }
-        
         # Evaluar cada respuesta
         for problema_id in problemas_ids:
             problema = await self.problem_repo.get_problem_by_id(problema_id)
@@ -304,7 +301,11 @@ class AdaptiveService:
             nivel_division=niveles["division"],
             nivel_actual=niveles["actual"],
             correctos_por_operacion=correctos_por_operacion,
-            velocidad_por_operacion={},  # TODO: calcular si tenemos tiempos
+            velocidad_por_operacion={
+                op: round(tiempos_op[op] / len(resultados[op]), 1)
+                for op in resultados
+                if tiempos_op.get(op) and resultados[op]
+            },
             mensaje=mensaje
         )
     
@@ -390,6 +391,8 @@ class AdaptiveService:
             ratio_dificultad=ratio
         )
         
+        await self._registrar_contexto_sesion(sesion, perfil)
+
         # Convertir a display
         problemas_display = [
             {
@@ -401,7 +404,7 @@ class AdaptiveService:
             }
             for p in problemas
         ]
-        
+
         mensaje = f"Hoy practicaremos {op_mas_debil.value} (tu operación más débil)"
         
         return SesionStartResponse(
@@ -413,6 +416,22 @@ class AdaptiveService:
             mensaje_intro=mensaje
         )
     
+    async def _registrar_contexto_sesion(self, sesion: SesionPractica, perfil: PerfilEstudiante) -> None:
+        """
+        Guarda en la sesión el contexto con el que se generó: perfil ML del estudiante,
+        probabilidad de subir de nivel en las próximas sesiones y tema narrativo activo.
+        """
+        referencia = perfil.fecha_ultima_promocion or perfil.fecha_diagnostico or datetime.utcnow()
+        dias = max((datetime.utcnow() - referencia).days, 0)
+        sesion.probabilidad_exito_predicha = round(
+            ml_service.predecir_exito_nivel_siguiente(perfil, dias), 2
+        )
+        sesion.perfil_al_momento = (
+            perfil.perfil_aprendizaje.value if perfil.perfil_aprendizaje else None
+        )
+        sesion.tema_activo = await self.adaptive_repo.get_tema_activo(sesion.estudiante_id)
+        await self.adaptive_repo.update_sesion(sesion)
+
     def _get_operaciones_disponibles(self, perfil: PerfilEstudiante) -> List[Operacion]:
         """Retorna operaciones que el estudiante puede practicar."""
         disponibles = []
@@ -507,6 +526,16 @@ class AdaptiveService:
 
         return distribucion
     
+    @staticmethod
+    def _ajustar_a_niveles_permitidos(nivel: int, permitidos: List[int]) -> int:
+        """
+        Devuelve el nivel de problema más cercano entre los permitidos por el
+        profesor (en empate, el menor). Sin restricción devuelve el mismo nivel.
+        """
+        if not permitidos or nivel in permitidos:
+            return nivel
+        return min(permitidos, key=lambda n: (abs(n - nivel), n))
+
     async def _generar_problemas_sesion(
         self,
         perfil: PerfilEstudiante,
@@ -524,13 +553,16 @@ class AdaptiveService:
 
         # Límites desde configuración del profesor (si existe)
         # Convertir a int porque _random_decimal usa random.randint
+        niveles_permitidos = sorted(config_grupo.niveles_permitidos or []) if config_grupo else []
         cfg_decimales = int(config_grupo.decimales_maximos) if config_grupo else None
         cfg_rango_min = int(float(config_grupo.rango_min)) if config_grupo else None
         cfg_rango_max = int(float(config_grupo.rango_max)) if config_grupo else None
 
         for op_str, cantidad in distribucion.items():
             operacion = self._str_to_operacion(op_str)
-            nivel_op = self._get_nivel_operacion(perfil, operacion)
+            nivel_op = self._ajustar_a_niveles_permitidos(
+                self._get_nivel_operacion(perfil, operacion), niveles_permitidos
+            )
 
             # Dividir en fáciles y desafiantes
             faciles = int(cantidad * ratio["faciles"])
@@ -549,7 +581,9 @@ class AdaptiveService:
 
             # Generar desafiantes (nivel + 1)
             for _ in range(desafiantes):
-                nivel_desafiante = min(nivel_op + 1, 5)
+                nivel_desafiante = self._ajustar_a_niveles_permitidos(
+                    min(nivel_op + 1, 5), niveles_permitidos
+                )
                 prob = await self.problem_service._generate_single_problem(
                     nivel=nivel_desafiante,
                     operaciones=[operacion],
@@ -581,11 +615,12 @@ class AdaptiveService:
     # Completar Sesión y Ajuste de Niveles
     # ============================================
     
-    async def completar_sesion(self, sesion_id: int) -> SesionCompleteResponse:
+    async def completar_sesion(self, sesion_id: int, estudiante_id: int) -> SesionCompleteResponse:
         """
         Completa una sesión y evalúa cambios de nivel.
-        
-        Este es el método más importante del sistema adaptativo.
+
+        Este es el método más importante del sistema adaptativo. Solo se procesa
+        una vez, y solo si la sesión es del estudiante y ya fue terminada.
         """
         # Obtener sesión
         sesion = await self.adaptive_repo.get_sesion(sesion_id)
@@ -595,6 +630,25 @@ class AdaptiveService:
                 detail="Sesión no encontrada"
             )
         
+        if sesion.estudiante_id != estudiante_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para completar esta sesión"
+            )
+
+        if sesion.estado != EstadoSesion.COMPLETADA:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La sesión todavía no ha terminado"
+            )
+
+        # `cambios_nivel` se guarda (aunque sea vacío) al procesar la sesión
+        if sesion.cambios_nivel is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta sesión ya fue procesada"
+            )
+
         # Obtener intentos de la sesión
         intentos = await self.adaptive_repo.get_intentos_sesion(sesion_id)
         
@@ -631,6 +685,24 @@ class AdaptiveService:
         # Evaluar cambios de nivel
         cambios = await self._evaluar_cambios_nivel(perfil, sesion, intentos)
 
+        # Historial de cambios de nivel del estudiante (se reasigna la lista para
+        # que SQLAlchemy detecte el cambio en la columna JSON)
+        if cambios:
+            historial = list(perfil.historial_promociones or [])
+            ahora = datetime.utcnow().isoformat()
+            historial.extend(
+                {
+                    "fecha": ahora,
+                    "sesion_id": sesion.id,
+                    "operacion": c.operacion,
+                    "nivel_anterior": c.nivel_anterior,
+                    "nivel_nuevo": c.nivel_nuevo,
+                    "razon": c.razon,
+                }
+                for c in cambios
+            )
+            perfil.historial_promociones = historial
+
         # Actualizar perfil
         await self._actualizar_metricas_perfil(perfil, sesion, intentos, org_id=org_id)
         
@@ -655,7 +727,6 @@ class AdaptiveService:
         ops_bloqueadas = self._get_operaciones_bloqueadas(perfil)
         
         # Estadísticas de grupo (opcional)
-        estadisticas_grupo = None  # TODO: implementar cuando tengamos grupos
         
         # Mensaje motivacional
         mensaje = self._generar_mensaje_motivacional(es_perfecta, precision, cambios)
@@ -679,7 +750,6 @@ class AdaptiveService:
             velocidad_promedio=velocidad_promedio,
             cambios_nivel=cambios,
             nivel_actual_nuevo=perfil.nivel_actual,
-            estadisticas_grupo=estadisticas_grupo,
             es_practica_perfecta=es_perfecta,
             practicas_perfectas_consecutivas=perfil.practicas_perfectas_consecutivas,
             mensaje_motivacional=mensaje,
@@ -717,12 +787,20 @@ class AdaptiveService:
             perfil.practicas_perfectas_consecutivas += 1
             
             if perfil.practicas_perfectas_consecutivas >= 3:
-                # Subir nivel general
-                if perfil.nivel_actual < 5:
+                # Subir nivel general. Para llegar al nivel 5 se exige la misma
+                # regla que en _recalcular_nivel_actual: todas las operaciones
+                # practicables en nivel 4 o superior. Si no se cumple, la racha
+                # se conserva y el ascenso ocurre en la primera práctica perfecta
+                # posterior a que se cumpla.
+                if perfil.nivel_actual < 5 and (
+                    perfil.nivel_actual + 1 < 5 or self._cumple_regla_nivel_5(perfil)
+                ):
                     nivel_anterior = perfil.nivel_actual
                     perfil.nivel_actual += 1
                     perfil.practicas_perfectas_consecutivas = 0
-                    
+                    perfil.sesiones_en_nivel_actual = 0
+                    perfil.fecha_ultima_promocion = datetime.utcnow()
+
                     cambios.append(CambioNivel(
                         operacion="nivel_general",
                         nivel_anterior=nivel_anterior,
@@ -744,13 +822,21 @@ class AdaptiveService:
         # Obtener nivel actual de la operación
         nivel_actual = self._get_nivel_operacion(perfil, operacion)
         
-        # Contar consecutivos correctos
+        # Racha final de aciertos en esta operación dentro de la sesión
         consecutivos = 0
         for intento in reversed(intentos):
             if intento.es_correcto:
                 consecutivos += 1
             else:
                 break
+
+        # La racha continúa desde la sesión anterior solo si en esta sesión no
+        # hubo ningún fallo en la operación; si hubo alguno, empieza de nuevo.
+        # Así el umbral (7-15) no depende de cuántos problemas de la operación
+        # caben en una sola sesión.
+        todos_correctos = consecutivos == len(intentos)
+        previas = self._get_consecutivos(perfil, operacion)
+        racha_total = previas + consecutivos if todos_correctos else consecutivos
         
         # Calcular precisión en esta operación
         correctos = sum(1 for i in intentos if i.es_correcto)
@@ -759,11 +845,9 @@ class AdaptiveService:
         # Obtener umbral (puede ser personalizado por ML)
         umbral = ml_service.ajustar_umbral_segun_perfil(perfil)
         
-        # TODO: Ajustar umbral según percentil de grupo
-        # umbral_final = ml_service.calcular_umbral_dinamico(perfil, percentil)
         
         # SUBIR nivel
-        if consecutivos >= umbral and nivel_actual < 5:
+        if racha_total >= umbral and nivel_actual < 5:
             self._set_nivel_operacion(perfil, operacion, nivel_actual + 1)
             self._reset_consecutivos(perfil, operacion)
             
@@ -771,7 +855,7 @@ class AdaptiveService:
                 operacion=operacion.value,
                 nivel_anterior=nivel_actual,
                 nivel_nuevo=nivel_actual + 1,
-                razon=f"{consecutivos} problemas consecutivos correctos"
+                razon=f"{racha_total} problemas consecutivos correctos"
             )
         
         # BAJAR nivel
@@ -786,11 +870,8 @@ class AdaptiveService:
                 razon=f"Precisión baja ({precision_op:.0%})"
             )
         
-        # Actualizar consecutivos
-        if consecutivos > 0:
-            self._incrementar_consecutivos(perfil, operacion, consecutivos)
-        else:
-            self._reset_consecutivos(perfil, operacion)
+        # Guardar la racha acumulada (vuelve a 0 si el último intento falló)
+        self._set_consecutivos(perfil, operacion, racha_total if consecutivos > 0 else 0)
         
         return None
     
@@ -816,8 +897,18 @@ class AdaptiveService:
         elif operacion == Operacion.DIVISION:
             perfil.consecutivas_correctas_div = 0
     
-    def _incrementar_consecutivos(self, perfil: PerfilEstudiante, operacion: Operacion, cantidad: int):
-        """Incrementa consecutivos de una operación."""
+    def _get_consecutivos(self, perfil: PerfilEstudiante, operacion: Operacion) -> int:
+        """Racha acumulada de aciertos consecutivos de una operación."""
+        valor = {
+            Operacion.SUMA: perfil.consecutivas_correctas_suma,
+            Operacion.RESTA: perfil.consecutivas_correctas_resta,
+            Operacion.MULTIPLICACION: perfil.consecutivas_correctas_mult,
+            Operacion.DIVISION: perfil.consecutivas_correctas_div,
+        }[operacion]
+        return int(valor or 0)
+
+    def _set_consecutivos(self, perfil: PerfilEstudiante, operacion: Operacion, cantidad: int):
+        """Fija la racha acumulada de aciertos consecutivos de una operación."""
         if operacion == Operacion.SUMA:
             perfil.consecutivas_correctas_suma = cantidad
         elif operacion == Operacion.RESTA:
@@ -826,7 +917,15 @@ class AdaptiveService:
             perfil.consecutivas_correctas_mult = cantidad
         elif operacion == Operacion.DIVISION:
             perfil.consecutivas_correctas_div = cantidad
-    
+
+    def _cumple_regla_nivel_5(self, perfil: PerfilEstudiante) -> bool:
+        """Regla especial del nivel 5: todas las operaciones practicables en nivel 4 o más."""
+        niveles = [
+            self._get_nivel_operacion(perfil, op)
+            for op in self._get_operaciones_disponibles(perfil)
+        ]
+        return bool(niveles) and all(nivel >= 4 for nivel in niveles)
+
     async def _actualizar_metricas_perfil(
         self,
         perfil: PerfilEstudiante,
@@ -886,7 +985,7 @@ class AdaptiveService:
         
         # REGLA ESPECIAL: Para nivel 5, TODAS las operaciones deben estar en 4+
         if nivel_calculado >= 5:
-            if not all(nivel >= 4 for nivel in niveles_practicables):
+            if not self._cumple_regla_nivel_5(perfil):
                 nivel_calculado = 4  # Limitar a nivel 4 hasta que todas suban
         
         # El nivel_actual solo SUBE o se mantiene
@@ -1112,6 +1211,7 @@ class AdaptiveService:
             operaciones_incluidas=distribucion,
             ratio_dificultad={"redencion": 1.0}
         )
+        await self._registrar_contexto_sesion(sesion, perfil)
 
         problemas_display = [
             {
@@ -1222,9 +1322,10 @@ class AdaptiveService:
         se otorgan monedas (puntos de tienda) a todos los estudiantes activos del grupo
         usando GamificationRepository para registrar la transacción correctamente.
         """
-        from sqlalchemy import select, and_, func
-        from app.models.group import EstudianteGrupo
+        from sqlalchemy import and_, or_, select
+
         from app.models.challenge import DesafioGrupal, GrupoDesafio
+        from app.models.group import EstudianteGrupo
         from app.repositories.gamification_repository import GamificationRepository
 
         db = self.adaptive_repo.db
@@ -1250,6 +1351,7 @@ class AdaptiveService:
                 GrupoDesafio.grupo_id.in_(grupos_ids),
                 DesafioGrupal.completado == False,
                 DesafioGrupal.eliminado == False,
+                or_(DesafioGrupal.fecha_limite.is_(None), DesafioGrupal.fecha_limite >= datetime.utcnow()),
             ))
         )
         relaciones = result.all()
@@ -1296,43 +1398,13 @@ class AdaptiveService:
                 gd.puntos_otorgados = True
 
                 # Otorgar monedas solo a estudiantes que participaron activamente
-                # (completaron al menos 1 sesión dentro de la ventana del desafío)
+                # (≥ 3 sesiones completadas dentro de la ventana del desafío)
                 if desafio.recompensa_puntos and desafio.recompensa_puntos > 0:
-                    from app.models.adaptive import SesionPractica, EstadoSesion
-
-                    # 1. Todos los miembros activos del grupo
-                    est_result = await db.execute(
-                        select(EstudianteGrupo.estudiante_id)
-                        .where(and_(
-                            EstudianteGrupo.grupo_id == gd.grupo_id,
-                            EstudianteGrupo.activo == True,
-                        ))
+                    participantes_ids = await self.adaptive_repo.get_participantes_desafio(
+                        gd.grupo_id, desafio
                     )
-                    miembros_ids = [row[0] for row in est_result.all()]
 
-                    # 2. Filtrar solo los que completaron ≥ MIN sesiones en la ventana
-                    #    (mismo umbral que el router de estudiante)
-                    MIN_SESIONES = 3
-                    cond_ventana = [
-                        SesionPractica.estudiante_id.in_(miembros_ids),
-                        SesionPractica.estado == EstadoSesion.COMPLETADA,
-                        SesionPractica.fecha_fin >= desafio.fecha_creacion,
-                    ]
-                    if desafio.fecha_limite:
-                        cond_ventana.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
-
-                    part_result = await db.execute(
-                        select(
-                            SesionPractica.estudiante_id,
-                            func.count(SesionPractica.id).label("cnt"),
-                        )
-                        .where(and_(*cond_ventana))
-                        .group_by(SesionPractica.estudiante_id)
-                        .having(func.count(SesionPractica.id) >= MIN_SESIONES)
-                    )
-                    participantes_ids = [row[0] for row in part_result.all()]
-
-                    # 3. Solo los participantes reciben la recompensa
+                    # Solo los participantes reciben la recompensa
                     gamif_repo = GamificationRepository(db)
                     for part_id in participantes_ids:
                         await gamif_repo.agregar_puntos(
@@ -1353,6 +1425,7 @@ class AdaptiveService:
         y si el estudiante ya lo completó.
         """
         from sqlalchemy import select
+
         from app.models.organization import Organizacion
 
         db = self.adaptive_repo.db
@@ -1393,7 +1466,6 @@ class AdaptiveService:
         - Si la org no tiene post_test_activo, lanza 400.
         """
         from sqlalchemy import select
-        from app.models.organization import Organizacion
 
         db = self.adaptive_repo.db
 

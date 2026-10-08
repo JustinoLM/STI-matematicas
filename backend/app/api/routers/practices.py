@@ -14,19 +14,18 @@ Endpoints:
 - GET /suspicious - Alertas de actividad sospechosa
 """
 
-from fastapi import APIRouter, Depends, Query
-from typing import Optional
+from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentStudent, PracticeServiceDep
 from app.schemas.practice import (
-    SessionProgressResponse,
+    GlobalStatsResponse,
     NextProblemResponse,
+    SessionHistoryResponse,
+    SessionProgressResponse,
+    SessionSummaryResponse,
     SubmitProblemRequest,
     SubmitProblemResponse,
-    SessionHistoryResponse,
-    SessionSummaryResponse,
-    GlobalStatsResponse,
-    SuspiciousActivityResponse
+    SuspiciousActivityResponse,
 )
 
 router = APIRouter()

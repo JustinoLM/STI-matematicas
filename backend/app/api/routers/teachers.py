@@ -1,30 +1,35 @@
 """Router de profesores - APIs completas."""
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.dependencies import (
-    get_current_teacher,
     get_adaptive_service,
+    get_current_teacher,
     get_practice_service,
 )
-from app.models.user import Profesor, Estudiante
+from app.core.database import get_db
 from app.models.adaptive import PerfilEstudiante
 from app.models.organization import Organizacion
+from app.models.user import Estudiante, Profesor
+from app.schemas.teacher import (
+    AlertaEstudianteResponse,
+    ConfiguracionPracticaCreate,
+    ConfiguracionPracticaResponse,
+    DesafioGrupalCreate,
+    DesafioGrupalDetalle,
+    EstadisticasGrupo,
+    GrupoCreate,
+    GrupoDetalle,
+    GrupoResumen,
+)
 from app.services.adaptive_service import AdaptiveService
 from app.services.practice_service import PracticeService
 from app.services.teacher_service import TeacherService
-from app.schemas.teacher import (
-    GrupoCreate, GrupoUpdate, GrupoDetalle, GrupoResumen,
-    ConfiguracionPracticaCreate, ConfiguracionPracticaResponse,
-    DesafioGrupalCreate, DesafioGrupalDetalle, DesafioGrupalResumen,
-    EstadisticasGrupo, ProgresoEstudiante, AlertaEstudianteResponse,
-    BuscarEstudianteRequest, EstudianteSearchResult
-)
-from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -93,6 +98,7 @@ async def bulk_add_students_to_group(
     Continúa aunque alguna fila falle — devuelve resumen de éxitos y errores.
     """
     from sqlalchemy import select as sa_select
+
     from app.models.user import Estudiante
 
     errores: List[BulkAddError] = []
@@ -346,15 +352,26 @@ async def listar_estudiantes_organizacion(
     return datos
 
 
-@router.post("/students/search", response_model=List[EstudianteSearchResult])
-async def buscar_estudiantes(
-    request: BuscarEstudianteRequest,
-    profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service)
-):
-    """Busca estudiantes por nombre o código."""
-    # TODO: Implementar búsqueda avanzada
-    return []
+async def _estudiante_de_mi_organizacion(
+    db: AsyncSession, profesor: Profesor, student_id: int
+) -> Estudiante:
+    """
+    Devuelve el estudiante solo si pertenece a la organización del profesor.
+    Un profesor sin organización asignada no ve a ningún estudiante.
+    Responde 404 también cuando el estudiante existe en otra organización, para no
+    revelar su existencia.
+    """
+    if profesor.organizacion_id is not None:
+        result = await db.execute(
+            select(Estudiante).where(
+                Estudiante.id == student_id,
+                Estudiante.organizacion_id == profesor.organizacion_id,
+            )
+        )
+        estudiante = result.scalar_one_or_none()
+        if estudiante:
+            return estudiante
+    raise HTTPException(status_code=404, detail="Estudiante no encontrado en tu organización")
 
 
 @router.get("/students/{student_id}/profile")
@@ -369,12 +386,7 @@ async def obtener_perfil_estudiante(
     Retorna los mismos datos que GET /adaptive/profile pero accesible para profesores,
     con el nombre del estudiante añadido.
     """
-    est_result = await db.execute(select(Estudiante).where(Estudiante.id == student_id))
-    estudiante = est_result.scalar_one_or_none()
-    if not estudiante:
-        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    if profesor.organizacion_id and estudiante.organizacion_id != profesor.organizacion_id:
-        raise HTTPException(status_code=404, detail="Estudiante no pertenece a tu organización")
+    estudiante = await _estudiante_de_mi_organizacion(db, profesor, student_id)
 
     perfil = await adaptive_service.get_perfil(student_id)
     perfil_dict = perfil.model_dump()
@@ -393,27 +405,5 @@ async def obtener_stats_estudiante(
     Obtiene las estadísticas globales de práctica de un estudiante.
     Retorna los mismos datos que GET /practices/stats pero accesible para profesores.
     """
-    if profesor.organizacion_id:
-        est_result = await db.execute(
-            select(Estudiante).where(
-                Estudiante.id == student_id,
-                Estudiante.organizacion_id == profesor.organizacion_id
-            )
-        )
-        if not est_result.scalar_one_or_none():
-            raise HTTPException(status_code=404, detail="Estudiante no encontrado en tu organización")
-
+    await _estudiante_de_mi_organizacion(db, profesor, student_id)
     return await practice_service.get_global_stats(student_id)
-
-
-# ==================== REPORTES ====================
-
-@router.get("/groups/{group_id}/report")
-async def generar_reporte(
-    group_id: int,
-    profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service)
-):
-    """Genera reporte PDF del grupo."""
-    # TODO: Implementar generación de PDF
-    raise HTTPException(status_code=501, detail="No implementado")

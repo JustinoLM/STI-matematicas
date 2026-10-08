@@ -7,10 +7,9 @@ en tabla enunciado_tematico (PK: signature × tema × nivel).
 
 from typing import Dict, List
 
-from app.repositories.enunciados_repository import EnunciadoTematicoRepository
-from app.services.llm_service import LLMService, LLMPrompts
 from app.models.problem import Problema
-
+from app.repositories.enunciados_repository import EnunciadoTematicoRepository
+from app.services.llm_service import LLMPrompts, LLMService
 
 # Mapeo del Operacion enum (símbolos) a nombres legibles para el LLM
 _OP_NOMBRE: Dict[str, str] = {
@@ -157,11 +156,3 @@ class EnunciadosService:
         if not texto:
             raise ValueError("DeepSeek devolvió respuesta vacía")
         return texto
-
-    @staticmethod
-    def _fallback_por_id(problema_id: int) -> str:
-        """
-        Fallback cuando el problema no se encuentra en BD.
-        No se cachea — se lanza excepción en obtener_enunciado.
-        """
-        raise ValueError(f"Problema {problema_id} no encontrado")

@@ -36,7 +36,7 @@ function normalizarDecimal(num: number, decimales: number): number {
  * Inserta el punto decimal según la cantidad total de decimales
  */
 function insertarDecimal(valor: number, totalDecimales: number): string {
-  let str = valor.toString();
+  const str = valor.toString();
 
   if (totalDecimales === 0) return str;
 

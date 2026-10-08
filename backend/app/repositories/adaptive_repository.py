@@ -4,23 +4,37 @@ Repository para operaciones de base de datos del sistema adaptativo.
 Gestiona perfiles, diagnósticos, sesiones y alertas.
 """
 
-from typing import Optional, List, Dict
-from sqlalchemy import select, func, and_, or_, desc
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.adaptive import (
+    AlertaEstudiante,
+    EstadoDiagnostico,
+    EstadoSesion,
     PerfilEstudiante,
     PruebaDiagnostica,
     SesionPractica,
-    EstadoSesion,
-    AlertaEstudiante,
-    EstadoDiagnostico,
     TipoAlerta,
-    PerfilAprendizaje
 )
+from app.models.challenge import DesafioGrupal, GrupoDesafio
+from app.models.gamification import Desbloqueable, PersonalizacionEstudiante
+from app.models.group import EstudianteGrupo
 from app.models.problem import Intento, Problema
 from app.models.user import Estudiante
+
+# Temas narrativos (ids del catálogo de la tienda) y umbral de participación en desafíos
+TEMAS_NARRATIVOS = (
+    "tema-piratas",
+    "tema-astronautas",
+    "tema-magos",
+    "tema-caballeros",
+    "tema-vaqueros",
+    "tema-princesas",
+)
+MIN_SESIONES_PARTICIPACION_DESAFIO = 3
 
 
 class AdaptiveRepository:
@@ -187,20 +201,6 @@ class AdaptiveRepository:
         await self.db.refresh(sesion)
         return sesion
     
-    async def get_ultimas_sesiones(
-        self,
-        estudiante_id: int,
-        limit: int = 10
-    ) -> List[SesionPractica]:
-        """Obtiene las últimas N sesiones de un estudiante."""
-        result = await self.db.execute(
-            select(SesionPractica)
-            .where(SesionPractica.estudiante_id == estudiante_id)
-            .order_by(SesionPractica.fecha_inicio.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-    
     # ============================================
     # Operaciones de Intentos (extendidas)
     # ============================================
@@ -272,21 +272,6 @@ class AdaptiveRepository:
         return [row[0] for row in result.all()]
 
     # ============================================
-    # Estadísticas de Grupo
-    # ============================================
-
-    async def get_velocidades_grupo(self, grupo_id: int) -> List[float]:
-        """Obtiene velocidades promedio de todos los estudiantes del grupo."""
-        # TODO: Implementar cuando tengamos la relación estudiante-grupo
-        # Por ahora retorna lista vacía
-        return []
-    
-    async def get_precisiones_grupo(self, grupo_id: int) -> List[float]:
-        """Obtiene precisiones de todos los estudiantes del grupo."""
-        # TODO: Implementar cuando tengamos la relación estudiante-grupo
-        return []
-    
-    # ============================================
     # Operaciones de Alertas (preparado para futuro)
     # ============================================
     
@@ -337,7 +322,7 @@ class AdaptiveRepository:
         fecha_fin: datetime
     ) -> int:
         """Cuenta sesiones en un rango de fechas."""
-        from sqlalchemy import func, and_
+        from sqlalchemy import and_, func
         
         result = await self.db.execute(
             select(func.count(SesionPractica.id))
@@ -354,7 +339,7 @@ class AdaptiveRepository:
     
     async def get_total_problemas_resueltos(self, estudiante_id: int) -> int:
         """Total de problemas resueltos (todas las sesiones completadas)."""
-        from sqlalchemy import func, and_
+        from sqlalchemy import and_, func
 
         result = await self.db.execute(
             select(func.sum(SesionPractica.cantidad_problemas))
@@ -459,12 +444,6 @@ class AdaptiveRepository:
         )
         return result.scalar_one_or_none()
     
-    async def update_problema(self, problema: Problema) -> Problema:
-        """Actualiza un problema."""
-        await self.db.commit()
-        await self.db.refresh(problema)
-        return problema
-    
     async def get_intentos_problema(
         self,
         estudiante_id: int,
@@ -482,3 +461,91 @@ class AdaptiveRepository:
             .order_by(Intento.timestamp)
         )
         return list(result.scalars().all())
+
+    # ============================================
+    # Tema activo (medalla de exploración)
+    # ============================================
+
+    async def get_tema_activo(self, estudiante_id: int) -> Optional[str]:
+        """Id del tema narrativo activo del estudiante (p. ej. "tema-piratas"), o None."""
+        result = await self.db.execute(
+            select(Desbloqueable.archivo_referencia)
+            .join(PersonalizacionEstudiante, PersonalizacionEstudiante.tema_activo_id == Desbloqueable.id)
+            .where(PersonalizacionEstudiante.estudiante_id == estudiante_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def contar_temas_narrativos_practicados(self, estudiante_id: int) -> int:
+        """Cuántos temas narrativos distintos usó el estudiante en sesiones completadas."""
+        result = await self.db.execute(
+            select(func.count(func.distinct(SesionPractica.tema_activo))).where(
+                and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    SesionPractica.estado == EstadoSesion.COMPLETADA,
+                    SesionPractica.tema_activo.in_(TEMAS_NARRATIVOS),
+                )
+            )
+        )
+        return int(result.scalar() or 0)
+
+    # ============================================
+    # Desafíos grupales (participación)
+    # ============================================
+
+    def _condiciones_ventana_desafio(self, desafio: DesafioGrupal) -> list:
+        condiciones = [
+            SesionPractica.estado == EstadoSesion.COMPLETADA,
+            SesionPractica.fecha_fin >= desafio.fecha_creacion,
+        ]
+        if desafio.fecha_limite:
+            condiciones.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
+        return condiciones
+
+    async def get_participantes_desafio(self, grupo_id: int, desafio: DesafioGrupal) -> List[int]:
+        """
+        Miembros activos del grupo que participaron en el desafío: completaron al menos
+        MIN_SESIONES_PARTICIPACION_DESAFIO sesiones dentro de la ventana del desafío.
+        """
+        miembros = await self.db.execute(
+            select(EstudianteGrupo.estudiante_id).where(
+                and_(EstudianteGrupo.grupo_id == grupo_id, EstudianteGrupo.activo == True)  # noqa: E712
+            )
+        )
+        miembros_ids = [row[0] for row in miembros.all()]
+        if not miembros_ids:
+            return []
+        result = await self.db.execute(
+            select(SesionPractica.estudiante_id)
+            .where(and_(
+                SesionPractica.estudiante_id.in_(miembros_ids),
+                *self._condiciones_ventana_desafio(desafio),
+            ))
+            .group_by(SesionPractica.estudiante_id)
+            .having(func.count(SesionPractica.id) >= MIN_SESIONES_PARTICIPACION_DESAFIO)
+        )
+        return [row[0] for row in result.all()]
+
+    async def contar_desafios_grupales_participados(self, estudiante_id: int) -> int:
+        """Desafíos grupales completados por un grupo del estudiante en los que él participó."""
+        completados = await self.db.execute(
+            select(DesafioGrupal)
+            .join(GrupoDesafio, GrupoDesafio.desafio_id == DesafioGrupal.id)
+            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == GrupoDesafio.grupo_id)
+            .where(and_(
+                EstudianteGrupo.estudiante_id == estudiante_id,
+                GrupoDesafio.puntos_otorgados == True,  # noqa: E712
+                DesafioGrupal.eliminado == False,  # noqa: E712
+            ))
+            .distinct()
+        )
+        total = 0
+        for desafio in completados.scalars().all():
+            sesiones = await self.db.execute(
+                select(func.count(SesionPractica.id)).where(and_(
+                    SesionPractica.estudiante_id == estudiante_id,
+                    *self._condiciones_ventana_desafio(desafio),
+                ))
+            )
+            if (sesiones.scalar() or 0) >= MIN_SESIONES_PARTICIPACION_DESAFIO:
+                total += 1
+        return total

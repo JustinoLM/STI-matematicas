@@ -2,9 +2,10 @@
 Schemas Pydantic para desafíos desde la perspectiva del estudiante.
 """
 
-from typing import Optional, List
-from pydantic import BaseModel
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 
 class ContribuidorInfo(BaseModel):
