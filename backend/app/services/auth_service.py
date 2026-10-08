@@ -128,7 +128,6 @@ class AuthService:
         estudiante = await self.user_repo.create_student(
             codigo_estudiante=data.codigo_estudiante,
             password_hash=password_hash,
-            password_plain=data.password,
             nombre_completo=data.nombre_completo,
             genero=data.genero,
             organizacion_id=data.organizacion_id,
@@ -154,7 +153,6 @@ class AuthService:
         profesor = await self.user_repo.create_teacher(
             codigo_profesor=data.codigo_profesor,
             password_hash=password_hash,
-            password_plain=data.password,
             nombre_completo=data.nombre_completo,
             institucion=data.institucion,
             organizacion_id=data.organizacion_id,
@@ -179,7 +177,6 @@ class AuthService:
                 await self.user_repo.create_student(
                     codigo_estudiante=row.codigo_estudiante,
                     password_hash=pw_hash,
-                    password_plain=row.password,
                     nombre_completo=row.nombre_completo,
                     genero=row.genero,
                     organizacion_id=row.organizacion_id,
@@ -210,7 +207,6 @@ class AuthService:
                 await self.user_repo.create_teacher(
                     codigo_profesor=row.codigo_profesor,
                     password_hash=pw_hash,
-                    password_plain=row.password,
                     nombre_completo=row.nombre_completo,
                     institucion=row.institucion,
                     organizacion_id=row.organizacion_id,
@@ -274,7 +270,8 @@ class AuthService:
         
         # Extraer user_id del payload
         user_id: int = payload.get("sub")
-        if user_id is None:
+        # Un token de administrador (sub="admin") no es un usuario de la BD
+        if user_id is None or payload.get("role") == "admin" or not str(user_id).isdigit():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token inválido",

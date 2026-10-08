@@ -85,7 +85,6 @@ class UserRepository:
         password_hash: str,
         nombre_completo: str,
         genero: str = "masculino",
-        password_plain: Optional[str] = None,
         organizacion_id: Optional[int] = None,
         grado_academico: Optional[str] = None,
         edad: Optional[int] = None,
@@ -99,7 +98,6 @@ class UserRepository:
         estudiante = Estudiante(
             codigo_estudiante=codigo_estudiante,
             password_hash=password_hash,
-            password_plain=password_plain,
             tipo_usuario=TipoUsuario.ESTUDIANTE,
             nombre_completo=nombre_completo,
             genero=genero,
@@ -120,7 +118,6 @@ class UserRepository:
         codigo_profesor: str,
         password_hash: str,
         nombre_completo: str,
-        password_plain: Optional[str] = None,
         institucion: Optional[str] = None,
         organizacion_id: Optional[int] = None,
         grado_academico: Optional[str] = None,
@@ -129,7 +126,6 @@ class UserRepository:
         profesor = Profesor(
             codigo_profesor=codigo_profesor,
             password_hash=password_hash,
-            password_plain=password_plain,
             tipo_usuario=TipoUsuario.PROFESOR,
             nombre_completo=nombre_completo,
             institucion=institucion,

@@ -12,7 +12,7 @@ Endpoints (todos bajo /admin/organizations — sin auth por ahora):
 import asyncio
 from datetime import datetime, date, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sa_delete, update as sa_update, cast, Date
 from sqlalchemy.orm import selectinload
@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional
 from pydantic import BaseModel
 
-from app.api.dependencies import DBSession
+from app.api.dependencies import DBSession, require_admin
 from app.models.organization import Organizacion
 from app.models.user import Profesor, Estudiante
 from app.models.group import Grupo, EstudianteGrupo
@@ -47,7 +47,8 @@ from app.schemas.organization import (
     AsignarOrganizacionRequest,
 )
 
-router = APIRouter()
+# Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -387,7 +388,6 @@ async def listar_todos_usuarios(db: DBSession):
                 "nombre_completo": p.nombre_completo,
                 "organizacion_id": p.organizacion_id,
                 "institucion": p.institucion,
-                "password_plain": p.password_plain,
                 "activo": bool(p.activo),
                 "fecha_creacion": p.fecha_creacion.isoformat() if p.fecha_creacion else None,
                 "ultimo_acceso": p.ultimo_acceso.isoformat() if p.ultimo_acceso else None,
@@ -405,7 +405,6 @@ async def listar_todos_usuarios(db: DBSession):
                 "grado_academico": e.grado_academico,
                 "genero": e.genero.value if e.genero else None,
                 "edad": e.edad,
-                "password_plain": e.password_plain,
                 "activo": bool(e.activo),
                 "fecha_creacion": e.fecha_creacion.isoformat() if e.fecha_creacion else None,
                 "ultimo_acceso": e.ultimo_acceso.isoformat() if e.ultimo_acceso else None,

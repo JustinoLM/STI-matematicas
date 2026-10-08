@@ -87,3 +87,10 @@ app.dependency_overrides[get_db] = override_get_db
 def anyio_backend():
     """Backend for anyio."""
     return "asyncio"
+
+
+def admin_headers() -> dict:
+    """Cabecera Authorization con un token de administrador (para endpoints /admin)."""
+    from app.core.security import create_admin_token
+
+    return {"Authorization": f"Bearer {create_admin_token()}"}

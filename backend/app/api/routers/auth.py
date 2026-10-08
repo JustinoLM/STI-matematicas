@@ -3,16 +3,23 @@ Router de autenticación.
 
 Endpoints:
 - POST /login - Login con código + password
-- POST /admin/students - Crear estudiante (solo admin por ahora)
-- POST /admin/teachers - Crear profesor (solo admin por ahora)
+- POST /admin-login - Login del panel de administración (contraseña ADMIN_PASSWORD)
+- POST /admin/students, /admin/teachers, /admin/bulk/* - Requieren token de administrador
 - GET /me - Obtener usuario actual
 - POST /change-password - Cambiar contraseña
 """
 
-from fastapi import APIRouter, Depends, status
+import hmac
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.core.config import settings
+from app.core.security import create_admin_token
 from app.api.dependencies import (
+    require_admin,
     get_current_active_user,
     get_current_student,
     get_current_teacher,
@@ -117,12 +124,66 @@ async def change_password(
 
 
 # ============================================
+# Login del panel de administración
+# ============================================
+
+_ADMIN_MAX_FALLOS = 5
+_ADMIN_VENTANA_SEG = 15 * 60
+_admin_fallos: dict[str, list[float]] = {}
+
+
+class AdminLoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class AdminTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+@router.post("/admin-login", response_model=AdminTokenResponse)
+async def admin_login(data: AdminLoginRequest, request: Request):
+    """
+    Verifica la contraseña del panel de administración (ADMIN_PASSWORD) y
+    devuelve un token con role="admin". Limita a 5 intentos fallidos por IP
+    cada 15 minutos (en memoria del proceso).
+    """
+    if not settings.ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El acceso de administrador no está configurado",
+        )
+
+    ip = request.client.host if request.client else "desconocida"
+    ahora = time.monotonic()
+    fallos = [t for t in _admin_fallos.get(ip, []) if ahora - t < _ADMIN_VENTANA_SEG]
+    if len(fallos) >= _ADMIN_MAX_FALLOS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Espera unos minutos.",
+        )
+
+    if not hmac.compare_digest(
+        data.password.encode("utf-8"), settings.ADMIN_PASSWORD.encode("utf-8")
+    ):
+        fallos.append(ahora)
+        _admin_fallos[ip] = fallos
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Contraseña incorrecta",
+        )
+
+    _admin_fallos.pop(ip, None)
+    return AdminTokenResponse(access_token=create_admin_token())
+
+
+# ============================================
 # Endpoints de Administración
 # ============================================
-# NOTA: Por ahora sin protección de admin.
-# En producción, agregar dependency que verifique rol de admin.
+# Todos los endpoints /admin/* exigen un token con role="admin"
+# (obtenido en POST /admin-login).
 
-@router.post("/admin/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/admin/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
 async def create_student(
     student_data: CreateStudentRequest,
     auth_service: AuthServiceDep
@@ -130,9 +191,8 @@ async def create_student(
     """
     Crea un nuevo estudiante.
     
-    **NOTA:** En producción, este endpoint debe estar protegido por rol de administrador.
-    Por ahora está abierto para facilitar testing y desarrollo.
-    
+    Requiere token de administrador.
+
     El admin proporciona:
     - Código único del estudiante
     - Nombre completo
@@ -141,7 +201,7 @@ async def create_student(
     return await auth_service.create_student(student_data)
 
 
-@router.post("/admin/teachers", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/admin/teachers", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
 async def create_teacher(
     teacher_data: CreateTeacherRequest,
     auth_service: AuthServiceDep
@@ -149,13 +209,12 @@ async def create_teacher(
     """
     Crea un nuevo profesor.
 
-    **NOTA:** En producción, este endpoint debe estar protegido por rol de administrador.
-    Por ahora está abierto para facilitar testing y desarrollo.
+    Requiere token de administrador.
     """
     return await auth_service.create_teacher(teacher_data)
 
 
-@router.post("/admin/bulk/students", response_model=BulkImportResult)
+@router.post("/admin/bulk/students", response_model=BulkImportResult, dependencies=[Depends(require_admin)])
 async def bulk_import_students(
     data: BulkImportStudentsRequest,
     auth_service: AuthServiceDep
@@ -167,7 +226,7 @@ async def bulk_import_students(
     return await auth_service.bulk_import_students(data)
 
 
-@router.post("/admin/bulk/teachers", response_model=BulkImportResult)
+@router.post("/admin/bulk/teachers", response_model=BulkImportResult, dependencies=[Depends(require_admin)])
 async def bulk_import_teachers(
     data: BulkImportTeachersRequest,
     auth_service: AuthServiceDep

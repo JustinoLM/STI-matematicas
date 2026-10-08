@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
+from tests.conftest import admin_headers
 from app.core.config import settings
 
 
@@ -18,6 +19,7 @@ async def test_create_student_success():
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024001",
                 "nombre_completo": "Juan Pérez",
@@ -40,6 +42,7 @@ async def test_create_student_duplicate_codigo():
         # Crear primer estudiante
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024002",
                 "nombre_completo": "María García",
@@ -50,6 +53,7 @@ async def test_create_student_duplicate_codigo():
         # Intentar crear otro con mismo código
         response = await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024002",
                 "nombre_completo": "Pedro López",
@@ -67,6 +71,7 @@ async def test_create_teacher_success():
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.post(
             "/api/auth/admin/teachers",
+            headers=admin_headers(),
             json={
                 "codigo_profesor": "PROF001",
                 "nombre_completo": "Ana Martínez",
@@ -89,6 +94,7 @@ async def test_login_student_success():
         # Crear estudiante
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024003",
                 "nombre_completo": "Carlos Ruiz",
@@ -119,6 +125,7 @@ async def test_login_wrong_password():
         # Crear estudiante
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024004",
                 "nombre_completo": "Luis Gómez",
@@ -161,6 +168,7 @@ async def test_get_current_user_authenticated():
         # Crear y hacer login
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024005",
                 "nombre_completo": "Sofia López",
@@ -217,6 +225,7 @@ async def test_change_password_success():
         # Crear y hacer login
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST2024006",
                 "nombre_completo": "Miguel Torres",
@@ -266,6 +275,7 @@ async def test_teacher_cannot_access_student_endpoint():
         # Crear profesor
         await client.post(
             "/api/auth/admin/teachers",
+            headers=admin_headers(),
             json={
                 "codigo_profesor": "PROF002",
                 "nombre_completo": "Roberto Díaz",

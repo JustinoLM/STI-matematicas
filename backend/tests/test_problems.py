@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from decimal import Decimal
 
 from app.main import app
+from tests.conftest import admin_headers
 
 
 @pytest.mark.asyncio
@@ -18,6 +19,7 @@ async def test_generate_problems_default_level_1():
         # Crear y autenticar estudiante
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST001",
                 "nombre_completo": "Test Student",
@@ -64,6 +66,7 @@ async def test_generate_problems_level_3_with_multiplication():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST002",
                 "nombre_completo": "Test Student 2",
@@ -103,6 +106,7 @@ async def test_generate_problems_custom_parameters():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST003",
                 "nombre_completo": "Test Student 3",
@@ -148,6 +152,7 @@ async def test_submit_answer_correct():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST004",
                 "nombre_completo": "Test Student 4",
@@ -206,6 +211,7 @@ async def test_submit_answer_incorrect():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST005",
                 "nombre_completo": "Test Student 5",
@@ -256,6 +262,7 @@ async def test_validate_answer_without_registering():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST006",
                 "nombre_completo": "Test Student 6",
@@ -310,6 +317,7 @@ async def test_generate_division_problems():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST007",
                 "nombre_completo": "Test Student 7",
@@ -351,6 +359,7 @@ async def test_problem_uniqueness_by_signature():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST008",
                 "nombre_completo": "Test Student 8",
@@ -415,6 +424,7 @@ async def test_generate_problems_invalid_level():
         # Crear y autenticar
         await client.post(
             "/api/auth/admin/students",
+            headers=admin_headers(),
             json={
                 "codigo_estudiante": "EST009",
                 "nombre_completo": "Test Student 9",

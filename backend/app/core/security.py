@@ -73,3 +73,18 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def create_admin_token() -> str:
+    """
+    Crea un JWT para el panel de administración.
+
+    No corresponde a un usuario de la BD: lleva role="admin" y sub="admin",
+    y expira según ADMIN_TOKEN_EXPIRE_MINUTES.
+    """
+    expire = datetime.utcnow() + timedelta(minutes=settings.ADMIN_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"sub": "admin", "role": "admin", "exp": expire},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )

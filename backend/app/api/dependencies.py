@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import decode_access_token
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.models.user import Usuario, Estudiante, Profesor, TipoUsuario
@@ -150,6 +151,27 @@ async def get_current_teacher(
             detail="Este endpoint es solo para profesores"
         )
     return current_user
+
+
+async def require_admin(token: str = Depends(oauth2_scheme)) -> None:
+    """
+    Dependency que exige un token de administrador (role="admin").
+
+    El token se obtiene con POST /api/auth/admin-login. Un token de estudiante
+    o profesor, aunque sea válido, recibe 403.
+    """
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if payload.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol de administrador",
+        )
 
 
 # ============================================

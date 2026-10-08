@@ -40,3 +40,5 @@ coverage/
 *.jsonl
 CLAUDE.md
 
+# Contraseñas generadas por scripts/reset_passwords.py
+credenciales_*.csv

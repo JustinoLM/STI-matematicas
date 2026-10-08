@@ -7,6 +7,13 @@ import axios, { AxiosError } from 'axios';
 // URL base de la API
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
+// Clave en sessionStorage del token del panel /admin (rol "admin")
+export const ADMIN_TOKEN_KEY = 'admin_token';
+
+// Rutas que usan el token de administrador en lugar del de estudiante/profesor
+const esRutaAdmin = (url?: string) =>
+  !!url && (url.startsWith('/admin') || url.startsWith('/auth/admin'));
+
 // Crear instancia de Axios
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -19,6 +26,14 @@ const apiClient = axios.create({
 // Interceptor de request: Agregar token JWT
 apiClient.interceptors.request.use(
   (config) => {
+    // Rutas de administración: token de admin (sessionStorage), no el de usuario
+    if (esRutaAdmin(config.url) && config.url !== '/auth/admin-login') {
+      const adminToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+      if (adminToken) {
+        config.headers.Authorization = `Bearer ${adminToken}`;
+      }
+      return config;
+    }
     // Obtener token del localStorage (viene del authStore persist)
     const authStorage = localStorage.getItem('auth-storage');
     if (authStorage) {
@@ -40,7 +55,18 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     // Token inválido o expirado — pero NO redirigir si es el propio endpoint de login.
     // Un 401 en /auth/login significa "credenciales incorrectas", no "token expirado".
-    const isLoginRequest = error.config?.url?.includes('/auth/login');
+    const isLoginRequest =
+      error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/admin-login');
+    // Token de admin vencido o inválido: volver a pedir la contraseña del panel
+    if (
+      (error.response?.status === 401 || error.response?.status === 403) &&
+      esRutaAdmin(error.config?.url) &&
+      !isLoginRequest
+    ) {
+      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+      window.location.href = '/admin';
+      return Promise.reject(error);
+    }
     if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('auth-storage');
       localStorage.removeItem('access_token');

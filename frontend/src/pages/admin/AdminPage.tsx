@@ -49,7 +49,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import apiClient, { getErrorMessage } from '@/services/api';
+import apiClient, { getErrorMessage, ADMIN_TOKEN_KEY } from '@/services/api';
 import { reglaDeTresService, type EstudianteNotaR3 } from '@/services/reglaDeTresService';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -143,7 +143,6 @@ interface UsuarioAdmin {
   nombre_completo: string;
   organizacion_id: number | null;
   institucion?: string;
-  password_plain: string | null;
   activo: boolean;
   fecha_creacion: string | null;
   ultimo_acceso: string | null;
@@ -1207,7 +1206,6 @@ function SeccionOrganizaciones() {
 // ─── Sección Ver Usuarios ─────────────────────────────────────────────────────
 
 function SeccionVerUsuarios() {
-  const [showPasswords, setShowPasswords] = useState(false);
   const [editandoEst, setEditandoEst] = useState<UsuarioAdmin | null>(null);
   // Claves colapsadas: "org-{orgId}" y "sec-{orgId}-{secNombre}"
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -1292,18 +1290,6 @@ function SeccionVerUsuarios() {
           })()}
         </td>
       )}
-      <td className="px-3 py-2">
-        {u.password_plain ? (
-          <div className="flex items-center gap-1">
-            <code className="text-xs bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded">
-              {showPasswords ? u.password_plain : '••••••'}
-            </code>
-            <CopiarBtn texto={u.password_plain} />
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground italic">—</span>
-        )}
-      </td>
       <td className="px-3 py-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatFecha(u.fecha_creacion)}</div>
       </td>
@@ -1335,7 +1321,6 @@ function SeccionVerUsuarios() {
         {tipo === 'profesor'   && <th className="px-3 py-1.5 font-semibold">Institución</th>}
         {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Pruebas</th>}
         {tipo === 'estudiante' && <th className="px-3 py-1.5 font-semibold">Regla de 3</th>}
-        <th className="px-3 py-1.5 font-semibold">Contraseña</th>
         <th className="px-3 py-1.5 font-semibold">Creado</th>
         <th className="px-3 py-1.5 font-semibold">Último acceso</th>
         <th className="px-3 py-1.5 font-semibold">Estado</th>
@@ -1398,10 +1383,6 @@ function SeccionVerUsuarios() {
     <div className="space-y-6">
       {/* Controles */}
       <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => setShowPasswords(v => !v)}>
-          {showPasswords ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
-          {showPasswords ? 'Ocultar' : 'Mostrar'} contraseñas
-        </Button>
         <Button variant="outline" size="sm" onClick={() => refetch()}>
           <RefreshCw className="h-4 w-4 mr-1" />Actualizar
         </Button>
@@ -2006,16 +1987,22 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState('');
 
-  const ADMIN_PWD = import.meta.env.VITE_ADMIN_PASSWORD || '';
+  const [enviando, setEnviando] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // La contraseña se verifica en el backend (POST /auth/admin-login), que
+  // devuelve un token con rol de administrador.
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pwd === ADMIN_PWD) {
-      sessionStorage.setItem('admin_auth', 'ok');
+    setEnviando(true);
+    try {
+      const res = await apiClient.post<{ access_token: string }>('/auth/admin-login', { password: pwd });
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, res.data.access_token);
       onAcceso();
-    } else {
-      setError('Contraseña incorrecta');
+    } catch (err) {
+      setError(getErrorMessage(err));
       setPwd('');
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -2056,7 +2043,7 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
                 <AlertCircle className="h-4 w-4" /> {error}
               </div>
             )}
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" disabled={enviando || !pwd}>
               <ShieldCheck className="h-4 w-4 mr-2" /> Ingresar
             </Button>
           </form>
@@ -2642,7 +2629,7 @@ function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
 
 export function AdminPage() {
   const [autenticado, setAutenticado] = useState(() =>
-    sessionStorage.getItem('admin_auth') === 'ok'
+    !!sessionStorage.getItem(ADMIN_TOKEN_KEY)
   );
 
   // Lista de organizaciones disponibles para los dropdowns (compartida entre tabs)
@@ -2678,7 +2665,7 @@ export function AdminPage() {
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground"
-              onClick={() => { sessionStorage.removeItem('admin_auth'); setAutenticado(false); }}
+              onClick={() => { sessionStorage.removeItem(ADMIN_TOKEN_KEY); setAutenticado(false); }}
             >
               Cerrar sesión
             </Button>

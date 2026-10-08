@@ -8,13 +8,14 @@ Endpoints:
 
 from io import BytesIO
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 import openpyxl
 
-from app.api.dependencies import AdminImportServiceDep
+from app.api.dependencies import AdminImportServiceDep, require_admin
 from app.schemas.admin_import import ImportResumen
 
-router = APIRouter()
+# Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.post("/admin/import/excel", response_model=ImportResumen)

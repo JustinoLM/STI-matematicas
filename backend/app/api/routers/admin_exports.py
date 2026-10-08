@@ -12,17 +12,18 @@ Endpoints:
 """
 
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import DBSession
+from app.api.dependencies import DBSession, require_admin
 from app.models.adaptive import SesionPractica, EstadoSesion, PerfilEstudiante, PruebaDiagnostica, ResultadoPostTest
 from app.models.user import Estudiante
 from app.models.organization import Organizacion
 from app.models.gamification import EstudianteMedalla, Medalla, TransaccionPuntos, TipoTransaccion
 
-router = APIRouter()
+# Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -69,7 +70,6 @@ async def exportar_estudiantes(
             "activo": "Sí" if est.activo else "No",
             "fecha_creacion": _fmt(est.fecha_creacion),
             "ultimo_acceso": _fmt(est.ultimo_acceso),
-            "password_plain": _fmt(est.password_plain),
         }
         for est, org in rows
     ]

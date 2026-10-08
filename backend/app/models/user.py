@@ -37,7 +37,6 @@ class Usuario(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), nullable=True, index=True)  # Opcional para notificaciones
     password_hash = Column(String(255), nullable=False)
-    password_plain = Column(String(100), nullable=True)   # MVP: contraseña en texto plano para admin
     tipo_usuario = Column(Enum(TipoUsuario), nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     ultimo_acceso = Column(DateTime, nullable=True)

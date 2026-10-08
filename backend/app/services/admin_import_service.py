@@ -213,12 +213,13 @@ class AdminImportService:
             genero = str(row[2] or "masculino").strip().lower()
             if genero not in ("masculino", "femenino"):
                 genero = "masculino"
-            password_plain = str(row[10]) if row[10] else "cambiar123"
+            # Columna opcional (índice 10): el exportador ya no la incluye, así que
+            # un Excel exportado no la trae y se usa la contraseña inicial por defecto.
+            password_inicial = str(row[10]) if len(row) > 10 and row[10] else "cambiar123"
 
             estudiante = Estudiante(
                 codigo_estudiante=codigo,
-                password_hash=get_password_hash(password_plain),
-                password_plain=password_plain,
+                password_hash=get_password_hash(password_inicial),
                 tipo_usuario=TipoUsuario.ESTUDIANTE,
                 nombre_completo=row[1] or codigo,
                 genero=genero,

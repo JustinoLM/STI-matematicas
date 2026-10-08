@@ -119,6 +119,26 @@ poetry run alembic downgrade -1
 openssl rand -hex 32
 ```
 
+## Panel de administración
+Los endpoints `/api/admin/*` y `/api/auth/admin/*` exigen un token con rol de
+administrador. Se obtiene con `POST /api/auth/admin-login`, que compara la
+contraseña con la variable de entorno `ADMIN_PASSWORD` (máx. 5 intentos fallidos
+por IP cada 15 min). Si `ADMIN_PASSWORD` está vacía, el login devuelve 503.
+
+```bash
+openssl rand -base64 24   # generar ADMIN_PASSWORD
+```
+
+## Restablecer contraseñas
+`scripts/reset_passwords.py` genera contraseñas nuevas, guarda solo los hashes
+Argon2 en la BD y escribe las claves en un CSV local (nunca las imprime).
+Por defecto es simulación; con `--execute` aplica los cambios.
+
+```bash
+poetry run python scripts/reset_passwords.py --org-id 1 --salida credenciales_org1.csv
+poetry run python scripts/reset_passwords.py --org-id 1 --salida credenciales_org1.csv --execute
+```
+
 ## Documentación de la API
 
 La documentación se genera automáticamente con FastAPI:
@@ -132,7 +152,8 @@ La documentación se genera automáticamente con FastAPI:
 
 1. Conectar repositorio a Railway
 2. Configurar variables de entorno
-3. Deploy automático en cada push a `main`
+3. Variables obligatorias: `DATABASE_URL`, `SECRET_KEY`, `ADMIN_PASSWORD`
+4. Desplegar con `railway up` (ver `deploy.sh`); no hay despliegue automático versionado
 
 ## Licencia
 

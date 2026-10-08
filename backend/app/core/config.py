@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 horas
 
+    # Panel de administración: contraseña verificada en el backend.
+    # Vacía = el login de administrador queda deshabilitado (503).
+    ADMIN_PASSWORD: str = ""
+    ADMIN_TOKEN_EXPIRE_MINUTES: int = 120
+
     # LLM (DeepSeek API)
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
