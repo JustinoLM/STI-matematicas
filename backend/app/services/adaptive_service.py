@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 
+from app.core.respuestas import respuesta_es_correcta
 from app.models.adaptive import (
     EstadoDiagnostico,
     EstadoSesion,
@@ -185,7 +186,7 @@ class AdaptiveService:
                 continue
             
             # Validar respuesta
-            es_correcto = abs(respuesta - problema.resultado) <= Decimal("0.01")
+            es_correcto = respuesta_es_correcta(respuesta, problema.resultado)
             
             # Mapear operación a key
             op_key = problema.operacion.value
@@ -210,12 +211,14 @@ class AdaptiveService:
         total_correctos = sum(correctos_por_operacion.values())
         
         if total_correctos == 8:
-            # CASO ESPECIAL: Todas correctas → Nivel 4, todas operaciones nivel 2
+            # Puntuación perfecta: cada operación tiene 2/2 correctas, así que recibe
+            # nivel 3 (igual que cualquier operación con 2/2), y el nivel general
+            # arranca en 4.
             niveles = {
-                "suma": 2,
-                "resta": 2,
-                "multiplicacion": 2,
-                "division": 2,
+                "suma": 3,
+                "resta": 3,
+                "multiplicacion": 3,
+                "division": 3,
                 "actual": 4
             }
             mensaje = "¡Perfecto! Empezarás en nivel avanzado 4"
@@ -1601,7 +1604,7 @@ class AdaptiveService:
             if respuesta is None:
                 continue
 
-            es_correcto = abs(respuesta - problema.resultado) <= Decimal("0.01")
+            es_correcto = respuesta_es_correcta(respuesta, problema.resultado)
             op_key = problema.operacion.value
             if op_key == "+":
                 op_key = "suma"

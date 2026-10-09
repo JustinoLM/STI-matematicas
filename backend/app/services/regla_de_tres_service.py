@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from fastapi import HTTPException, status
 
+from app.core.respuestas import respuesta_es_correcta
 from app.models.regla_de_tres import (
     EstadoSesion,
     IntentoReglaTres,
@@ -37,7 +38,6 @@ class ReglaDeTresService:
     CANTIDAD_PROBLEMAS_DEFAULT = 10
     PROMOCION_CONSECUTIVAS = 5  # 5 correctas seguidas -> sube nivel (tope 5)
     PUNTOS_POR_CORRECTA = 10
-    TOLERANCIA = Decimal("0.01")
 
     # Configuración por nivel de dificultad (1-5)
     NIVEL_CONFIG = {
@@ -182,7 +182,7 @@ class ReglaDeTresService:
         if not problema:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problema no encontrado")
 
-        es_correcto = abs(Decimal(respuesta) - problema.resultado) <= self.TOLERANCIA
+        es_correcto = respuesta_es_correcta(respuesta, problema.resultado)
 
         intento = IntentoReglaTres(
             sesion_id=sesion.id, problema_id=problema.id,

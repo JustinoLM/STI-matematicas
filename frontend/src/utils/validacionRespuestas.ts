@@ -6,10 +6,34 @@
 import { Operacion, RespuestaValidacion } from '@/types';
 
 /**
- * Compara dos números con tolerancia para errores de punto flotante
+ * Convierte un número escrito como texto a milésimas (entero), redondeando a tres
+ * decimales con "mitad hacia arriba" (igual que ROUND_HALF_UP del backend).
+ * Trabaja sobre el texto para no depender de la coma flotante binaria.
+ * Devuelve null si el texto no es un número decimal simple.
  */
-function numerosIguales(num1: number, num2: number, tolerancia = 0.01): boolean {
-  return Math.abs(num1 - num2) < tolerancia;
+function aMilesimas(texto: string): bigint | null {
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(texto.trim());
+  if (!m || (m[2] === '' && (m[3] ?? '') === '')) return null;
+  const decimales = (m[3] ?? '').padEnd(4, '0');
+  let valor = BigInt((m[2] || '0') + decimales.slice(0, 3));
+  if (decimales.charAt(3) >= '5') valor += 1n;
+  return m[1] === '-' ? -valor : valor;
+}
+
+/** Texto decimal de un número (evita la notación exponencial). */
+function textoDecimal(n: number): string {
+  const t = String(n);
+  return /e/i.test(t) ? n.toFixed(3) : t;
+}
+
+/**
+ * Regla de corrección: la respuesta es correcta si, redondeada a tres decimales,
+ * es igual al resultado almacenado. Es la misma regla del backend.
+ */
+export function respuestaEsCorrecta(respuesta: string, resultadoEsperado: number): boolean {
+  const r = aMilesimas(respuesta);
+  const e = aMilesimas(textoDecimal(resultadoEsperado));
+  return r !== null && e !== null && r === e;
 }
 
 /**
@@ -31,8 +55,7 @@ function validarSumaResta(
     };
   }
 
-  const respuestaNum = parseFloat(respuestaLimpia);
-  const esCorrecta = numerosIguales(respuestaNum, resultadoEsperado);
+  const esCorrecta = respuestaEsCorrecta(respuestaLimpia, resultadoEsperado);
 
   return {
     esCorrecta,
@@ -63,8 +86,7 @@ function validarMultiplicacion(
   // Por ahora, solo validamos el resultado final
   // Los productos parciales son pasos intermedios que el estudiante completa
   // pero la validación principal es del resultado
-  const respuestaNum = parseFloat(respuestaLimpia);
-  const resultadoCorrecto = numerosIguales(respuestaNum, resultadoEsperado);
+  const resultadoCorrecto = respuestaEsCorrecta(respuestaLimpia, resultadoEsperado);
 
   return {
     esCorrecta: resultadoCorrecto,
@@ -92,8 +114,7 @@ function validarDivision(
   }
 
   // Validar solo el cociente (resultado final)
-  const cocienteNum = parseFloat(respuestaLimpia);
-  const resultadoCorrecto = numerosIguales(cocienteNum, resultadoEsperado);
+  const resultadoCorrecto = respuestaEsCorrecta(respuestaLimpia, resultadoEsperado);
 
   return {
     esCorrecta: resultadoCorrecto,

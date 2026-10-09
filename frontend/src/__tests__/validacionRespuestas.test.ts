@@ -1,5 +1,39 @@
 import { describe, it, expect } from 'vitest'
-import { validarRespuesta } from '@/utils/validacionRespuestas'
+import { validarRespuesta, respuestaEsCorrecta } from '@/utils/validacionRespuestas'
+
+describe('regla de corrección: redondeo a 3 decimales (mitad hacia arriba)', () => {
+  it('12.34 frente a 12.35 es incorrecta', () => {
+    expect(respuestaEsCorrecta('12.34', 12.35)).toBe(false)
+    expect(validarRespuesta('SUMA', '12.34', 10, 2.35, 12.35).esCorrecta).toBe(false)
+  })
+
+  it('20.8 frente a 20.80 es correcta (escritura equivalente)', () => {
+    expect(respuestaEsCorrecta('20.8', 20.8)).toBe(true)
+    expect(respuestaEsCorrecta('20.80', 20.8)).toBe(true)
+    expect(respuestaEsCorrecta('20.8', 20.800)).toBe(true)
+  })
+
+  it('18.5175 frente a 18.518 es correcta (redondea 18.5175 → 18.518)', () => {
+    expect(respuestaEsCorrecta('18.5175', 18.518)).toBe(true)
+    expect(validarRespuesta('DIVISION', '18.5175', 74.07, 4, 18.518).esCorrecta).toBe(true)
+  })
+
+  it('18.5174 frente a 18.518 es incorrecta (redondea a 18.517)', () => {
+    expect(respuestaEsCorrecta('18.5174', 18.518)).toBe(false)
+  })
+
+  it('no depende de la coma flotante binaria', () => {
+    expect(respuestaEsCorrecta('1.0005', 1.001)).toBe(true)
+    expect(respuestaEsCorrecta('2.675', 2.675)).toBe(true)
+    expect(respuestaEsCorrecta('-1.0005', -1.001)).toBe(true)  // mitad hacia arriba en valor absoluto
+  })
+
+  it('texto que no es un número es incorrecto', () => {
+    expect(respuestaEsCorrecta('abc', 5)).toBe(false)
+    expect(respuestaEsCorrecta('', 5)).toBe(false)
+    expect(respuestaEsCorrecta('.', 5)).toBe(false)
+  })
+})
 
 describe('validarRespuesta', () => {
 
@@ -42,8 +76,8 @@ describe('validarRespuesta', () => {
       expect(r.esCorrecta).toBe(true)
     })
 
-    it('respuesta fuera de la tolerancia es rechazada', () => {
-      // 8.02 difiere de 8 en 0.02 > tolerancia 0.01
+    it('respuesta distinta del resultado al redondear a 3 decimales es rechazada', () => {
+      // 8.02 redondeado a 3 decimales (8.020) no es igual a 8
       const r = validarRespuesta('SUMA', '8.02', 5, 3, 8)
       expect(r.esCorrecta).toBe(false)
     })

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 
+from app.core.respuestas import respuesta_es_correcta
 from app.models.adaptive import EstadoSesion, SesionPractica, TipoAlerta
 from app.models.problem import TipoSesion
 from app.repositories.adaptive_repository import AdaptiveRepository
@@ -330,7 +331,7 @@ class PracticeService:
             )
         
         respuesta_dec = Decimal(str(respuesta))
-        es_correcto = abs(respuesta_dec - problema.resultado) <= Decimal("0.01")
+        es_correcto = respuesta_es_correcta(respuesta_dec, problema.resultado)
         
         await self.problem_repo.create_intento(
             estudiante_id=estudiante_id,

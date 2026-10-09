@@ -9,10 +9,9 @@ intento incorrecto de una práctica (PracticeService) y su resultado se guarda e
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
+from app.core.respuestas import respuesta_es_correcta
 from app.models.hints import TipoError
 from app.models.problem import Operacion, Problema
-
-TOLERANCIA = Decimal("0.01")
 
 DESCRIPCIONES = {
     TipoError.DESALINEACION_DECIMALES: "No alineaste correctamente los puntos decimales",
@@ -29,7 +28,8 @@ def _dec(valor) -> Decimal:
 
 
 def _cerca(a: Decimal, b: Decimal) -> bool:
-    return abs(a - b) <= TOLERANCIA
+    """Misma regla que la corrección: iguales al redondear a tres decimales."""
+    return respuesta_es_correcta(a, b)
 
 
 def _digitos(valor: Decimal) -> str:
