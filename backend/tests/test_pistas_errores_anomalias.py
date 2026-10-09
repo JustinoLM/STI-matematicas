@@ -12,13 +12,17 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models.adaptive import (
-    AlertaEstudiante, EstadoSesion, PerfilEstudiante, SesionPractica, TipoAlerta,
+    AlertaEstudiante,
+    EstadoSesion,
+    PerfilEstudiante,
+    SesionPractica,
+    TipoAlerta,
 )
 from app.models.error import ErrorComun, EstudianteError
 from app.models.group import EstudianteGrupo, Grupo
 from app.models.organization import Organizacion
 from app.models.problem import Intento, Operacion, Problema, TipoSesion
-from app.models.user import Estudiante, Profesor
+from app.models.user import Profesor
 from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.gamification_repository import GamificationRepository
 from app.repositories.practice_repository import PracticeRepository

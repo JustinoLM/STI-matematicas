@@ -10,8 +10,8 @@ from typing import List, Optional, Set
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.llm import EnunciadoTematico
 from app.models.adaptive import SesionPractica
+from app.models.llm import EnunciadoTematico
 from app.models.problem import Problema
 
 

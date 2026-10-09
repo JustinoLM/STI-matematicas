@@ -4,15 +4,15 @@ Configuración de pytest y fixtures.
 Crea una base de datos de test limpia antes de cada test.
 """
 
-import pytest
 import asyncio
-from typing import Generator, AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from typing import AsyncGenerator, Generator
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.main import app
-
 
 # URL de base de datos de test (en memoria compartida)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

@@ -210,9 +210,10 @@ export const adminService = {
     const response = await apiClient.get('/admin/sistema/stats');
     return response.data;
   },
-  async exportar(key: string, orgId?: number | string) {
-    const orgParam = orgId ? `?org_id=${orgId}` : '';
-    const response = await apiClient.get(`/admin/export/${key}${orgParam}`);
+  async exportar(key: string, orgId?: number | string, conNombres = false) {
+    const response = await apiClient.get(`/admin/export/${key}`, {
+      params: { ...(orgId ? { org_id: orgId } : {}), ...(conNombres ? { con_nombres: true } : {}) },
+    });
     return response.data;
   },
   /** Verifica la contraseña del panel en el backend y guarda el token de administrador. */

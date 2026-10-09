@@ -9,20 +9,23 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.main import app
 from app.models.adaptive import EstadoSesion, PerfilEstudiante, SesionPractica, TipoAlerta
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.gamification import (
-    CategoriaDesbloqueable, CategoriaMedalla, Desbloqueable, EstudianteDesbloqueable, Medalla,
+    CategoriaDesbloqueable,
+    CategoriaMedalla,
+    Desbloqueable,
+    EstudianteDesbloqueable,
+    Medalla,
     PersonalizacionEstudiante,
 )
 from app.models.group import EstudianteGrupo, Grupo
 from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento, Operacion, Problema, TipoSesion
 from app.models.user import Profesor
-from app.repositories.adaptive_repository import AdaptiveRepository, TEMAS_NARRATIVOS
+from app.repositories.adaptive_repository import TEMAS_NARRATIVOS, AdaptiveRepository
 from app.repositories.gamification_repository import GamificationRepository
 from app.services import scheduler_service
 from app.services.adaptive_service import AdaptiveService

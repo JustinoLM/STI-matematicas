@@ -9,12 +9,18 @@ Endpoints:
   GET /admin/export/medallas     → medallas obtenidas
   GET /admin/export/tienda       → transacciones de la tienda
   GET /admin/export/resumen      → resumen por organización
+  GET /admin/export/desafios     → desafíos grupales por grupo (progreso y estado)
+  GET /admin/export/participacion → participación de cada estudiante en los desafíos
+
+Privacidad: por defecto las columnas de nombre salen vacías; el panel las pide solo
+con `con_nombres=true`. Las columnas se conservan en su posición porque la importación
+del Excel completo lee por posición.
 """
 
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 
 from app.api.dependencies import DBSession, require_admin
 from app.models.adaptive import (
@@ -24,9 +30,15 @@ from app.models.adaptive import (
     ResultadoPostTest,
     SesionPractica,
 )
+from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.gamification import EstudianteMedalla, Medalla, TipoTransaccion, TransaccionPuntos
+from app.models.group import EstudianteGrupo, Grupo
 from app.models.organization import Organizacion
 from app.models.user import Estudiante
+from app.repositories.adaptive_repository import (
+    MIN_SESIONES_PARTICIPACION_DESAFIO,
+    AdaptiveRepository,
+)
 
 # Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -41,6 +53,11 @@ def _fmt(val) -> str:
     return str(val)
 
 
+def _nombre(est, con_nombres: bool) -> str:
+    """Nombre del estudiante solo si el administrador lo pidió explícitamente."""
+    return (est.nombre_completo or "") if con_nombres else ""
+
+
 def _pct(correctos, total) -> str:
     if not total:
         return ""
@@ -53,6 +70,7 @@ def _pct(correctos, total) -> str:
 async def exportar_estudiantes(
     db: DBSession,
     org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
 ):
     """Listado completo de estudiantes con datos básicos y estado de cuenta."""
     stmt = (
@@ -67,7 +85,7 @@ async def exportar_estudiantes(
     data = [
         {
             "codigo_estudiante": est.codigo_estudiante,
-            "nombre_completo": est.nombre_completo,
+            "nombre_completo": _nombre(est, con_nombres),
             "genero": est.genero.value if est.genero else "",
             "grado_academico": _fmt(est.grado_academico),
             "edad": _fmt(est.edad),
@@ -89,6 +107,7 @@ async def exportar_estudiantes(
 async def exportar_diagnostico(
     db: DBSession,
     org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
 ):
     """
     Comparación pre-test (PruebaDiagnostica) vs post-test (ResultadoPostTest)
@@ -162,7 +181,7 @@ async def exportar_diagnostico(
 
         row = {
             "codigo_estudiante":    est.codigo_estudiante,
-            "nombre_estudiante":    est.nombre_completo,
+            "nombre_estudiante":    _nombre(est, con_nombres),
             "grado":                _fmt(est.grado_academico),
             "organizacion":         org.nombre if org else "",
             # — Pre-test —
@@ -219,6 +238,7 @@ async def exportar_diagnostico(
 async def exportar_sesiones(
     db: DBSession,
     org_id: Optional[int] = Query(None, description="Filtrar por organización"),
+    con_nombres: bool = Query(False, description="Incluir el nombre de cada estudiante"),
 ):
     """
     Devuelve el historial completo de sesiones de práctica completadas.
@@ -248,7 +268,7 @@ async def exportar_sesiones(
         data.append({
             "sesion_id": sesion.id,
             "codigo_estudiante": est.codigo_estudiante,
-            "nombre_estudiante": est.nombre_completo,
+            "nombre_estudiante": _nombre(est, con_nombres),
             "organizacion": org.nombre if org else "",
             "fecha_inicio": _fmt(sesion.fecha_inicio),
             "fecha_fin": _fmt(sesion.fecha_fin),
@@ -272,6 +292,7 @@ async def exportar_sesiones(
 async def exportar_niveles(
     db: DBSession,
     org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
 ):
     """
     Devuelve la evolución de niveles por sesión completada.
@@ -302,7 +323,7 @@ async def exportar_niveles(
         cambios = sesion.cambios_nivel or {}
         data.append({
             "codigo_estudiante": est.codigo_estudiante,
-            "nombre_estudiante": est.nombre_completo,
+            "nombre_estudiante": _nombre(est, con_nombres),
             "organizacion": org.nombre if org else "",
             "fecha": _fmt(sesion.fecha_fin),
             "nivel_general": sesion.nivel_actual_inicio or "",
@@ -321,7 +342,7 @@ async def exportar_niveles(
         if est_row:
             actuales.append({
                 "codigo_estudiante": est_row.codigo_estudiante,
-                "nombre_estudiante": est_row.nombre_completo,
+                "nombre_estudiante": _nombre(est_row, con_nombres),
                 "organizacion": org_row.nombre if org_row else "",
                 "nivel_actual_suma": perfil.nivel_suma,
                 "nivel_actual_resta": perfil.nivel_resta,
@@ -353,6 +374,7 @@ async def exportar_niveles(
 async def exportar_medallas(
     db: DBSession,
     org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
 ):
     """Historial de medallas obtenidas por estudiantes."""
     stmt = (
@@ -369,7 +391,7 @@ async def exportar_medallas(
     data = [
         {
             "codigo_estudiante": est.codigo_estudiante,
-            "nombre_estudiante": est.nombre_completo,
+            "nombre_estudiante": _nombre(est, con_nombres),
             "organizacion": org.nombre if org else "",
             "medalla": medalla.nombre,
             "categoria": medalla.categoria.value if hasattr(medalla.categoria, "value") else str(medalla.categoria),
@@ -388,6 +410,7 @@ async def exportar_medallas(
 async def exportar_tienda(
     db: DBSession,
     org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
 ):
     """Historial de compras en la tienda (transacciones de tipo 'compra')."""
     stmt = (
@@ -404,7 +427,7 @@ async def exportar_tienda(
     data = [
         {
             "codigo_estudiante": est.codigo_estudiante,
-            "nombre_estudiante": est.nombre_completo,
+            "nombre_estudiante": _nombre(est, con_nombres),
             "organizacion": org.nombre if org else "",
             "item_comprado": tx.concepto,
             "puntos_gastados": abs(tx.cantidad),
@@ -478,6 +501,17 @@ async def exportar_resumen(db: DBSession):
             )).all()
         )
 
+        # Desafíos grupales de los grupos con estudiantes de la organización
+        desafios_org = (await db.execute(
+            select(
+                func.count(func.distinct(GrupoDesafio.desafio_id)),
+                func.count(func.distinct(GrupoDesafio.desafio_id)).filter(GrupoDesafio.puntos_otorgados.is_(True)),
+            )
+            .join(DesafioGrupal, DesafioGrupal.id == GrupoDesafio.desafio_id)
+            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == GrupoDesafio.grupo_id)
+            .where(and_(EstudianteGrupo.estudiante_id.in_(est_ids), DesafioGrupal.eliminado.is_(False)))
+        )).one()
+
         data.append({
             "organizacion": org.nombre,
             "codigo": org.codigo,
@@ -486,6 +520,112 @@ async def exportar_resumen(db: DBSession):
             "precision_promedio": precision_avg,
             "medallas_otorgadas": med_count,
             "compras_realizadas": compras_count,
+            "desafios_asignados": desafios_org[0],
+            "desafios_completados": desafios_org[1],
         })
+
+    return {"columnas": list(data[0].keys()) if data else [], "filas": data}
+
+
+# ─── Desafíos grupales ────────────────────────────────────────────────────────
+
+async def _filas_desafios(db, org_id: Optional[int]):
+    """
+    Una fila por (desafío, grupo) con los miembros activos del grupo.
+    Con `org_id` solo cuentan los grupos con al menos un estudiante de esa organización.
+    Devuelve [(desafio, grupo_desafio, grupo, [(estudiante, organizacion)])].
+    """
+    stmt = (
+        select(DesafioGrupal, GrupoDesafio, Grupo)
+        .join(GrupoDesafio, GrupoDesafio.desafio_id == DesafioGrupal.id)
+        .join(Grupo, Grupo.id == GrupoDesafio.grupo_id)
+        .where(DesafioGrupal.eliminado.is_(False))
+        .order_by(DesafioGrupal.fecha_creacion, DesafioGrupal.id, Grupo.nombre)
+    )
+    filas = []
+    for desafio, gd, grupo in (await db.execute(stmt)).all():
+        miembros_stmt = (
+            select(Estudiante, Organizacion)
+            .join(EstudianteGrupo, EstudianteGrupo.estudiante_id == Estudiante.id)
+            .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
+            .where(and_(EstudianteGrupo.grupo_id == grupo.id, EstudianteGrupo.activo.is_(True)))
+            .order_by(Estudiante.codigo_estudiante)
+        )
+        if org_id:
+            miembros_stmt = miembros_stmt.where(Estudiante.organizacion_id == org_id)
+        miembros = (await db.execute(miembros_stmt)).all()
+        if org_id and not miembros:
+            continue
+        filas.append((desafio, gd, grupo, miembros))
+    return filas
+
+
+@router.get("/admin/export/desafios")
+async def exportar_desafios(
+    db: DBSession,
+    org_id: Optional[int] = Query(None),
+):
+    """
+    Desafíos grupales: una fila por desafío y grupo, con su ventana de fechas, el progreso
+    del grupo, si lo completó y cuántos miembros participaron (completaron al menos
+    MIN_SESIONES_PARTICIPACION_DESAFIO sesiones dentro de la ventana).
+    """
+    repo = AdaptiveRepository(db)
+    data = []
+    for desafio, gd, grupo, _miembros in await _filas_desafios(db, org_id):
+        participantes = await repo.get_participantes_desafio(grupo.id, desafio)
+        data.append({
+            "id_desafio": desafio.id,
+            "nombre": desafio.nombre,
+            "tipo": desafio.tipo,
+            "grupo": grupo.nombre,
+            "objetivo": desafio.objetivo_cantidad,
+            "parametro_adicional": _fmt(desafio.parametro_adicional),
+            "fecha_inicio": _fmt(desafio.fecha_creacion),
+            "fecha_fin": _fmt(desafio.fecha_limite),
+            "progreso_grupo": gd.progreso_actual,
+            "completado": "Sí" if gd.puntos_otorgados else "No",
+            "estudiantes_participantes": len(participantes),
+            "recompensa_puntos": _fmt(desafio.recompensa_puntos),
+            "recompensa_texto": _fmt(desafio.recompensa_texto),
+        })
+
+    return {"columnas": list(data[0].keys()) if data else [], "filas": data}
+
+
+@router.get("/admin/export/participacion")
+async def exportar_participacion(
+    db: DBSession,
+    org_id: Optional[int] = Query(None),
+    con_nombres: bool = Query(False),
+):
+    """
+    Participación de cada miembro activo de cada grupo en cada desafío: sesiones completadas
+    dentro de la ventana del desafío, si participó (mínimo de sesiones) y si cuenta para las
+    medallas de desafíos (participó y su grupo completó el desafío).
+    """
+    repo = AdaptiveRepository(db)
+    data = []
+    for desafio, gd, grupo, miembros in await _filas_desafios(db, org_id):
+        condiciones = repo._condiciones_ventana_desafio(desafio)
+        for est, org in miembros:
+            sesiones = (await db.execute(
+                select(func.count(SesionPractica.id)).where(and_(
+                    SesionPractica.estudiante_id == est.id, *condiciones,
+                ))
+            )).scalar() or 0
+            participo = sesiones >= MIN_SESIONES_PARTICIPACION_DESAFIO
+            completado = bool(gd.puntos_otorgados)
+            data.append({
+                "codigo_estudiante": est.codigo_estudiante,
+                "nombre_estudiante": _nombre(est, con_nombres),
+                "organizacion": org.nombre if org else "",
+                "grupo": grupo.nombre,
+                "id_desafio": desafio.id,
+                "sesiones_en_ventana": sesiones,
+                "participo": "Sí" if participo else "No",
+                "desafio_completado_por_grupo": "Sí" if completado else "No",
+                "cuenta_para_medalla": "Sí" if (participo and completado) else "No",
+            })
 
     return {"columnas": list(data[0].keys()) if data else [], "filas": data}

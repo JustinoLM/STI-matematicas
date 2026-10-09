@@ -2294,19 +2294,22 @@ const ENDPOINTS_EXPORT = [
   { key: 'niveles',   label: 'Niveles',           desc: 'Evolución de niveles e instantánea actual.',             sheet: null /* two sheets */ },
   { key: 'medallas',  label: 'Medallas',          desc: 'Medallas obtenidas por los estudiantes.',                sheet: 'Medallas' },
   { key: 'tienda',    label: 'Tienda',            desc: 'Compras realizadas en la tienda de recompensas.',        sheet: 'Tienda' },
-  { key: 'resumen',   label: 'Resumen por org',   desc: 'Agregado por organización: sesiones, precisión, etc.',   sheet: 'Resumen' },
+  { key: 'resumen',   label: 'Resumen por org',   desc: 'Agregado por organización: sesiones, precisión, desafíos, etc.', sheet: 'Resumen' },
+  { key: 'desafios',  label: 'Desafíos',          desc: 'Desafíos grupales por grupo: ventana, progreso, estado y participantes.', sheet: 'Desafíos' },
+  { key: 'participacion', label: 'Participación', desc: 'Participación de cada estudiante en los desafíos (sesiones en la ventana).', sheet: 'Participación' },
 ] as const;
 
 type ExportKey = (typeof ENDPOINTS_EXPORT)[number]['key'];
 
 function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
   const [orgFiltro, setOrgFiltro] = useState<string>('');
+  const [conNombres, setConNombres] = useState(false);
   const [descargando, setDescargando] = useState<ExportKey | null>(null);
   const [descargandoTodo, setDescargandoTodo] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
 
   async function fetchDataset(key: ExportKey): Promise<{ data: ExportDataset; data2?: ExportDataset; label2?: string }> {
-    const datos = await adminService.exportar(key, orgFiltro);
+    const datos = await adminService.exportar(key, orgFiltro, conNombres);
     if (key === 'niveles') {
       return { data: datos.historial, data2: datos.nivel_actual, label2: 'Niveles Actuales' };
     }
@@ -2388,6 +2391,14 @@ function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
                 ))}
               </select>
             </div>
+            <label className="flex items-center gap-2 text-sm pb-2">
+              <input
+                type="checkbox"
+                checked={conNombres}
+                onChange={e => setConNombres(e.target.checked)}
+              />
+              Incluir nombres de estudiantes
+            </label>
             <Button
               onClick={descargarTodo}
               disabled={descargandoTodo}

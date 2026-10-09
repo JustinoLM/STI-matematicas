@@ -32,7 +32,6 @@ from app.models.ml_model import ModeloML
 from app.models.problem import Intento
 from app.models.user import Estudiante
 
-
 logger = logging.getLogger(__name__)
 
 

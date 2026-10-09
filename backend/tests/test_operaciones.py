@@ -18,7 +18,6 @@ from app.main import app, urls_documentacion
 from app.services import scheduler_service
 from tests.conftest import TestSessionLocal, test_engine
 
-
 # ─── Documentación y CORS ────────────────────────────────────────────────────
 
 def test_en_produccion_se_desactivan_docs_redoc_y_openapi():

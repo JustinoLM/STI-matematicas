@@ -6,11 +6,9 @@ Prueba login, creación de usuarios, tokens JWT y protección de endpoints.
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
 from tests.conftest import admin_headers
-from app.core.config import settings
 
 
 @pytest.mark.asyncio

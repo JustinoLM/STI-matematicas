@@ -138,6 +138,7 @@ async def test_el_modelo_se_guarda_y_se_recarga_de_la_bd():
 @pytest.mark.asyncio
 async def test_construir_historico_desde_la_bd():
     from decimal import Decimal
+
     from app.models.adaptive import EstadoSesion, SesionPractica
     from app.models.problem import Intento, Operacion, Problema, TipoSesion
     from app.models.user import Estudiante, TipoUsuario

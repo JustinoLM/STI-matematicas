@@ -10,8 +10,10 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import HTTPException
+from httpx import AsyncClient
 from sqlalchemy import select
 
+from app.main import app
 from app.models.adaptive import EstadoSesion, PerfilEstudiante
 from app.models.llm import EnunciadoTematico
 from app.models.problem import Operacion, Problema
@@ -21,9 +23,6 @@ from app.services.llm_service import LLMPrompts, LLMService
 from app.services.stats_service import StatsService
 from tests.conftest import TestSessionLocal
 from tests.test_medallas_sesiones_config import _estudiante, _sesion
-from app.main import app
-from httpx import AsyncClient
-
 
 # ─── Temas ───────────────────────────────────────────────────────────────────
 
@@ -252,10 +251,12 @@ def test_los_prompts_de_estudiante_no_llevan_nombre_y_el_nombre_se_inserta_despu
 
 
 def _estadisticas_falsas():
-    est = lambda i, nombre, **kw: SimpleNamespace(
-        id=i, nombre=nombre, nivel_suma=2, nivel_resta=2, nivel_multiplicacion=2, nivel_division=2,
-        precision=70.0, probabilidad_avance=kw.get("prob", 50.0), dias_sin_practicar=kw.get("dias", 0),
-        alertas=kw.get("alertas", []))
+    def est(i, nombre, **kw):
+        return SimpleNamespace(
+            id=i, nombre=nombre, nivel_suma=2, nivel_resta=2, nivel_multiplicacion=2, nivel_division=2,
+            precision=70.0, probabilidad_avance=kw.get("prob", 50.0), dias_sin_practicar=kw.get("dias", 0),
+            alertas=kw.get("alertas", []))
+
     ests = [est(1, "Zoe Pérez", prob=20.0, alertas=["rezagado"]), est(2, "Marcos Díaz", prob=90.0)]
     return SimpleNamespace(
         grupo_nombre="5to B Secreto", total_estudiantes=2, estudiantes=ests,
