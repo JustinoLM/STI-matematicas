@@ -563,8 +563,13 @@ class GamificationService:
 
         elif tipo == "coleccionista":
             # Comprar X items
-            cantidad_req = criterio.get("cantidad", 20)
             items_poseidos = await self.gamification_repo.get_items_poseidos(estudiante_id)
+            if criterio.get("todos"):
+                # Posee cada uno de los items activos del catálogo vigente
+                activos = await self.gamification_repo.get_ids_desbloqueables_activos()
+                poseidos = {i.desbloqueable_id for i in items_poseidos}
+                return bool(activos) and activos <= poseidos
+            cantidad_req = criterio.get("cantidad", 20)
             return len(items_poseidos) >= cantidad_req
 
         elif tipo == "desafio_grupal":

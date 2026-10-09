@@ -205,6 +205,13 @@ class GamificationRepository:
         )
         return list(result.scalars().all())
     
+    async def get_ids_desbloqueables_activos(self) -> set[int]:
+        """Ids de los items activos del catálogo de la tienda."""
+        result = await self.db.execute(
+            select(Desbloqueable.id).where(Desbloqueable.activo.is_(True))
+        )
+        return set(result.scalars().all())
+
     async def desbloquear_item(
         self,
         estudiante_id: int,

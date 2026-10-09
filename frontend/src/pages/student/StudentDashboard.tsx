@@ -75,7 +75,8 @@ export function StudentDashboard() {
   const { data: sesionActiva, isLoading: loadingSesion } = useQuery<SesionActivaResponse | null>({
     queryKey: ['sesion-activa'],
     queryFn: () => studentService.getSesionActiva(),
-    staleTime: 1000 * 30, // refrescar cada 30s
+    staleTime: 0,
+    refetchOnMount: 'always', // al volver de una práctica debe reflejar la sesión pendiente
     retry: false,
   });
 

@@ -17,7 +17,6 @@ interface SessionResultsProps {
   // Datos de gamificación
   puntosGanados: number;
   medallasObtenidas: string[];
-  rachaActual: number;
 
   // Análisis LLM post-práctica (null = cargando, string = listo)
   analisisLLM?: string | null;
@@ -36,7 +35,6 @@ export function SessionResults({
   operacionesDominadas,
   puntosGanados,
   medallasObtenidas,
-  rachaActual,
   analisisLLM,
   onContinuar,
   onVerDetalles,
@@ -112,7 +110,7 @@ export function SessionResults({
             </div>
 
             {/* Estadísticas de aprendizaje */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Precisión */}
               <div className="bg-blue-50 p-4 rounded-lg text-center">
                 <Target className="w-8 h-8 mx-auto mb-2 text-blue-600" />
@@ -134,18 +132,6 @@ export function SessionResults({
                 <div className="text-sm text-gray-600">Nivel Actual</div>
                 <div className="text-xs text-gray-500 mt-1">
                   {progresoNivel}% al siguiente nivel
-                </div>
-              </div>
-
-              {/* Racha */}
-              <div className="bg-orange-50 p-4 rounded-lg text-center">
-                <Star className="w-8 h-8 mx-auto mb-2 text-orange-600" />
-                <div className="text-3xl font-bold text-orange-600">
-                  {rachaActual}
-                </div>
-                <div className="text-sm text-gray-600">Racha de días</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  ¡Sigue practicando!
                 </div>
               </div>
             </div>

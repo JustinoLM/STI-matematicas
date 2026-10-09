@@ -4,9 +4,7 @@
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { useStudentStore } from '@/store/studentStore';
-import { useTeacherStore } from '@/store/teacherStore';
-import { usePracticeStore } from '@/store/practiceStore';
+import { useThemeStore } from '@/store/themeStore';
 import { authService } from '@/services/authService';
 import { queryClient } from '@/lib/queryClient';
 
@@ -31,7 +29,6 @@ import { BadgesPage } from '@/pages/student/BadgesPage';
 import { ProgressPage } from '@/pages/student/ProgressPage';
 import { AnimacionesPage } from '@/pages/student/AnimacionesPage';
 import { ChallengesPage as StudentChallengesPage } from '@/pages/student/ChallengesPage';
-import { GroupChallengePage } from '@/pages/student/GroupChallengePage';
 import { SettingsPage } from '@/pages/student/SettingsPage';
 import { ReglaDeTresPracticePage } from '@/pages/student/ReglaDeTresPracticePage';
 
@@ -50,9 +47,6 @@ import { ReglaDeTresResultsPage } from '@/pages/teacher/ReglaDeTresResultsPage';
 
 function App() {
   const { isAuthenticated, getUserRole, getUserName, login, logout } = useAuthStore();
-  const resetStudent = useStudentStore(s => s.reset);
-  const resetTeacher = useTeacherStore(s => s.reset);
-  const resetPractice = usePracticeStore(s => s.reset);
 
   const userRole = getUserRole();
   const userName = getUserName();
@@ -67,9 +61,7 @@ function App() {
     logout();
     // Limpiar todo el caché y estado de sesión anterior
     queryClient.clear();
-    resetStudent();
-    resetTeacher();
-    resetPractice();
+    useThemeStore.getState().reset();
   };
 
   return (
@@ -179,7 +171,6 @@ function App() {
                   <Route path="animaciones" element={<AnimacionesPage />} />
                   <Route path="regla-de-tres" element={<ReglaDeTresPracticePage />} />
                   <Route path="challenges" element={<StudentChallengesPage />} />
-                  <Route path="group-challenge" element={<GroupChallengePage />} />
                   <Route path="settings" element={<SettingsPage />} />
                   <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                 </Routes>

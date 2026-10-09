@@ -67,7 +67,7 @@ class ConfiguracionPracticaCreate(BaseModel):
     niveles_permitidos: List[int] = Field(default=[1, 2, 3, 4, 5])
     rango_min: Decimal = Field(default=0)
     rango_max: Decimal = Field(default=100)
-    decimales_maximos: int = Field(default=2, ge=0, le=5)
+    decimales_maximos: int = Field(default=2, ge=0, le=3)
     pistas_habilitadas: Dict[str, bool] = Field(
         default={"nivel_1": True, "nivel_2": True, "nivel_3": True}
     )

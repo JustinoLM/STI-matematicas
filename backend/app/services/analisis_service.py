@@ -68,7 +68,6 @@ class AnalisisService:
 
         # ── 5. Construir prompt y llamar R1 ──────────────────────────────────
         prompt = LLMPrompts.analisis_post_practica(
-            nombre=estudiante.nombre_completo,
             genero=genero,
             operacion=_operacion_label(operacion_principal),
             nivel=nivel,
@@ -76,17 +75,17 @@ class AnalisisService:
             total_correctos=total_correctos,
             precision=precision,
             tiempo_promedio_seg=tiempo_promedio,
-            pasos_intermedios_correctos=0,
-            pasos_intermedios_total=0,
         )
 
         try:
             texto = await self.llm.generate(
                 prompt=prompt,
                 use_reasoning=True,
-                max_tokens=300,
+                # R1 cuenta su razonamiento interno dentro de max_tokens: con un tope bajo
+                # el contenido llegaría vacío. La respuesta visible sigue limitada a 4 oraciones.
+                max_tokens=2000,
             )
-            return texto.strip(), True
+            return LLMPrompts.insertar_nombre(texto.strip(), estudiante.nombre_completo), True
         except Exception:
             return self._fallback(precision), False
 

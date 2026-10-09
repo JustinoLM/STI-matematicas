@@ -49,203 +49,24 @@ import {
   Pencil,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import apiClient, { getErrorMessage, ADMIN_TOKEN_KEY } from '@/services/api';
+import { getErrorMessage } from '@/services/api';
+import {
+  adminService,
+  type CreateStudentPayload,
+  type BulkStudentRow,
+  type BulkTeacherRow,
+  type BulkImportResult,
+  type ImportResumenExcel,
+  type CreateTeacherPayload,
+  type CreateOrgPayload,
+  type UserCreated,
+  type OrgCreated,
+  type UsuarioAdmin,
+  type AllUsersResponse,
+} from '@/services/adminService';
 import { reglaDeTresService, type EstudianteNotaR3 } from '@/services/reglaDeTresService';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
-
-interface CreateStudentPayload {
-  codigo_estudiante: string;
-  nombre_completo: string;
-  genero: 'masculino' | 'femenino';
-  password: string;
-  organizacion_id?: number;
-  grado_academico?: string;
-  edad?: number;
-}
-
-interface BulkStudentRow {
-  codigo_estudiante: string;
-  nombre_completo: string;
-  genero: 'masculino' | 'femenino';
-  password: string;
-  organizacion_id?: number;
-  grado_academico?: string;
-  edad?: number;
-}
-
-interface BulkTeacherRow {
-  codigo_profesor: string;
-  nombre_completo: string;
-  password: string;
-  institucion?: string;
-  organizacion_id?: number;
-  grado_academico?: string;
-}
-
-interface BulkImportError { fila: number; codigo: string; mensaje: string; }
-interface BulkImportResult { total: number; creados: number; errores: BulkImportError[]; }
-interface ConteoHoja { hoja: string; procesados: number; creados: number; omitidos: number; }
-interface ImportResumenExcel {
-  organizacion_id: number;
-  organizacion_nombre: string;
-  organizacion_creada: boolean;
-  hojas: ConteoHoja[];
-  advertencias: string[];
-}
-
-interface CreateTeacherPayload {
-  codigo_profesor: string;
-  nombre_completo: string;
-  password: string;
-  institucion?: string;
-  organizacion_id?: number;
-  grado_academico?: string;
-}
-
-interface CreateOrgPayload {
-  nombre: string;
-  codigo: string;
-  descripcion?: string;
-  ciudad?: string;
-  pais?: string;
-}
-
-interface UserCreated {
-  id: number;
-  tipo_usuario: string;
-  codigo_estudiante?: string;
-  codigo_profesor?: string;
-  nombre_completo: string;
-  activo: boolean;
-}
-
-interface OrgCreated {
-  id: number;
-  nombre: string;
-  codigo: string;
-  ciudad?: string;
-  pais?: string;
-  post_test_activo?: boolean;
-  total_profesores: number;
-  total_estudiantes: number;
-}
-
-interface OrgDetalle extends OrgCreated {
-  descripcion?: string;
-  profesores: Array<{ id: number; codigo: string; nombre_completo: string; tipo: string }>;
-  estudiantes: Array<{ id: number; codigo: string; nombre_completo: string; tipo: string }>;
-}
-
-interface UsuarioAdmin {
-  id: number;
-  codigo: string;
-  nombre_completo: string;
-  organizacion_id: number | null;
-  institucion?: string;
-  activo: boolean;
-  fecha_creacion: string | null;
-  ultimo_acceso: string | null;
-  // Solo en profesores
-  secciones_asignadas?: string[];
-  // Solo en estudiantes
-  grado_academico?: string;
-  genero?: string;
-  edad?: number | null;
-  pre_test_completado?: boolean;
-  post_test_completado?: boolean;
-}
-
-interface AllUsersResponse {
-  profesores: UsuarioAdmin[];
-  estudiantes: UsuarioAdmin[];
-}
-
-// ─── Servicios de admin ───────────────────────────────────────────────────────
-
-const adminService = {
-  async crearEstudiante(data: CreateStudentPayload): Promise<UserCreated> {
-    const response = await apiClient.post<UserCreated>('/auth/admin/students', data);
-    return response.data;
-  },
-  async crearProfesor(data: CreateTeacherPayload): Promise<UserCreated> {
-    const response = await apiClient.post<UserCreated>('/auth/admin/teachers', data);
-    return response.data;
-  },
-  async crearOrganizacion(data: CreateOrgPayload): Promise<OrgCreated> {
-    const response = await apiClient.post<OrgCreated>('/admin/organizations', data);
-    return response.data;
-  },
-  async getOrganizaciones(): Promise<{ total: number; organizaciones: OrgCreated[] }> {
-    const response = await apiClient.get('/admin/organizations');
-    return response.data;
-  },
-  async getDetalleOrg(id: number): Promise<OrgDetalle> {
-    const response = await apiClient.get(`/admin/organizations/${id}`);
-    return response.data;
-  },
-  async getAllUsers(): Promise<AllUsersResponse> {
-    const response = await apiClient.get('/admin/users');
-    return response.data;
-  },
-  async asignarProfesorOrg(orgId: number, profId: number): Promise<void> {
-    await apiClient.put(`/admin/organizations/${orgId}/professors/${profId}`);
-  },
-  async quitarProfesorOrg(orgId: number, profId: number): Promise<void> {
-    await apiClient.delete(`/admin/organizations/${orgId}/professors/${profId}`);
-  },
-  async asignarEstudianteOrg(orgId: number, estId: number): Promise<void> {
-    await apiClient.put(`/admin/organizations/${orgId}/students/${estId}`);
-  },
-  async quitarEstudianteOrg(orgId: number, estId: number): Promise<void> {
-    await apiClient.delete(`/admin/organizations/${orgId}/students/${estId}`);
-  },
-  async activarPostTest(orgId: number): Promise<void> {
-    await apiClient.post(`/admin/organizations/${orgId}/post-test/activate`);
-  },
-  async desactivarPostTest(orgId: number): Promise<void> {
-    await apiClient.delete(`/admin/organizations/${orgId}/post-test/activate`);
-  },
-  async eliminarOrganizacion(orgId: number): Promise<void> {
-    await apiClient.delete(`/admin/organizations/${orgId}`);
-  },
-  async eliminarProfesor(profId: number): Promise<void> {
-    await apiClient.delete(`/admin/professors/${profId}`);
-  },
-  async eliminarEstudiante(estId: number): Promise<void> {
-    await apiClient.delete(`/admin/students/${estId}`);
-  },
-  async bulkImportStudents(rows: BulkStudentRow[]): Promise<BulkImportResult> {
-    const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/students', { estudiantes: rows });
-    return response.data;
-  },
-  async bulkImportTeachers(rows: BulkTeacherRow[]): Promise<BulkImportResult> {
-    const response = await apiClient.post<BulkImportResult>('/auth/admin/bulk/teachers', { profesores: rows });
-    return response.data;
-  },
-  async importarExcelCompleto(archivo: File, organizacionNombre: string): Promise<ImportResumenExcel> {
-    const formData = new FormData();
-    formData.append('archivo', archivo);
-    formData.append('organizacion_nombre', organizacionNombre);
-    const response = await apiClient.post<ImportResumenExcel>('/admin/import/excel', formData);
-    return response.data;
-  },
-  async getGradosOrg(orgId: number): Promise<string[]> {
-    const response = await apiClient.get<string[]>(`/admin/organizations/${orgId}/grados`);
-    return response.data;
-  },
-  async actualizarSeccionesProfesor(profId: number, secciones: string[]): Promise<void> {
-    await apiClient.patch(`/admin/professors/${profId}/secciones`, { secciones });
-  },
-  async editarEstudiante(estId: number, data: {
-    nombre_completo?: string;
-    genero?: string;
-    grado_academico?: string;
-    edad?: number;
-  }): Promise<void> {
-    await apiClient.patch(`/admin/students/${estId}`, data);
-  },
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1651,15 +1472,15 @@ function SeccionAgregarPuntos() {
 
   const { data: usersData } = useQuery({
     queryKey: ['admin-usuarios'],
-    queryFn: () => apiClient.get('/admin/users').then(r => r.data),
+    queryFn: () => adminService.getAllUsers(),
     staleTime: 30 * 1000,
   });
   const estudiantes: { id: number; nombre_completo: string; codigo: string; puntos_totales: number }[] =
-    usersData?.estudiantes ?? [];
+    (usersData?.estudiantes ?? []).map((e) => ({ ...e, puntos_totales: e.puntos_totales ?? 0 }));
 
   const mutation = useMutation({
     mutationFn: (payload: { estudiante_id: number; puntos: number }) =>
-      apiClient.post('/admin/gamification/add-points', payload).then(r => r.data),
+      adminService.agregarPuntos(payload),
     onSuccess: (data) => {
       setResultado({ nombre: data.nombre, nuevo_saldo: data.nuevo_saldo });
       setPuntos('');
@@ -1752,8 +1573,8 @@ function TabML() {
   const { data: estado, isLoading: cargandoEstado } = useQuery({
     queryKey: ['admin-ml-estado'],
     queryFn: async () => {
-      const res = await apiClient.get('/admin/ml/estado');
-      return res.data as {
+      const data = await adminService.getEstadoML();
+      return data as {
         clustering_entrenado: boolean;
         prediccion_entrenado: boolean;
         scaler_disponible: boolean;
@@ -1765,8 +1586,8 @@ function TabML() {
 
   const entrenarMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.post('/admin/ml/entrenar');
-      return res.data as {
+      const data = await adminService.entrenarML();
+      return data as {
         success: boolean;
         mensaje: string;
         total_perfiles?: number;
@@ -1910,8 +1731,8 @@ function TabSistema() {
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['admin-sistema-stats'],
     queryFn: async () => {
-      const res = await apiClient.get('/admin/sistema/stats');
-      return res.data as {
+      const data = await adminService.getStatsSistema();
+      return data as {
         total_estudiantes: number;
         total_profesores: number;
         total_grupos: number;
@@ -1995,8 +1816,7 @@ function PasswordGate({ onAcceso }: { onAcceso: () => void }) {
     e.preventDefault();
     setEnviando(true);
     try {
-      const res = await apiClient.post<{ access_token: string }>('/auth/admin-login', { password: pwd });
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, res.data.access_token);
+      await adminService.login(pwd);
       onAcceso();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -2468,7 +2288,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
 interface ExportDataset { columnas: string[]; filas: Record<string, unknown>[]; }
 
 const ENDPOINTS_EXPORT = [
-  { key: 'estudiantes', label: 'Estudiantes',     desc: 'Listado completo de estudiantes con datos básicos y contraseñas.', sheet: 'Estudiantes' },
+  { key: 'estudiantes', label: 'Estudiantes',     desc: 'Listado completo de estudiantes con datos básicos.', sheet: 'Estudiantes' },
   { key: 'diagnostico', label: 'Pre vs Post-test', desc: 'Comparación pre-test / post-test por estudiante con delta de mejora por operación.', sheet: 'Diagnóstico' },
   { key: 'sesiones',  label: 'Sesiones',         desc: 'Historial de sesiones de práctica completadas.',         sheet: 'Sesiones' },
   { key: 'niveles',   label: 'Niveles',           desc: 'Evolución de niveles e instantánea actual.',             sheet: null /* two sheets */ },
@@ -2485,14 +2305,12 @@ function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
   const [descargandoTodo, setDescargandoTodo] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
 
-  const orgParam = orgFiltro ? `?org_id=${orgFiltro}` : '';
-
   async function fetchDataset(key: ExportKey): Promise<{ data: ExportDataset; data2?: ExportDataset; label2?: string }> {
-    const res = await apiClient.get(`/admin/export/${key}${orgParam}`);
+    const datos = await adminService.exportar(key, orgFiltro);
     if (key === 'niveles') {
-      return { data: res.data.historial, data2: res.data.nivel_actual, label2: 'Niveles Actuales' };
+      return { data: datos.historial, data2: datos.nivel_actual, label2: 'Niveles Actuales' };
     }
-    return { data: res.data };
+    return { data: datos };
   }
 
   function datasetToSheet(dataset: ExportDataset) {
@@ -2629,7 +2447,7 @@ function TabExportar({ organizaciones }: { organizaciones: OrgCreated[] }) {
 
 export function AdminPage() {
   const [autenticado, setAutenticado] = useState(() =>
-    !!sessionStorage.getItem(ADMIN_TOKEN_KEY)
+    adminService.haySesion()
   );
 
   // Lista de organizaciones disponibles para los dropdowns (compartida entre tabs)
@@ -2665,7 +2483,7 @@ export function AdminPage() {
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground"
-              onClick={() => { sessionStorage.removeItem(ADMIN_TOKEN_KEY); setAutenticado(false); }}
+              onClick={() => { adminService.cerrarSesion(); setAutenticado(false); }}
             >
               Cerrar sesión
             </Button>

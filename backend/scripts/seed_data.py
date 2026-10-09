@@ -62,12 +62,10 @@ async def seed_narrativas(db: AsyncSession):
 # ============================================================
 
 async def seed_desbloqueables(db: AsyncSession):
-    """Insertar catálogo completo de desbloqueables."""
-    result = await db.execute(select(Desbloqueable))
-    if result.scalars().first():
-        print("  → Desbloqueables ya existen, omitiendo.")
-        return
+    """Insertar o actualizar (por archivo_referencia) el catálogo de desbloqueables.
 
+    Conserva los ids existentes para no romper compras ni personalización.
+    """
     items = []
 
     # ----------------------------------------------------------
@@ -91,8 +89,7 @@ async def seed_desbloqueables(db: AsyncSession):
     fondos = [
         # Genéricos
         {"nombre": "Fondo Cuadrícula",      "descripcion": "Fondo de cuadrícula clásica para enfocarse.",             "precio_puntos": 75,  "nivel_minimo_requerido": 1, "archivo_referencia": "fondo-cuadricula",    "orden": 1},
-        {"nombre": "Degradado Azul",        "descripcion": "Suave degradado azul, tranquilo y relajante.",            "precio_puntos": 75,  "nivel_minimo_requerido": 1, "archivo_referencia": "fondo-degradado-azul","orden": 2},
-        {"nombre": "Noche Estrellada",      "descripcion": "Cielo nocturno lleno de estrellas.",                       "precio_puntos": 75,  "nivel_minimo_requerido": 2, "archivo_referencia": "fondo-noche",         "orden": 3},
+        {"nombre": "Noche Estrellada",      "descripcion": "Cielo nocturno lleno de estrellas.",                       "precio_puntos": 75,  "nivel_minimo_requerido": 1, "archivo_referencia": "fondo-noche",         "orden": 3},
         # Piratas
         {"nombre": "Puerto Pirata",         "descripcion": "Un muelle con barcos piratas al amanecer.",               "precio_puntos": 75,  "nivel_minimo_requerido": 1, "archivo_referencia": "fondo-piratas-1",     "orden": 4},
         {"nombre": "Mar Abierto",           "descripcion": "Océano infinito bajo el sol del mediodía.",               "precio_puntos": 75,  "nivel_minimo_requerido": 1, "archivo_referencia": "fondo-piratas-2",     "orden": 5},
@@ -186,10 +183,27 @@ async def seed_desbloqueables(db: AsyncSession):
     for e in efectos:
         items.append(Desbloqueable(categoria=CategoriaDesbloqueable.EFECTO, **e))
 
+    existentes = (await db.execute(select(Desbloqueable))).scalars().all()
+    por_ref = {d.archivo_referencia: d for d in existentes}
+    campos = ("categoria", "nombre", "descripcion", "precio_puntos", "nivel_minimo_requerido",
+              "orden", "es_tema_inicial")
     for item in items:
-        db.add(item)
+        actual = por_ref.get(item.archivo_referencia)
+        if actual is None:
+            db.add(item)
+        else:
+            for campo in campos:
+                valor = getattr(item, campo)
+                if campo == "es_tema_inicial" and valor is None:
+                    valor = False
+                setattr(actual, campo, valor)
+            actual.activo = True
+    vigentes = {i.archivo_referencia for i in items}
+    for ref, d in por_ref.items():
+        if ref not in vigentes:
+            d.activo = False  # fuera del catálogo: se conserva lo ya comprado
     await db.commit()
-    print(f"  ✓ {len(items)} desbloqueables ({len(temas)} temas, {len(fondos)} fondos, {len(colores)} colores, {len(musicas)} músicas, {len(efectos)} efectos)")
+    print(f"  ✓ {len(items)} desbloqueables sincronizados ({len(temas)} temas, {len(fondos)} fondos, {len(colores)} colores, {len(musicas)} músicas, {len(efectos)} efectos)")
 
 
 # ============================================================
@@ -197,15 +211,12 @@ async def seed_desbloqueables(db: AsyncSession):
 # ============================================================
 
 async def seed_medallas(db: AsyncSession):
-    """Insertar (o reemplazar) el catálogo oficial de medallas."""
-    # Borrar medallas existentes para poder re-ejecutar el seed limpiamente
+    """Insertar o actualizar (por nombre) el catálogo oficial de medallas.
+
+    Conserva los ids existentes para no perder las medallas ya obtenidas por los estudiantes.
+    """
     existing = await db.execute(select(Medalla))
-    existing_medals = existing.scalars().all()
-    if existing_medals:
-        for m in existing_medals:
-            await db.delete(m)
-        await db.flush()
-        print(f"  → {len(existing_medals)} medallas anteriores eliminadas.")
+    por_nombre = {m.nombre: m for m in existing.scalars().all()}
 
     A = CategoriaMedalla.APRENDIZAJE
     V = CategoriaMedalla.VOLUMEN
@@ -415,7 +426,7 @@ async def seed_medallas(db: AsyncSession):
             "nombre": "¡Todo es Mío!",
             "descripcion": "Compraste absolutamente todos los items de la tienda. ¡El dueño del lugar!",
             "categoria": E,
-            "criterio": {"tipo": "coleccionista", "cantidad": 63},
+            "criterio": {"tipo": "coleccionista", "todos": True},
             "imagen_url": "🛒",
             "orden": 24,
             "es_secreta": True,
@@ -432,10 +443,21 @@ async def seed_medallas(db: AsyncSession):
         },
     ]
 
+    nombres = {data["nombre"] for data in medallas}
     for data in medallas:
-        db.add(Medalla(**data))
+        actual = por_nombre.get(data["nombre"])
+        if actual is None:
+            db.add(Medalla(**data))
+        else:
+            for campo, valor in data.items():
+                setattr(actual, campo, valor)
+            actual.activa = True
+    # Medallas que ya no están en el catálogo: se desactivan (conservan lo ganado)
+    for nombre, m in por_nombre.items():
+        if nombre not in nombres:
+            m.activa = False
     await db.commit()
-    print(f"  ✓ {len(medallas)} medallas insertadas ({sum(1 for m in medallas if m.get('es_secreta'))} secretas, {sum(1 for m in medallas if not m.get('es_secreta'))} visibles)")
+    print(f"  ✓ {len(medallas)} medallas sincronizadas ({sum(1 for m in medallas if m.get('es_secreta'))} secretas, {sum(1 for m in medallas if not m.get('es_secreta'))} visibles)")
 
 
 

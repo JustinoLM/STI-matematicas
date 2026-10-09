@@ -228,7 +228,7 @@ export interface DesafioEstudiante {
   objetivo_cantidad: number;
   parametro_adicional?: number;  // Parámetro Y (max errores / seg / min)
   recompensa_texto?: string;
-  recompensa_puntos?: number;    // Monedas al completar
+  recompensa_puntos?: number;    // Puntos al completar
   fecha_creacion: string;
   fecha_limite?: string;
   completado: boolean;

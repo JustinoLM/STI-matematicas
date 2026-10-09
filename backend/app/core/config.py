@@ -53,9 +53,13 @@ class Settings(BaseSettings):
         "https://tesis-sti-matematicas.vercel.app",
     ]
 
-    # Entorno
-    ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    # Entorno: por defecto seguro (producción). En local, ENVIRONMENT=development y DEBUG=True.
+    ENVIRONMENT: str = "production"
+    DEBUG: bool = False
+
+    # Registros: "json" (una línea JSON por registro) o "text". Vacío = json en producción.
+    LOG_FORMAT: str = ""
+    LOG_LEVEL: str = "INFO"
 
     # Configuración de Pydantic Settings
     model_config = SettingsConfigDict(

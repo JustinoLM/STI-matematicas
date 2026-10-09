@@ -11,6 +11,7 @@ tabla `modelo_ml` de PostgreSQL para sobrevivir reinicios del servidor
 
 import asyncio
 import bisect
+import logging
 import pickle
 from collections import defaultdict
 from datetime import datetime
@@ -30,6 +31,9 @@ from app.models.adaptive import EstadoSesion, PerfilAprendizaje, PerfilEstudiant
 from app.models.ml_model import ModeloML
 from app.models.problem import Intento
 from app.models.user import Estudiante
+
+
+logger = logging.getLogger(__name__)
 
 
 class MLService:
@@ -96,7 +100,7 @@ class MLService:
         Después de retornar, guardar en DB con `await save_org_model_to_db(...)`.
         """
         if len(estudiantes) < 10:
-            print(f"⚠️  Org {org_id}: Insuficientes estudiantes: {len(estudiantes)}/10")
+            logger.warning(f"Org {org_id}: Insuficientes estudiantes: {len(estudiantes)}/10")
             return
 
         features = [
@@ -106,8 +110,8 @@ class MLService:
         ]
 
         if len(features) < 10:
-            print(
-                f"⚠️  Org {org_id}: Insuficientes perfiles válidos: {len(features)}/10"
+            logger.warning(
+                f"Org {org_id}: Insuficientes perfiles válidos: {len(features)}/10"
             )
             return
 
@@ -120,7 +124,7 @@ class MLService:
 
         # Guardar en memoria
         self._org_models[org_id] = (modelo, scaler)
-        print(f"✅ Org {org_id}: Clustering entrenado con {len(features)} estudiantes")
+        logger.info(f"Org {org_id}: Clustering entrenado con {len(features)} estudiantes")
 
     def predecir_perfil(
         self,
@@ -447,8 +451,8 @@ class MLService:
             len(historico) < self.MIN_EJEMPLOS_PREDICCION
             or min(positivos, negativos) < self.MIN_EJEMPLOS_POR_CLASE
         ):
-            print(
-                f"⚠️  Predicción: datos insuficientes ({len(historico)} ejemplos, "
+            logger.warning(
+                f"Predicción: datos insuficientes ({len(historico)} ejemplos, "
                 f"{positivos} con éxito y {negativos} sin éxito)."
             )
             return False
@@ -465,7 +469,7 @@ class MLService:
                 ),
             ]
         ).fit(X, y)
-        print(f"✅ Predicción entrenada con {len(historico)} ejemplos ({positivos} con éxito)")
+        logger.info(f"Predicción entrenada con {len(historico)} ejemplos ({positivos} con éxito)")
         return True
 
     def predecir_exito_nivel_siguiente(
@@ -587,7 +591,7 @@ class MLService:
         """
         modelo, scaler = self._get_org_model(org_id)
         if modelo is None or scaler is None:
-            print(f"⚠️  save_org_model_to_db: sin modelo en memoria para org {org_id}")
+            logger.warning(f"save_org_model_to_db: sin modelo en memoria para org {org_id}")
             return
 
         modelo_bytes = pickle.dumps(modelo)
@@ -618,12 +622,12 @@ class MLService:
             session.add(fila)
 
         await session.flush()
-        print(f"✅ Org {org_id}: Clustering guardado en BD")
+        logger.info(f"Org {org_id}: Clustering guardado en BD")
 
     async def save_prediccion_to_db(self, session: AsyncSession) -> None:
         """Persiste el modelo global de predicción en PostgreSQL."""
         if not self.prediccion_model:
-            print("⚠️  save_prediccion_to_db: sin modelo de predicción en memoria")
+            logger.warning("save_prediccion_to_db: sin modelo de predicción en memoria")
             return
 
         modelo_bytes = pickle.dumps(self.prediccion_model)
@@ -649,7 +653,7 @@ class MLService:
             session.add(fila)
 
         await session.flush()
-        print("✅ Predicción guardada en BD")
+        logger.info("Predicción guardada en BD")
 
     async def load_prediccion_from_db(self, session: AsyncSession) -> bool:
         """
@@ -671,10 +675,10 @@ class MLService:
 
         try:
             self.prediccion_model = pickle.loads(fila.modelo_bytes)
-            print("✅ Predicción cargada desde BD")
+            logger.info("Predicción cargada desde BD")
             return True
         except Exception as e:
-            print(f"⚠️  Error deserializando modelo de predicción: {e}")
+            logger.warning(f"Error deserializando modelo de predicción: {e}")
             return False
 
     async def load_all_from_db(self, session: AsyncSession) -> None:
@@ -696,13 +700,13 @@ class MLService:
                 self._org_models[fila.org_id] = (modelo, scaler)
                 orgs_cargadas += 1
             except Exception as e:
-                print(f"⚠️  Error cargando clustering org {fila.org_id}: {e}")
+                logger.warning(f"Error cargando clustering org {fila.org_id}: {e}")
 
         # Cargar modelo de predicción global
         pred_cargado = await self.load_prediccion_from_db(session)
 
-        print(
-            f"🤖 ML startup: {orgs_cargadas} modelos de clustering, "
+        logger.info(
+            f"ML startup: {orgs_cargadas} modelos de clustering, "
             f"predicción={'OK' if pred_cargado else 'no disponible'}"
         )
 

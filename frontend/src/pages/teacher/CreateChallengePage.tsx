@@ -1,8 +1,8 @@
 /**
  * Página para crear nuevos desafíos grupales.
  *
- * Soporta 5 tipos ordenados por dificultad, recompensa física o monedas,
- * y muestra sugerencias de cantidad de monedas según el tipo elegido.
+ * Soporta 5 tipos ordenados por dificultad, recompensa física o puntos,
+ * y muestra sugerencias de cantidad de puntos según el tipo elegido.
  */
 
 import { useState } from 'react';
@@ -38,7 +38,7 @@ interface TipoMeta {
   placeholderParam?: string;
   unidad: string;
   puntosBase: number;
-  /** Rango orientativo de monedas sugeridas para este tipo. */
+  /** Rango orientativo de puntos sugeridos para este tipo. */
   puntosMin: number;
   puntosMax: number;
 }
@@ -128,7 +128,7 @@ const TIPOS: Record<TipoDesafioGrupal, TipoMeta> = {
 };
 
 /**
- * Monedas sugeridas para un desafío según su tipo y cantidad objetivo.
+ * Puntos sugeridos para un desafío según su tipo y cantidad objetivo.
  * Escala logarítmicamente entre puntosMin (objetivo pequeño) y puntosMax
  * (objetivo ≥ 100), siempre dentro del rango orientativo del tier.
  * Redondeado a múltiplos de 50.
@@ -343,7 +343,7 @@ export default function CreateChallengePage() {
             <div className="grid grid-cols-3 gap-3">
               {(
                 [
-                  { key: 'puntos', label: 'Monedas',   icon: Coins  },
+                  { key: 'puntos', label: 'Puntos',   icon: Coins  },
                   { key: 'texto',  label: 'Física',    icon: Trophy  },
                   { key: 'ambos',  label: 'Ambas',     icon: Star    },
                 ] as const
@@ -373,7 +373,7 @@ export default function CreateChallengePage() {
             {(tipoRecompensa === 'puntos' || tipoRecompensa === 'ambos') && (
               <div className="space-y-2">
                 <Label htmlFor="recompensa_puntos">
-                  Monedas para cada estudiante del grupo
+                  Puntos para cada estudiante del grupo
                 </Label>
                 <div className="flex gap-2">
                   <Input
@@ -400,8 +400,8 @@ export default function CreateChallengePage() {
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <span>
                     Para dificultad <strong>{meta.dificultadLabel}</strong> el rango orientativo es:{' '}
-                    ⭐ 200–500 · ⭐⭐ 300–700 · ⭐⭐⭐ 500–1 000 · ⭐⭐⭐⭐ 700–1 500 · ⭐⭐⭐⭐⭐ 1 000–2 500 monedas.
-                    Las monedas se otorgan automáticamente a cada estudiante del grupo al completar.
+                    ⭐ 200–500 · ⭐⭐ 300–700 · ⭐⭐⭐ 500–1 000 · ⭐⭐⭐⭐ 700–1 500 · ⭐⭐⭐⭐⭐ 1 000–2 500 puntos.
+                    Los puntos se otorgan automáticamente a cada estudiante del grupo al completar.
                   </span>
                 </div>
               </div>

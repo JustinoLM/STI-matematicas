@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { TrendingUp, Target, Clock, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { studentService } from '@/services/studentService';
-import apiClient from '@/services/api';
 import { useThemeStore } from '@/store/themeStore';
 
 // ─── Tipos de stats ───────────────────────────────────────────────────────────
@@ -34,9 +33,6 @@ interface GlobalStats {
   total_problemas_correctos: number;
   precision_global: number;
   velocidad_promedio_global: number;
-  racha_actual_perfectas: number;
-  mejor_racha_perfectas: number;
-  dias_consecutivos_practicando: number;
   stats_por_operacion: StatsPerOperation[];
   precision_ultimos_7_dias: number[];
   sesiones_ultimos_7_dias: number[];
@@ -83,10 +79,7 @@ export function ProgressPage() {
 
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['stats-globales'],
-    queryFn: async (): Promise<GlobalStats> => {
-      const response = await apiClient.get<GlobalStats>('/practices/stats');
-      return response.data;
-    },
+    queryFn: (): Promise<GlobalStats> => studentService.getEstadisticasGlobales<GlobalStats>(),
     staleTime: 1000 * 60 * 5,
   });
 

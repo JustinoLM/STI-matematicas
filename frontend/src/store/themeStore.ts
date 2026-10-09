@@ -75,6 +75,9 @@ interface ThemeState {
   setNotifLogros: (v: boolean) => void;
   setNotifRecordatorios: (v: boolean) => void;
 
+  /** Restaura las preferencias por defecto (al cerrar sesión). */
+  reset: () => void;
+
   // ---- Helpers de lectura ----
   getTemaActivo: () => Desbloqueable | undefined;
   getFondoActivo: () => Desbloqueable | null;
@@ -138,6 +141,21 @@ export const useThemeStore = create<ThemeState>()(
       preferenciasPorTema: {
         'tema-default': getPreferenciaDefault(),
       },
+
+      reset: () =>
+        set({
+          temaActivoId: 'tema-default',
+          colorActivoId: null,
+          efectoActivoId: null,
+          audioActivado: false,
+          volumen: 70,
+          efectosSonidoActivados: true,
+          notificacionesActivadas: true,
+          notifDesafios: true,
+          notifLogros: true,
+          notifRecordatorios: true,
+          preferenciasPorTema: { 'tema-default': getPreferenciaDefault() },
+        }),
 
       // ---- Cambiar tema ----
       setTemaActivo: (temaId: string) => {

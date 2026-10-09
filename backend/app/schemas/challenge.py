@@ -32,7 +32,7 @@ class DesafioEstudianteResponse(BaseModel):
     objetivo_cantidad: int
     parametro_adicional: Optional[int] = None   # Parámetro Y según tipo
     recompensa_texto: Optional[str] = None
-    recompensa_puntos: Optional[int] = None      # Monedas a ganar al completar
+    recompensa_puntos: Optional[int] = None      # Puntos a ganar al completar
     fecha_creacion: datetime
     fecha_limite: Optional[datetime] = None
     completado: bool

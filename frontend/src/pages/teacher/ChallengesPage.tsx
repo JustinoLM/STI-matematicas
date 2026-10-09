@@ -331,7 +331,7 @@ export function ChallengesPage() {
                                 <div className="flex items-center gap-1.5 text-sm">
                                   <Coins className="h-4 w-4 text-yellow-500" />
                                   <span className="font-medium text-yellow-700">
-                                    {desafio.recompensa_puntos.toLocaleString()} monedas por estudiante
+                                    {desafio.recompensa_puntos.toLocaleString()} puntos por estudiante
                                   </span>
                                 </div>
                               )}

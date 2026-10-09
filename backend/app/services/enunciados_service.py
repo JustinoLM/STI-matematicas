@@ -1,11 +1,20 @@
 """
 Service para generación de enunciados narrativos temáticos.
 
-Genera enunciados con DeepSeek V3 y los cachea permanentemente
-en tabla enunciado_tematico (PK: signature × tema × nivel).
+Genera hasta 3 variaciones por problema con DeepSeek V3 (una sola llamada) y las
+cachea permanentemente en la tabla enunciado_tematico
+(PK: signature × tema × nivel × variacion). Al servir un problema se elige una
+variación al azar. Solo se guardan variaciones que contienen exactamente los
+números del problema.
 """
 
-from typing import Dict, List
+import asyncio
+import random
+import re
+from decimal import Decimal, InvalidOperation
+from typing import Dict, List, Optional, Set
+
+from sqlalchemy.exc import IntegrityError
 
 from app.models.problem import Problema
 from app.repositories.enunciados_repository import EnunciadoTematicoRepository
@@ -18,6 +27,13 @@ _OP_NOMBRE: Dict[str, str] = {
     "×": "multiplicacion",
     "÷": "division",
 }
+
+NUM_VARIACIONES = 3
+MAX_INTENTOS_GENERACION = 2   # llamadas al LLM si ninguna variación sale válida
+MAX_PROBLEMAS_POR_LOTE = 30
+
+_RE_NUMERO = re.compile(r"\d+(?:[.,]\d+)?")
+_RE_VARIACION = re.compile(r"^\s*VARIACION_\d+\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 
 class EnunciadosService:
@@ -35,124 +51,158 @@ class EnunciadosService:
     # API pública
     # ──────────────────────────────────────────────────────────────
 
-    async def obtener_enunciado(
-        self,
-        problema_id: int,
-        tema_nombre: str,
-    ) -> str:
+    async def obtener_enunciado(self, problema_id: int, tema_nombre: str) -> str:
         """
-        Obtiene enunciado narrativo para un problema + tema.
+        Enunciado narrativo de un problema + tema (variación al azar entre las guardadas).
 
-        Flujo:
-        1. Normaliza el nombre del tema ("Piratas" → "tema-piratas")
-        2. Busca en caché  (signature × tema × nivel)
-        3. Si miss → genera con DeepSeek V3 → guarda → devuelve
-        4. Si hit  → devuelve directo sin llamar al LLM
-
-        Returns:
-            Texto del enunciado narrativo (puede ser fallback genérico).
+        Lanza ValueError si el tema no es narrativo, el problema no existe o el LLM
+        no produjo ningún texto válido.
         """
-        problema = await self.enunciados_repo.get_problema(problema_id)
-        if not problema:
-            raise ValueError(f"Problema {problema_id} no encontrado")
-
-        tema = self._normalizar_tema(tema_nombre)
-
-        # Guardia: solo temas narrativos conocidos generan enunciados.
-        # Temas como "Clásico" / "tema-default" NO son narrativos y no deben
-        # generar texto LLM (evita el fallback-a-piratas de _buscar_config_tema).
-        if tema not in LLMPrompts._TEMAS_CONFIG:
-            raise ValueError(f"Tema '{tema}' no es narrativo — sin enunciado")
-
-        signature = problema.signature
-        nivel = problema.nivel_dificultad
-
-        # 1. Buscar en caché
-        cached = await self.enunciados_repo.get(signature, tema, nivel)
-        if cached:
-            return cached.texto
-
-        # 2. Generar con LLM
-        texto = await self._generar_con_llm(problema, tema)
-
-        # 3. Guardar en caché (permanente)
-        await self.enunciados_repo.create(signature, tema, nivel, texto)
-
-        return texto
+        if LLMPrompts.resolver_tema(tema_nombre) is None:
+            raise ValueError(f"Tema '{tema_nombre}' no es narrativo — sin enunciado")
+        resultado = await self.obtener_enunciados_lote([problema_id], tema_nombre)
+        if problema_id not in resultado:
+            raise ValueError(f"No se pudo obtener enunciado para el problema {problema_id}")
+        return resultado[problema_id]
 
     async def obtener_enunciados_lote(
         self,
         problema_ids: List[int],
         tema_nombre: str,
+        permitidos: Optional[Set[int]] = None,
     ) -> Dict[int, str]:
         """
-        Obtiene enunciados para múltiples problemas de una sesión.
+        Enunciados para varios problemas de una sesión.
 
-        Diseñado para llamarse al inicio de la sesión con todos los
-        problema_ids. Los hits de caché son instantáneos; el LLM solo
-        se llama para los que no tienen texto aún.
+        1. Lee la caché (secuencial: la sesión de BD no admite uso concurrente).
+        2. Genera en paralelo (asyncio.gather) los que faltan, sin tocar la BD.
+        3. Guarda las variaciones válidas (secuencial).
+
+        Args:
+            permitidos: si se indica, solo se atienden los problemas de este conjunto.
 
         Returns:
-            Dict {problema_id: texto} — solo incluye los que se obtuvieron
-            correctamente; los fallidos se omiten (el frontend usa la
-            pregunta genérica como fallback).
+            {problema_id: texto} solo para los obtenidos; los fallidos se omiten
+            (el frontend usa la pregunta genérica).
         """
+        tema = LLMPrompts.resolver_tema(tema_nombre)
+        if tema is None:
+            return {}
+
+        ids = list(dict.fromkeys(problema_ids))[:MAX_PROBLEMAS_POR_LOTE]
+        if permitidos is not None:
+            ids = [i for i in ids if i in permitidos]
+
         resultado: Dict[int, str] = {}
-        for problema_id in problema_ids:
+        faltantes: Dict[str, Problema] = {}          # signature → problema
+        ids_por_signature: Dict[str, List[int]] = {}
+
+        # 1. Caché
+        for pid in ids:
             try:
-                texto = await self.obtener_enunciado(problema_id, tema_nombre)
-                resultado[problema_id] = texto
+                problema = await self.enunciados_repo.get_problema(pid)
+                if problema is None:
+                    continue
+                cached = await self.enunciados_repo.get_variaciones(
+                    problema.signature, tema, problema.nivel_dificultad
+                )
             except Exception:
-                # Silencioso: no bloquea la sesión si un enunciado falla
-                pass
+                continue
+            if cached:
+                resultado[pid] = random.choice(cached).texto
+            else:
+                faltantes.setdefault(problema.signature, problema)
+                ids_por_signature.setdefault(problema.signature, []).append(pid)
+
+        if not faltantes:
+            return resultado
+
+        # 2. Generación en paralelo (return_exceptions: un fallo no cancela a los demás)
+        firmas = list(faltantes)
+        generados = await asyncio.gather(
+            *(self._generar_variaciones(faltantes[f], tema) for f in firmas),
+            return_exceptions=True,
+        )
+
+        # 3. Guardado
+        for firma, textos in zip(firmas, generados):
+            if isinstance(textos, BaseException) or not textos:
+                continue
+            problema = faltantes[firma]
+            guardados = await self._guardar(problema, tema, textos)
+            if not guardados:
+                continue
+            for pid in ids_por_signature[firma]:
+                resultado[pid] = random.choice(guardados)
         return resultado
 
     # ──────────────────────────────────────────────────────────────
     # Helpers privados
     # ──────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _normalizar_tema(tema: str) -> str:
-        """
-        Normaliza el nombre del tema a formato "tema-X".
+    async def _guardar(self, problema: Problema, tema: str, textos: List[str]) -> List[str]:
+        """Guarda las variaciones; si otra petición ya las guardó, devuelve las existentes."""
+        try:
+            await self.enunciados_repo.guardar_variaciones(
+                problema.signature, tema, problema.nivel_dificultad, textos
+            )
+            return textos
+        except IntegrityError:
+            await self.enunciados_repo.db.rollback()
+            existentes = await self.enunciados_repo.get_variaciones(
+                problema.signature, tema, problema.nivel_dificultad
+            )
+            return [e.texto for e in existentes]
+        except Exception:
+            await self.enunciados_repo.db.rollback()
+            return []
 
-        Ejemplos:
-            "Piratas"       → "tema-piratas"
-            "tema-piratas"  → "tema-piratas"
-            "ASTRONAUTAS"   → "tema-astronautas"
+    async def _generar_variaciones(self, problema: Problema, tema: str) -> List[str]:
         """
-        tema = tema.lower().strip()
-        if not tema.startswith("tema-"):
-            tema = f"tema-{tema}"
-        return tema
-
-    async def _generar_con_llm(self, problema: Problema, tema: str) -> str:
-        """
-        Genera enunciado narrativo con DeepSeek V3.
-
-        IMPORTANTE: Las excepciones se propagan al llamador.
-        Si el LLM falla, NO se guarda ningún fallback en caché;
-        el llamador decidirá qué mostrar.
+        Pide al LLM hasta NUM_VARIACIONES enunciados y devuelve solo los que contienen
+        exactamente los números del problema. Si ninguno es válido reintenta una vez.
+        Las excepciones del LLM se propagan; nunca se cachea nada inválido.
         """
         op_nombre = _OP_NOMBRE.get(problema.operacion.value, problema.operacion.value)
-        num1 = float(problema.numero1)
-        num2 = float(problema.numero2)
-
-        prompt = LLMPrompts.generar_enunciado_narrativo(
+        prompt = LLMPrompts.enunciados_variaciones(
             operacion=op_nombre,
-            operando1=num1,
-            operando2=num2,
+            operando1=problema.numero1,
+            operando2=problema.numero2,
             tema=tema,
-            variacion=1,
+            cantidad=NUM_VARIACIONES,
         )
+        for _ in range(MAX_INTENTOS_GENERACION):
+            respuesta = await self.llm_service.generate(
+                prompt=prompt,
+                temperature=0.8,
+                max_tokens=500,
+            )
+            validos = [
+                t
+                for t in self.parsear_variaciones(respuesta)
+                if self.contiene_numeros_exactos(t, problema.numero1, problema.numero2)
+            ]
+            if validos:
+                return validos[:NUM_VARIACIONES]
+        raise ValueError("El modelo no produjo ningún enunciado con los números correctos")
 
-        # Sin try/except aquí: si falla, la excepción sube y NO se cachea nada
-        respuesta = await self.llm_service.generate(
-            prompt=prompt,
-            temperature=0.8,
-            max_tokens=200,
-        )
-        texto = respuesta.strip()
-        if not texto:
-            raise ValueError("DeepSeek devolvió respuesta vacía")
-        return texto
+    @staticmethod
+    def parsear_variaciones(respuesta: str) -> List[str]:
+        """Extrae los textos de las líneas `VARIACION_n: texto` (sin comillas)."""
+        textos = [m.group(1).strip().strip('"“”').strip() for m in _RE_VARIACION.finditer(respuesta)]
+        return [t for t in textos if t]
+
+    @staticmethod
+    def contiene_numeros_exactos(texto: str, numero1, numero2) -> bool:
+        """
+        True si los números escritos en el texto son exactamente los del problema:
+        ni falta ninguno ni aparece otro distinto (las cifras con coma decimal cuentan).
+        """
+        try:
+            esperados = {Decimal(str(numero1)).normalize(), Decimal(str(numero2)).normalize()}
+            encontrados = {
+                Decimal(m.replace(",", ".")).normalize() for m in _RE_NUMERO.findall(texto)
+            }
+        except InvalidOperation:
+            return False
+        return encontrados == esperados

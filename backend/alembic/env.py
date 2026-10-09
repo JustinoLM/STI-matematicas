@@ -8,10 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()  # NO override — las variables del entorno (Railway) tienen prioridad sobre .env
 
 
-import os
-print("DATABASE_URL =", os.getenv("DATABASE_URL"))
-
-
 from logging.config import fileConfig
 import sys
 from pathlib import Path
@@ -33,7 +29,8 @@ import app.models
 config = context.config
 
 # Sobrescribir sqlalchemy.url con la URL de settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("+asyncpg", ""))
+# (async_database_url normaliza postgres:// y postgresql://; Alembic usa el driver síncrono psycopg2)
+config.set_main_option("sqlalchemy.url", settings.async_database_url.replace("+asyncpg", ""))
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

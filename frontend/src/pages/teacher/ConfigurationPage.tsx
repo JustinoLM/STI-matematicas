@@ -277,7 +277,7 @@ export function ConfigurationPage() {
                       id="decimales"
                       type="number"
                       min="0"
-                      max="5"
+                      max="3"
                       value={decimalesMaximos}
                       onChange={(e) => setDecimalesMaximos(e.target.value)}
                       required

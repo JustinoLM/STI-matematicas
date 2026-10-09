@@ -28,13 +28,14 @@ class EnunciadoTematico(Base):
     """
     Caché permanente de enunciados narrativos temáticos.
 
-    PK compuesta: (signature × tema × nivel)
+    PK compuesta: (signature × tema × nivel × variacion)
     - signature: hash único del Problema (Problema.signature)
     - tema:      nombre normalizado, ej. "tema-piratas", "tema-astronautas"
     - nivel:     nivel de dificultad 1-5
+    - variacion: 1..N, cada problema+tema guarda hasta 3 enunciados distintos
 
-    Un enunciado se genera UNA SOLA VEZ con DeepSeek V3 y se reutiliza
-    para todos los estudiantes que compartan el mismo tema activo.
+    Las variaciones se generan UNA SOLA VEZ con DeepSeek V3 (en una sola llamada) y
+    se reutilizan; al servir un problema se elige una al azar entre las guardadas.
     """
 
     __tablename__ = "enunciado_tematico"
@@ -42,6 +43,7 @@ class EnunciadoTematico(Base):
     signature = Column(String(64), primary_key=True)
     tema = Column(String(100), primary_key=True)
     nivel = Column(Integer, primary_key=True)
+    variacion = Column(Integer, primary_key=True, default=1, server_default="1")
     texto = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

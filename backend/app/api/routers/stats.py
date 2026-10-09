@@ -52,7 +52,7 @@ async def analizar_grupo_con_ia(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Genera análisis pedagógico del grupo bajo demanda usando DeepSeek V3.
+    Genera análisis pedagógico del grupo bajo demanda usando DeepSeek R1.
 
     - Sin caché: cada llamada genera un análisis fresco con datos actuales.
     - Incluye perfiles ML, alertas, niveles promedio y lista de estudiantes

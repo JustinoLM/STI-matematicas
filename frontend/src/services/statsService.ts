@@ -2,7 +2,7 @@
  * Servicio de estadísticas de grupo para el panel analítico del profesor.
  */
 
-import apiClient, { getErrorMessage } from './api';
+import apiClient, { getErrorMessage, TIMEOUT_LLM_R1_MS } from './api';
 import type { GrupoStatsResponse, AnalisisIAResponse } from '@/types';
 
 export const statsService = {
@@ -27,7 +27,9 @@ export const statsService = {
   async analizarConIA(grupoId: number): Promise<AnalisisIAResponse> {
     try {
       const response = await apiClient.post<AnalisisIAResponse>(
-        `/stats/groups/${grupoId}/ai-analysis`
+        `/stats/groups/${grupoId}/ai-analysis`,
+        undefined,
+        { timeout: TIMEOUT_LLM_R1_MS }
       );
       return response.data;
     } catch (error) {

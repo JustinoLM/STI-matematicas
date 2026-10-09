@@ -540,7 +540,6 @@ export function PracticePage() {
         }
         puntosGanados={recompensas?.puntos_ganados ?? 0}
         medallasObtenidas={recompensas?.medallas_nuevas.map((m) => m.nombre) ?? []}
-        rachaActual={0}
         analisisLLM={analisisLLM}
         onContinuar={() => navigate('/student/dashboard')}
         onVerDetalles={() => navigate('/student/progress')}

@@ -14,6 +14,11 @@ export const ADMIN_TOKEN_KEY = 'admin_token';
 const esRutaAdmin = (url?: string) =>
   !!url && (url.startsWith('/admin') || url.startsWith('/auth/admin'));
 
+// Las rutas que esperan una respuesta del LLM (DeepSeek) pueden tardar más que el resto
+export const TIMEOUT_LLM_MS = 65000;
+// Las que usan DeepSeek R1 (razonamiento): análisis posterior a la práctica y del grupo
+export const TIMEOUT_LLM_R1_MS = 130000;
+
 // Crear instancia de Axios
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -88,6 +93,13 @@ export const getErrorMessage = (error: unknown): string => {
       return detail.map((e: { msg?: string }) => e.msg ?? 'Error de validación').join(', ');
     }
     if (typeof detail === 'string') return detail;
+    // Sin respuesta del servidor: tiempo agotado o sin conexión
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return 'La solicitud tardó demasiado. Inténtalo de nuevo.';
+    }
+    if (!error.response) {
+      return 'No se pudo conectar con el servidor. Revisa tu conexión.';
+    }
     return error.message || 'Error desconocido';
   }
   if (error instanceof Error) {

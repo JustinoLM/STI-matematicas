@@ -49,6 +49,7 @@ class MensajesService:
         """
         hoy = date.today()
         nombre = estudiante.nombre_completo
+        tema = LLMPrompts.resolver_tema(tema)   # clave canónica (None si no es narrativo)
         genero_val = getattr(estudiante, "genero", None)
         genero = genero_val.value if hasattr(genero_val, "value") else str(genero_val or "masculino")
 
@@ -77,15 +78,11 @@ class MensajesService:
         nivel_general: int,
         tema: Optional[str],
     ) -> str:
-        # Solo pasar el tema al LLM si es un tema narrativo conocido
-        tema_narrativo = tema if tema and tema in LLMPrompts._TEMAS_CONFIG else None
-
+        # El nombre real no se envía al LLM: el prompt usa un marcador que se reemplaza aquí
         if tipo == "dashboard":
-            prompt = LLMPrompts.mensaje_motivacional_dashboard(
-                nombre, genero, nivel_general, tema_narrativo
-            )
+            prompt = LLMPrompts.mensaje_motivacional_dashboard(genero, nivel_general, tema)
         else:
-            prompt = LLMPrompts.mensaje_motivacional_progreso(nombre, genero, tema_narrativo)
+            prompt = LLMPrompts.mensaje_motivacional_progreso(genero, tema)
 
         respuesta = await self.llm_service.generate(
             prompt=prompt,
@@ -95,14 +92,14 @@ class MensajesService:
         texto = respuesta.strip()
         if not texto:
             raise ValueError("LLM devolvió respuesta vacía")
-        return texto
+        return LLMPrompts.insertar_nombre(texto, nombre)
 
     @staticmethod
     def _fallback(nombre: str, tipo: str, tema: Optional[str]) -> str:
         primer_nombre = nombre.split()[0] if nombre else "estudiante"
         # Usar saludo temático solo si es un tema narrativo conocido
         saludo_tema = ""
-        if tema and tema in LLMPrompts._TEMAS_CONFIG:
+        if tema:
             try:
                 config = LLMPrompts._buscar_config_tema(tema)
                 saludo_tema = config.get("saludo", "")

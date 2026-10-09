@@ -15,7 +15,8 @@ from app.main import app
 from app.models.adaptive import EstadoSesion, PerfilEstudiante, SesionPractica, TipoAlerta
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.gamification import (
-    CategoriaDesbloqueable, CategoriaMedalla, Desbloqueable, Medalla, PersonalizacionEstudiante,
+    CategoriaDesbloqueable, CategoriaMedalla, Desbloqueable, EstudianteDesbloqueable, Medalla,
+    PersonalizacionEstudiante,
 )
 from app.models.group import EstudianteGrupo, Grupo
 from app.models.practice_config import ConfiguracionPractica
@@ -123,6 +124,57 @@ async def test_medalla_de_desafio_grupal_cuenta_solo_los_desafios_en_que_partici
         svc = _servicio_gamificacion(db)
         assert await svc._cumple_criterio_medalla(participa, await repo.get_perfil(participa), medalla) is True
         assert await svc._cumple_criterio_medalla(espectador, await repo.get_perfil(espectador), medalla) is False
+
+
+@pytest.mark.asyncio
+async def test_medalla_de_comprar_todo_se_evalua_contra_el_catalogo_vigente():
+    async with AsyncClient(app=app, base_url="http://test") as c:
+        est, _ = await _estudiante(c, "MED004")
+    async with TestSessionLocal() as db:
+        db.add(PerfilEstudiante(estudiante_id=est))
+        items = [Desbloqueable(categoria=CategoriaDesbloqueable.FONDO, nombre=f"F{i}", precio_puntos=75)
+                 for i in range(3)]
+        db.add_all(items)
+        medalla = Medalla(nombre="Todo", descripcion="x", categoria=CategoriaMedalla.EXPLORACION,
+                          criterio={"tipo": "coleccionista", "todos": True})
+        db.add(medalla)
+        await db.flush()
+        repo = AdaptiveRepository(db)
+        svc = _servicio_gamificacion(db)
+        for it in items[:2]:
+            db.add(EstudianteDesbloqueable(estudiante_id=est, desbloqueable_id=it.id, puntos_gastados=75))
+        await db.commit()
+        assert await svc._cumple_criterio_medalla(est, await repo.get_perfil(est), medalla) is False
+        db.add(EstudianteDesbloqueable(estudiante_id=est, desbloqueable_id=items[2].id, puntos_gastados=75))
+        await db.commit()
+        assert await svc._cumple_criterio_medalla(est, await repo.get_perfil(est), medalla) is True
+
+
+@pytest.mark.asyncio
+async def test_medalla_de_comprar_todo_no_se_cumple_con_un_item_inactivo_en_lugar_de_uno_activo():
+    async with AsyncClient(app=app, base_url="http://test") as c:
+        est, _ = await _estudiante(c, "MED005")
+    async with TestSessionLocal() as db:
+        db.add(PerfilEstudiante(estudiante_id=est))
+        activos = [Desbloqueable(categoria=CategoriaDesbloqueable.FONDO, nombre=f"A{i}", precio_puntos=75)
+                   for i in range(2)]
+        retirado = Desbloqueable(categoria=CategoriaDesbloqueable.FONDO, nombre="Retirado",
+                                 precio_puntos=75, activo=False)
+        db.add_all(activos + [retirado])
+        medalla = Medalla(nombre="Todo", descripcion="x", categoria=CategoriaMedalla.EXPLORACION,
+                          criterio={"tipo": "coleccionista", "todos": True})
+        db.add(medalla)
+        await db.flush()
+        repo = AdaptiveRepository(db)
+        svc = _servicio_gamificacion(db)
+        # Tiene tantos items como activos hay (2), pero uno es el retirado y falta un activo
+        for it in (activos[0], retirado):
+            db.add(EstudianteDesbloqueable(estudiante_id=est, desbloqueable_id=it.id, puntos_gastados=75))
+        await db.commit()
+        assert await svc._cumple_criterio_medalla(est, await repo.get_perfil(est), medalla) is False
+        db.add(EstudianteDesbloqueable(estudiante_id=est, desbloqueable_id=activos[1].id, puntos_gastados=75))
+        await db.commit()
+        assert await svc._cumple_criterio_medalla(est, await repo.get_perfil(est), medalla) is True
 
 
 # ─── Tema activo ─────────────────────────────────────────────────────────────

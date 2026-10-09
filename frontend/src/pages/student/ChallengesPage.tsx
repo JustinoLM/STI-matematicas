@@ -198,7 +198,7 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
               <div className="flex items-center gap-1.5 rounded-md bg-yellow-50 border border-yellow-200 px-2.5 py-1.5 text-xs text-yellow-800">
                 <Coins className="h-3.5 w-3.5 shrink-0" />
                 <span className="font-medium">
-                  {terminado ? '¡' : ''}Recompensa: {desafio.recompensa_puntos.toLocaleString()} monedas{terminado ? ' ¡recibidas!' : ' al completar'}
+                  {terminado ? '¡' : ''}Recompensa: {desafio.recompensa_puntos.toLocaleString()} puntos{terminado ? ' ¡recibidas!' : ' al completar'}
                 </span>
               </div>
             )}
@@ -211,7 +211,7 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
           </div>
         )}
 
-        {/* Alerta de participación (solo si hay recompensa de monedas y el desafío no terminó) */}
+        {/* Alerta de participación (solo si hay recompensa de puntos y el desafío no terminó) */}
         {!terminado && desafio.recompensa_puntos != null && desafio.recompensa_puntos > 0 && (
           <div className={`flex items-start gap-1.5 rounded-md px-2.5 py-1.5 text-xs border ${
             desafio.califica_recompensa
@@ -226,8 +226,8 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
               {desafio.califica_recompensa
                 ? `¡Tu participación está asegurada! (${desafio.mi_sesiones_en_ventana} prácticas completadas)`
                 : desafio.sesiones_para_calificar === 1
-                  ? 'Practica 1 vez más para calificar para las monedas'
-                  : `Practica ${desafio.sesiones_para_calificar} veces más para calificar para las monedas`
+                  ? 'Practica 1 vez más para calificar para los puntos'
+                  : `Practica ${desafio.sesiones_para_calificar} veces más para calificar para los puntos`
               }
             </span>
           </div>

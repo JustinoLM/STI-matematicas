@@ -47,7 +47,9 @@ async def obtener_enunciados_lote(
     y el tema activo del estudiante.
 
     - Los hits de caché se devuelven instantáneamente.
-    - Los miss generan texto con DeepSeek V3 (puede tardar unos segundos).
+    - Los miss generan hasta 3 variaciones con DeepSeek V3 (en paralelo; puede tardar
+      unos segundos). Solo se guardan textos con los números exactos del problema.
+    - Solo se atienden problemas de las sesiones del estudiante.
     - Si tema está vacío, retorna dict vacío (frontend usa pregunta genérica).
     - Los errores individuales son silenciosos; el problema simplemente
       no aparece en el resultado (frontend usa fallback).
@@ -55,9 +57,14 @@ async def obtener_enunciados_lote(
     if not request.tema or not request.problema_ids:
         return EnunciadosLoteResponse(enunciados={})
 
+    # Solo se atienden problemas de las sesiones del propio estudiante
+    permitidos = await enunciados_service.enunciados_repo.get_ids_problemas_del_estudiante(
+        current_student.id
+    )
     enunciados = await enunciados_service.obtener_enunciados_lote(
         problema_ids=request.problema_ids,
         tema_nombre=request.tema,
+        permitidos=permitidos,
     )
 
     return EnunciadosLoteResponse(enunciados=enunciados)

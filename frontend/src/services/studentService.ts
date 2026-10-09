@@ -2,7 +2,7 @@
  * Servicio del estudiante — práctica, gamificación, pistas.
  */
 
-import apiClient, { getErrorMessage } from './api';
+import apiClient, { getErrorMessage, TIMEOUT_LLM_MS, TIMEOUT_LLM_R1_MS } from './api';
 import type { PerfilEstudiante, DesafioEstudiante } from '@/types';
 
 // ─── Tipos de práctica ────────────────────────────────────────────────────────
@@ -165,6 +165,15 @@ export const studentService = {
   async getPerfil(): Promise<PerfilEstudiante> {
     try {
       const response = await apiClient.get<PerfilEstudiante>('/adaptive/profile');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async getEstadisticasGlobales<T>(): Promise<T> {
+    try {
+      const response = await apiClient.get<T>('/practices/stats');
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -414,7 +423,8 @@ export const studentService = {
     try {
       const response = await apiClient.post<{ enunciados: Record<string, string> }>(
         '/enunciados/lote',
-        { problema_ids, tema }
+        { problema_ids, tema },
+        { timeout: TIMEOUT_LLM_MS }
       );
       // Convertir claves string → number
       const result: Record<number, string> = {};
@@ -439,7 +449,8 @@ export const studentService = {
   async getAnalisisSesion(sesionId: number): Promise<string> {
     try {
       const response = await apiClient.get<{ sesion_id: number; texto: string; generada_llm: boolean }>(
-        `/analisis/${sesionId}`
+        `/analisis/${sesionId}`,
+        { timeout: TIMEOUT_LLM_R1_MS }
       );
       return response.data.texto;
     } catch {
@@ -450,7 +461,8 @@ export const studentService = {
   async getMensajeMotivacional(tipo: 'dashboard' | 'progreso'): Promise<string> {
     try {
       const response = await apiClient.get<{ tipo: string; texto: string; generada_llm: boolean }>(
-        `/mensajes/${tipo}`
+        `/mensajes/${tipo}`,
+        { timeout: TIMEOUT_LLM_MS }
       );
       return response.data.texto;
     } catch {
@@ -531,7 +543,7 @@ export const studentService = {
         sesion_id: sesionId,
         problema_id: problemaId,
         nivel_pista: nivel,
-      });
+      }, { timeout: TIMEOUT_LLM_MS });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

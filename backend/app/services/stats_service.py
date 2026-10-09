@@ -6,6 +6,7 @@ AlertaEstudiante y aplica predicciones del MLService para construir
 una vista completa del grupo.
 """
 
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -320,7 +321,7 @@ class StatsService:
         self, grupo_id: int, profesor_id: int, llm: LLMService
     ) -> AnalisisIAResponse:
         """
-        Genera análisis pedagógico del grupo usando DeepSeek V3 (bajo demanda, sin caché).
+        Genera análisis pedagógico del grupo usando DeepSeek R1 (bajo demanda, sin caché).
         """
         stats = await self.get_grupo_stats(grupo_id, profesor_id)
         if stats is None:
@@ -328,14 +329,21 @@ class StatsService:
                 texto="Grupo no encontrado.", generado_por_llm=False
             )
 
+        # Los nombres reales no salen del servidor: el prompt usa etiquetas ("Estudiante 3",
+        # "[GRUPO]") que se reemplazan aquí en la respuesta.
+        etiquetas = self._etiquetas_anonimas(stats)
         prompt = self._construir_prompt_analisis(stats)
         try:
             texto = await llm.generate(
                 prompt=prompt,
-                use_reasoning=False,  # V3 es suficiente y más rápido
-                max_tokens=450,
+                use_reasoning=True,
+                # R1 cuenta su razonamiento dentro de max_tokens; el prompt limita la
+                # respuesta visible a ~250 palabras.
+                max_tokens=2000,
             )
-            return AnalisisIAResponse(texto=texto.strip(), generado_por_llm=True)
+            return AnalisisIAResponse(
+                texto=self._restaurar_nombres(texto.strip(), etiquetas), generado_por_llm=True
+            )
         except Exception:
             return AnalisisIAResponse(
                 texto="No se pudo generar el análisis en este momento. Verifica la conexión con DeepSeek.",
@@ -343,8 +351,28 @@ class StatsService:
             )
 
     @staticmethod
+    def _etiquetas_anonimas(stats: GrupoStatsResponse) -> dict[str, str]:
+        """Etiqueta anónima → nombre real (estudiantes y grupo), para el prompt y la respuesta."""
+        etiquetas = {f"Estudiante {i}": e.nombre for i, e in enumerate(stats.estudiantes, start=1)}
+        etiquetas["[GRUPO]"] = stats.grupo_nombre
+        return etiquetas
+
+    @staticmethod
+    def _restaurar_nombres(texto: str, etiquetas: dict[str, str]) -> str:
+        """Reemplaza las etiquetas anónimas de la respuesta del LLM por los nombres reales."""
+        def _sustituir(m: re.Match) -> str:
+            return etiquetas.get(m.group(0), m.group(0))
+
+        texto = re.sub(r"Estudiante \d+\b", _sustituir, texto)
+        return texto.replace("[GRUPO]", etiquetas.get("[GRUPO]", "[GRUPO]"))
+
+    @staticmethod
     def _construir_prompt_analisis(stats: GrupoStatsResponse) -> str:
-        """Construye el prompt enriquecido con todos los datos ML del grupo."""
+        """
+        Construye el prompt con los datos ML del grupo. Los estudiantes se identifican con
+        etiquetas anónimas ("Estudiante N"); no se envían nombres, códigos ni el nombre del grupo.
+        """
+        alias = {e.id: f"Estudiante {i}" for i, e in enumerate(stats.estudiantes, start=1)}
         dist = stats.distribucion_perfiles
         alertas = stats.resumen_alertas
         ests = stats.estudiantes
@@ -367,14 +395,14 @@ class StatsService:
 
         atencion_str = (
             "\n".join(
-                f"  - {e.nombre}: {e.probabilidad_avance:.0f}% avance, {e.dias_sin_practicar} días inactivo"
+                f"  - {alias[e.id]}: {e.probabilidad_avance:.0f}% avance, {e.dias_sin_practicar} días inactivo"
                 for e in necesitan[:5]
             )
             or "  Ninguno"
         )
         destacados_str = (
             "\n".join(
-                f"  - {e.nombre}: {e.probabilidad_avance:.0f}% probabilidad de avance"
+                f"  - {alias[e.id]}: {e.probabilidad_avance:.0f}% probabilidad de avance"
                 for e in destacados[:5]
             )
             or "  Ninguno"
@@ -383,22 +411,22 @@ class StatsService:
         # Líneas de alertas con nombres
         alerta_parts = []
         if alertas.posible_trampa > 0:
-            nombres = [e.nombre for e in ests if "posible_trampa" in e.alertas]
+            nombres = [alias[e.id] for e in ests if "posible_trampa" in e.alertas]
             alerta_parts.append(
                 f"- Posible trampa: {alertas.posible_trampa} ({', '.join(nombres[:3])})"
             )
         if alertas.inactivo > 0:
-            nombres = [e.nombre for e in ests if "inactivo" in e.alertas]
+            nombres = [alias[e.id] for e in ests if "inactivo" in e.alertas]
             alerta_parts.append(
                 f"- Inactivos: {alertas.inactivo} ({', '.join(nombres[:3])})"
             )
         if alertas.rezagado > 0:
-            nombres = [e.nombre for e in ests if "rezagado" in e.alertas]
+            nombres = [alias[e.id] for e in ests if "rezagado" in e.alertas]
             alerta_parts.append(
                 f"- Rezagados: {alertas.rezagado} ({', '.join(nombres[:3])})"
             )
         if alertas.dificultad_persistente > 0:
-            nombres = [e.nombre for e in ests if "dificultad_persistente" in e.alertas]
+            nombres = [alias[e.id] for e in ests if "dificultad_persistente" in e.alertas]
             alerta_parts.append(
                 f"- Dificultad persistente: {alertas.dificultad_persistente} ({', '.join(nombres[:3])})"
             )
@@ -409,7 +437,8 @@ class StatsService:
 
         return f"""Eres un asesor pedagógico para profesores de matemáticas de 5to grado (decimales).
 
-Analiza los datos del grupo "{stats.grupo_nombre}" ({stats.total_estudiantes} estudiantes) y genera recomendaciones concretas.
+Analiza los datos del grupo "[GRUPO]" ({stats.total_estudiantes} estudiantes) y genera recomendaciones concretas.
+Los estudiantes aparecen con etiquetas anónimas ("Estudiante N") y el grupo como [GRUPO]: úsalas tal cual si debes nombrarlos.
 
 PERFILES DE APRENDIZAJE (clasificados por clustering ML):
 - Rápido y Preciso: {dist.rapido_preciso} estudiantes

@@ -6,6 +6,8 @@ Usa la API de DeepSeek directamente (compatible con OpenAI).
 - R1 (deepseek-reasoner): análisis post-práctica
 """
 
+import asyncio
+from decimal import Decimal
 from typing import Dict, Optional
 
 import httpx
@@ -23,7 +25,10 @@ class LLMService:
         self.model_v3 = settings.DEEPSEEK_MODEL_V3      # deepseek-chat
         self.model_r1 = settings.DEEPSEEK_MODEL_R1      # deepseek-reasoner
         self.model = self.model_v3                       # alias por compatibilidad
-        self.timeout = 60
+        self.timeout = 60              # V3 (s)
+        self.timeout_reasoner = 120    # R1 razona antes de responder (s)
+        self.max_intentos = 2          # 1 intento + 1 reintento ante 429/5xx/red
+        self.espera_reintento = 1.0    # segundos (se multiplica por el nº de intento)
         self._client: Optional[httpx.AsyncClient] = None
         # Tokens totales (prompt + respuesta) de la última llamada exitosa
         self.ultimo_total_tokens: Optional[int] = None
@@ -59,6 +64,7 @@ class LLMService:
             Texto generado
         """
         model = self.model_r1 if use_reasoning else self.model_v3
+        timeout = self.timeout_reasoner if use_reasoning else self.timeout
 
         messages = []
         if system:
@@ -78,36 +84,62 @@ class LLMService:
         if max_tokens:
             payload["max_tokens"] = max_tokens
 
-        try:
-            response = await self.client.post(
-                f"{self.api_url}/chat/completions",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            self.ultimo_total_tokens = (data.get("usage") or {}).get("total_tokens")
-            return data["choices"][0]["message"]["content"]
+        ultimo_error: Optional[HTTPException] = None
+        for intento in range(1, self.max_intentos + 1):
+            try:
+                response = await self.client.post(
+                    f"{self.api_url}/chat/completions",
+                    json=payload,
+                    timeout=timeout,
+                )
+                response.raise_for_status()
+                data = response.json()
+                self.ultimo_total_tokens = (data.get("usage") or {}).get("total_tokens")
+                contenido = data["choices"][0]["message"]["content"]
+            except httpx.TimeoutException:
+                # Un tiempo agotado no se reintenta (duplicaría la espera)
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"Timeout al comunicarse con DeepSeek después de {timeout}s",
+                )
+            except httpx.HTTPStatusError as e:
+                codigo = e.response.status_code
+                ultimo_error = HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Error en DeepSeek API ({codigo}): {e.response.text}",
+                )
+                # Solo se reintenta lo transitorio: límite de tasa o error del servidor
+                if (codigo == 429 or codigo >= 500) and intento < self.max_intentos:
+                    await asyncio.sleep(self.espera_reintento * intento)
+                    continue
+                raise ultimo_error
+            except httpx.HTTPError as e:
+                ultimo_error = HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Error al comunicarse con DeepSeek: {str(e)}",
+                )
+                if intento < self.max_intentos:
+                    await asyncio.sleep(self.espera_reintento * intento)
+                    continue
+                raise ultimo_error
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error inesperado con LLM: {str(e)}",
+                )
 
-        except httpx.TimeoutException:
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=f"Timeout al comunicarse con DeepSeek después de {self.timeout}s",
-            )
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Error en DeepSeek API ({e.response.status_code}): {e.response.text}",
-            )
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Error al comunicarse con DeepSeek: {str(e)}",
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error inesperado con LLM: {str(e)}",
-            )
+            if not contenido or not contenido.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="DeepSeek devolvió una respuesta vacía",
+                )
+            return contenido
+
+        # Inalcanzable en la práctica: el bucle siempre retorna o lanza
+        raise ultimo_error or HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo comunicar con DeepSeek",
+        )
 
     async def close(self):
         """Cierra el cliente HTTP."""
@@ -230,51 +262,87 @@ Genera la pista:"""
         },
     }
 
+    # Equivalencias de nombres de tema (nombre del catálogo o id de la tienda) → clave de _TEMAS_CONFIG
+    _ALIAS_TEMAS: Dict[str, str] = {
+        "tema-piratas de los mares": "tema-piratas",
+        "tema-astronautas": "tema-astronautas galácticos",
+        "tema-magos": "tema-magos de la academia",
+        "tema-caballeros": "tema-caballeros del reino",
+        "tema-vaqueros": "tema-vaqueros del oeste",
+        "tema-princesas": "tema-princesas inventoras",
+    }
+
+    @classmethod
+    def resolver_tema(cls, tema: Optional[str]) -> Optional[str]:
+        """
+        Devuelve la clave de _TEMAS_CONFIG que corresponde a un tema, o None si no es narrativo.
+
+        Acepta el nombre del catálogo ("Piratas de los Mares"), su versión normalizada
+        ("tema-piratas de los mares") o el id de la tienda ("tema-piratas").
+        """
+        if not tema:
+            return None
+        clave = tema.lower().strip()
+        if not clave.startswith("tema-"):
+            clave = f"tema-{clave}"
+        if clave in cls._TEMAS_CONFIG:
+            return clave
+        return cls._ALIAS_TEMAS.get(clave)
+
     @classmethod
     def _buscar_config_tema(cls, tema: str) -> dict:
-        """
-        Busca la configuración de un tema por clave exacta o parcial.
-        Fallback: piratas.
-        """
-        # Coincidencia exacta primero
-        if tema in cls._TEMAS_CONFIG:
-            return cls._TEMAS_CONFIG[tema]
-        # Coincidencia parcial (por si la normalización difiere levemente)
-        for key, config in cls._TEMAS_CONFIG.items():
-            if key in tema or tema in key:
-                return config
-        # Sin fallback — el llamador debe validar que el tema existe
-        raise ValueError(f"Tema '{tema}' no encontrado en _TEMAS_CONFIG")
+        """Configuración de un tema narrativo. Lanza ValueError si el tema no existe."""
+        clave = cls.resolver_tema(tema)
+        if clave is None:
+            raise ValueError(f"Tema '{tema}' no encontrado en _TEMAS_CONFIG")
+        return cls._TEMAS_CONFIG[clave]
 
     @staticmethod
-    def generar_enunciado_narrativo(
-        operacion: str,
-        operando1: float,
-        operando2: float,
-        tema: str,
-        variacion: int,
-    ) -> str:
-        """Prompt para generar enunciado narrativo temático — V3."""
+    def formatear_numero(valor) -> str:
+        """Número sin ceros sobrantes ni notación científica (12.0 → "12", 3.50 → "3.5")."""
+        return format(Decimal(str(valor)).normalize(), "f")
 
+    # Marcador del nombre del estudiante: el nombre real nunca sale del servidor,
+    # se inserta en el texto después de recibir la respuesta del modelo.
+    MARCADOR_NOMBRE = "[NOMBRE]"
+
+    @classmethod
+    def insertar_nombre(cls, texto: str, nombre_completo: str) -> str:
+        """Reemplaza el marcador por el primer nombre del estudiante (sin enviarlo al LLM)."""
+        partes = (nombre_completo or "").split()
+        primer_nombre = partes[0] if partes else "estudiante"
+        return texto.replace(cls.MARCADOR_NOMBRE, primer_nombre)
+
+    @classmethod
+    def enunciados_variaciones(
+        cls,
+        operacion: str,
+        operando1,
+        operando2,
+        tema: str,
+        cantidad: int = 3,
+    ) -> str:
+        """Prompt para generar varios enunciados narrativos distintos del mismo problema — V3."""
         operacion_map = {
             "suma": "juntar/sumar",
             "resta": "quitar/restar",
             "multiplicacion": "multiplicar/agrupar",
             "division": "repartir/dividir",
         }
-
-        config = LLMPrompts._buscar_config_tema(tema)
+        config = cls._buscar_config_tema(tema)
         operacion_texto = operacion_map.get(operacion, operacion)
+        n1 = cls.formatear_numero(operando1)
+        n2 = cls.formatear_numero(operando2)
+        formato = "\n".join(f"VARIACION_{i}: [enunciado]" for i in range(1, cantidad + 1))
 
         return f"""Eres un escritor creativo de problemas matemáticos para niños de 5to grado (10-11 años).
 
 Tema narrativo: {config['nombre']}
 Contexto del tema: {config['contexto']}
 
-Crea un enunciado narrativo para este problema matemático:
+Crea {cantidad} enunciados narrativos DIFERENTES para este problema matemático:
 - Acción matemática: {operacion_texto}
-- Números exactos a usar: {operando1} y {operando2}
-- Variación #{variacion} — debe ser diferente a versiones anteriores
+- Números exactos a usar: {n1} y {n2}
 
 Recursos narrativos disponibles:
 - Personajes: {', '.join(config['personajes'])}
@@ -282,30 +350,33 @@ Recursos narrativos disponibles:
 - Verbos: {', '.join(config['verbos'])}
 - Lugares: {', '.join(config['lugares'])}
 
-Reglas CRÍTICAS (cumplir todas):
+Reglas CRÍTICAS (cumplir todas en cada enunciado):
 1. Exactamente 1-2 oraciones
 2. Termina con una pregunta matemática clara
-3. Usa los números EXACTOS: {operando1} y {operando2} (¡no cambiarlos!)
+3. Usa los números EXACTOS: {n1} y {n2} (¡no cambiarlos y no escribir ningún otro número!)
 4. NO menciones la operación directamente — solo plantea el contexto
-5. Apropiado para niños de 10-11 años, lenguaje sencillo y emocionante
+5. Cada enunciado debe ser único (distinto personaje, situación o lugar)
+6. Apropiado para niños de 10-11 años, lenguaje sencillo y emocionante
 
 Ejemplo del estilo buscado (tema piratas, suma):
-"El Capitán Barbanegra encontró un cofre con {operando1} monedas de oro en la isla del tesoro. Su tripulación capturó otro barco con {operando2} monedas más. ¿Cuántas monedas tienen en total?"
+"El Capitán Barbanegra encontró un cofre con {n1} monedas de oro en la isla del tesoro. Su tripulación capturó otro barco con {n2} monedas más. ¿Cuántas monedas tiene ahora?"
 
-Genera SOLO el enunciado narrativo (sin comillas ni explicaciones):"""
+Formato ESTRICTO (una línea por enunciado, sin comillas ni explicaciones):
+{formato}"""
+
+    # ── Mensajes motivacionales ──────────────────────────────────────────────
 
     @classmethod
     def mensaje_motivacional_dashboard(
         cls,
-        nombre: str,
         genero: str,
         nivel_general: int,
         tema: Optional[str] = None,
     ) -> str:
-        """Prompt para mensaje motivacional del dashboard — V3."""
+        """Prompt para mensaje motivacional del dashboard — V3. No incluye el nombre real."""
         articulo = "el" if genero == "masculino" else "la"
+        marcador = cls.MARCADOR_NOMBRE
 
-        # Contexto temático opcional
         tema_section = ""
         if tema:
             config = cls._buscar_config_tema(tema)
@@ -318,15 +389,15 @@ Genera SOLO el enunciado narrativo (sin comillas ni explicaciones):"""
 
         return f"""Eres un tutor motivador para niños de 5to grado (10-11 años).
 
-Estudiante: {nombre}
 Género: {genero}
 Nivel general: {nivel_general} de 5
 {tema_section}
-Escribe un mensaje de bienvenida corto y entusiasta para {articulo} estudiante {nombre}.
+Escribe un mensaje de bienvenida corto y entusiasta para {articulo} estudiante.
+Para nombrarle escribe exactamente {marcador} (el nombre real se insertará después).
 
 Reglas:
 - Máximo 2 oraciones
-- Usa el nombre del estudiante
+- Usa {marcador} una vez como nombre del estudiante
 - Menciona el nivel de forma positiva
 - Usa lenguaje apropiado para niños de 10-11 años
 - Sé animado y alentador
@@ -334,23 +405,22 @@ Reglas:
 - Si hay tema, úsalo de forma natural (no lo forces)
 
 Ejemplos sin tema:
-"¡Bienvenida, Sofía! Estás en nivel 3, ¡eres una crack de las matemáticas!"
+"¡Bienvenida, {marcador}! Estás en nivel 3, ¡eres una crack de las matemáticas!"
 
 Ejemplo con tema piratas:
-"¡Arrr! ¡Bienvenido de vuelta, Carlos! En nivel 2 ya eres digno marinero de las matemáticas."
+"¡Arrr! ¡Bienvenido de vuelta, {marcador}! En nivel 2 ya eres digno marinero de las matemáticas."
 
 Genera SOLO el mensaje (sin comillas ni explicaciones):"""
 
     @classmethod
     def mensaje_motivacional_progreso(
         cls,
-        nombre: str,
         genero: str,
         tema: Optional[str] = None,
     ) -> str:
-        """Prompt para mensaje motivacional de la página de progreso — V3."""
+        """Prompt para mensaje motivacional de la página de progreso — V3. No incluye el nombre real."""
+        marcador = cls.MARCADOR_NOMBRE
 
-        # Contexto temático opcional
         tema_section = ""
         if tema:
             config = cls._buscar_config_tema(tema)
@@ -363,29 +433,29 @@ Genera SOLO el mensaje (sin comillas ni explicaciones):"""
 
         return f"""Eres un tutor motivador para niños de 5to grado (10-11 años).
 
-Estudiante: {nombre}
 Género: {genero}
 {tema_section}
-Escribe un mensaje corto de motivación para animar a {nombre} a revisar su progreso y seguir mejorando.
+Escribe un mensaje corto de motivación para animar al estudiante a revisar su progreso y seguir mejorando.
+Para nombrarle escribe exactamente {marcador} (el nombre real se insertará después).
 
 Reglas:
 - Máximo 2 oraciones
-- Menciona el nombre
+- Usa {marcador} una vez como nombre del estudiante
 - Motiva a seguir practicando y a revisar sus estadísticas
 - Apropiado para niños de 10-11 años
 - Conjuga adjetivos según el género ({genero})
 - Si hay tema, úsalo de forma natural
 
 Ejemplo con tema astronautas:
-"¡Misión cumplida, Ana! Revisa tus estadísticas y sigue entrenando para conquistar la galaxia de las matemáticas."
+"¡Misión cumplida, {marcador}! Revisa tus estadísticas y sigue entrenando para conquistar la galaxia de las matemáticas."
 
 Genera SOLO el mensaje (sin comillas ni explicaciones):"""
 
     # ── Análisis post-práctica ───────────────────────────────────────────────
 
-    @staticmethod
+    @classmethod
     def analisis_post_practica(
-        nombre: str,
+        cls,
         genero: str,
         operacion: str,
         nivel: int,
@@ -393,37 +463,26 @@ Genera SOLO el mensaje (sin comillas ni explicaciones):"""
         total_correctos: int,
         precision: float,
         tiempo_promedio_seg: float,
-        pasos_intermedios_correctos: int,
-        pasos_intermedios_total: int,
     ) -> str:
-        """Prompt para análisis post-práctica — R1."""
+        """Prompt para análisis post-práctica — R1. No incluye el nombre real."""
+        marcador = cls.MARCADOR_NOMBRE
         precision_pct = round(precision * 100, 1)
-        pasos_pct = (
-            round((pasos_intermedios_correctos / pasos_intermedios_total) * 100, 1)
-            if pasos_intermedios_total > 0
-            else None
-        )
-        pasos_info = (
-            f"Pasos intermedios correctos: {pasos_intermedios_correctos}/{pasos_intermedios_total} ({pasos_pct}%)"
-            if pasos_pct is not None
-            else "Sin datos de pasos intermedios"
-        )
 
         return f"""Eres un tutor de matemáticas para niños de 5to grado. Analiza la sesión de práctica de un estudiante.
 
-Estudiante: {nombre} (género: {genero})
+Género del estudiante: {genero}
 Operación practicada: {operacion}
 Nivel: {nivel} de 5
 Problemas resueltos: {total_problemas}
 Respuestas correctas: {total_correctos} ({precision_pct}%)
 Tiempo promedio por problema: {tiempo_promedio_seg:.1f} segundos
-{pasos_info}
 
 Escribe un análisis breve y constructivo para el estudiante.
+Para nombrarle escribe exactamente {marcador} (el nombre real se insertará después).
 
 Reglas:
 - Máximo 4 oraciones
-- Usa el nombre del estudiante
+- Usa {marcador} una vez como nombre del estudiante
 - Destaca lo que hizo bien
 - Señala una cosa concreta a mejorar (si aplica)
 - Sé positivo y constructivo, nunca punitivo

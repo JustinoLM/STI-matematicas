@@ -557,7 +557,7 @@ class AdaptiveService:
         # Límites desde configuración del profesor (si existe)
         # Convertir a int porque _random_decimal usa random.randint
         niveles_permitidos = sorted(config_grupo.niveles_permitidos or []) if config_grupo else []
-        cfg_decimales = int(config_grupo.decimales_maximos) if config_grupo else None
+        cfg_decimales = min(int(config_grupo.decimales_maximos), 3) if config_grupo else None
         cfg_rango_min = int(float(config_grupo.rango_min)) if config_grupo else None
         cfg_rango_max = int(float(config_grupo.rango_max)) if config_grupo else None
 
@@ -1090,7 +1090,7 @@ class AdaptiveService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Sesión no encontrada"
             )
-        if sesion.estado != "en_progreso":
+        if sesion.estado not in ("iniciada", "en_progreso"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="La sesión ya no está activa"
@@ -1142,7 +1142,7 @@ class AdaptiveService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Sesión no encontrada"
             )
-        if sesion.estado != "en_progreso":
+        if sesion.estado not in ("iniciada", "en_progreso"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="La sesión ya no está activa"
@@ -1312,7 +1312,7 @@ class AdaptiveService:
         tiempo_total_segundos: int,
         velocidad_promedio: float,
     ) -> None:
-        """Actualiza el progreso de desafíos grupales activos y otorga monedas si se completan.
+        """Actualiza el progreso de desafíos grupales activos y otorga puntos si se completan.
 
         Tipos de desafío soportados:
         - problemas_resueltos    → +N correctos por sesión
@@ -1322,7 +1322,7 @@ class AdaptiveService:
         - practicas_rapidas      → +1 si tiempo_total <= parametro_adicional * 60 seg
 
         Cuando un grupo completa un desafío por primera vez y hay recompensa_puntos,
-        se otorgan monedas (puntos de tienda) a todos los estudiantes activos del grupo
+        se otorgan puntos de tienda a todos los estudiantes activos del grupo
         usando GamificationRepository para registrar la transacción correctamente.
         """
         from sqlalchemy import and_, or_, select
@@ -1394,13 +1394,13 @@ class AdaptiveService:
                     desafio.objetivo_cantidad,
                 )
 
-            # ── Detectar primera compleción y otorgar monedas de tienda ─────────
+            # ── Detectar primera compleción y otorgar puntos de tienda ─────────
             grupo_completo = gd.progreso_actual >= desafio.objetivo_cantidad
             if grupo_completo and not gd.puntos_otorgados:
                 desafio.completado = True
                 gd.puntos_otorgados = True
 
-                # Otorgar monedas solo a estudiantes que participaron activamente
+                # Otorgar puntos solo a estudiantes que participaron activamente
                 # (≥ 3 sesiones completadas dentro de la ventana del desafío)
                 if desafio.recompensa_puntos and desafio.recompensa_puntos > 0:
                     participantes_ids = await self.adaptive_repo.get_participantes_desafio(

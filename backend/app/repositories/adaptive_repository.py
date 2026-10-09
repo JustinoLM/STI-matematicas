@@ -177,7 +177,7 @@ class AdaptiveRepository:
 
     async def get_sesion_activa(self, estudiante_id: int) -> Optional[SesionPractica]:
         """
-        Devuelve la sesión EN_PROGRESO más reciente del estudiante
+        Devuelve la sesión iniciada o en progreso más reciente del estudiante
         siempre que tenga menos de 90 minutos de inactividad.
         """
         limite = datetime.utcnow() - timedelta(minutes=90)
@@ -186,7 +186,7 @@ class AdaptiveRepository:
             .where(
                 and_(
                     SesionPractica.estudiante_id == estudiante_id,
-                    SesionPractica.estado == EstadoSesion.EN_PROGRESO,
+                    SesionPractica.estado.in_([EstadoSesion.INICIADA, EstadoSesion.EN_PROGRESO]),
                     SesionPractica.fecha_ultima_actividad >= limite,
                 )
             )

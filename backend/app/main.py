@@ -2,9 +2,15 @@
 Entry point principal de la aplicación FastAPI.
 """
 
+import asyncio
+import logging
+import time
+import uuid
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.routers import (
     adaptive,
@@ -26,30 +32,38 @@ from app.api.routers import (
 )
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.core.logging_config import configurar_logging
 from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
-# En producción se ocultan los docs para no exponer la API pública
-_docs_url = None if settings.ENVIRONMENT == "production" else "/docs"
-_redoc_url = None if settings.ENVIRONMENT == "production" else "/redoc"
+configurar_logging(
+    formato=settings.LOG_FORMAT or ("text" if settings.ENVIRONMENT == "development" else "json"),
+    nivel=settings.LOG_LEVEL,
+)
+logger = logging.getLogger("sti")
+
+
+def urls_documentacion(entorno: str) -> dict:
+    """
+    URLs de la documentación interactiva. En producción se desactivan las tres
+    (`/docs`, `/redoc` y también `/openapi.json`) para no exponer la descripción de la API.
+    """
+    if entorno == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
 
 # Crear instancia de FastAPI
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API REST del Sistema de Tutoría Inteligente",
     version="0.1.0",
-    docs_url=_docs_url,
-    redoc_url=_redoc_url,
+    **urls_documentacion(settings.ENVIRONMENT),
 )
 
-# Configurar CORS
-# En desarrollo se permiten todos los orígenes localhost para evitar
-# problemas con puertos dinámicos de Vite (5173, 5174, etc.)
-cors_origins = [
-    "https://tesis-sti-matematicas.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
-]
+# Configurar CORS: orígenes tomados de BACKEND_CORS_ORIGINS (variable de entorno JSON
+# o valor por defecto de config.py)
+cors_origins = list(settings.BACKEND_CORS_ORIGINS)
 cors_credentials = True
 
 app.add_middleware(
@@ -59,6 +73,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+
+# ── Registro de peticiones ───────────────────────────────────────────────────
+# Una línea por petición (método, ruta sin query string, estado, duración e id).
+# Sustituye al registro de acceso de Uvicorn.
+@app.middleware("http")
+async def registrar_peticion(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    inicio = time.perf_counter()
+    estado = 500
+    try:
+        response = await call_next(request)
+        estado = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        logging.getLogger("sti.http").info(
+            "%s %s -> %s",
+            request.method,
+            request.url.path,
+            estado,
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status": estado,
+                "duration_ms": round((time.perf_counter() - inicio) * 1000, 1),
+            },
+        )
+
 
 # Registrar routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
@@ -92,10 +137,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
         }
-    # Log del error para poder diagnosticarlo desde los logs de Railway
-    import traceback
-    print(f"[ERROR 500] {request.method} {request.url}")
-    print(traceback.format_exc())
+    # Log del error (con traza) para diagnosticarlo desde los logs del despliegue
+    logger.error(
+        "Error no controlado: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"},
@@ -116,7 +164,23 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Endpoint detallado de health check."""
+    """
+    Health check detallado: ejecuta `SELECT 1` en la base de datos.
+    Responde 503 si la base no contesta en 5 segundos, para que el despliegue lo detecte.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            await asyncio.wait_for(session.execute(text("SELECT 1")), timeout=5)
+    except Exception:
+        logger.exception("Health check: la base de datos no responde")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "database": "unavailable",
+                "environment": settings.ENVIRONMENT,
+            },
+        )
     return {
         "status": "healthy",
         "database": "connected",
@@ -128,20 +192,19 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """Ejecutado al iniciar la aplicación."""
-    print("=" * 60)
-    print("🚀 INICIANDO STI BACKEND")
-    print("=" * 60)
-    print(f"Environment: {settings.ENVIRONMENT}")
-    print(f"Debug: {settings.DEBUG}")
-    print("API Docs: http://localhost:8000/docs")
-    print("=" * 60)
+    logger.info(
+        "Iniciando STI Backend (entorno=%s, debug=%s, docs=%s)",
+        settings.ENVIRONMENT,
+        settings.DEBUG,
+        app.docs_url or "desactivados",
+    )
 
     # Cargar modelos ML desde PostgreSQL (sobreviven reinicios del servidor)
     try:
         async with AsyncSessionLocal() as session:
             await ml_service.load_all_from_db(session)
-    except Exception as e:
-        print(f"⚠️  No se pudieron cargar modelos ML desde BD: {e}")
+    except Exception:
+        logger.exception("No se pudieron cargar modelos ML desde la BD")
 
     await start_scheduler()
 
@@ -149,5 +212,5 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Ejecutado al cerrar la aplicación."""
-    print("👋 Cerrando STI Backend...")
+    logger.info("Cerrando STI Backend")
     await stop_scheduler()
