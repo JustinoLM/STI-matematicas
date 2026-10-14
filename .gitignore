@@ -20,7 +20,7 @@ dist/
 .idea/
 *.swp
 
-# OS
+# OS archivos de mac
 .DS_Store
 
 # Database
