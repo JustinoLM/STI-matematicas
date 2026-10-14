@@ -178,6 +178,7 @@ export function PracticePage() {
   const efectosSonidoActivados  = useThemeStore(s => s.efectosSonidoActivados);
   const volumen                 = useThemeStore(s => s.volumen);
   const [efectoVictoria, setEfectoVictoria] = useState<{
+    id: number;   // cambia con cada respuesta correcta: fuerza un efecto nuevo (key) sin repetir el anterior
     animacion: AnimationType;
     duracionMs: number;
     sonido?: string;
@@ -192,6 +193,11 @@ export function PracticePage() {
 
   // ── Mutation de envío de respuesta ────────────────────────────────────────
 
+  // Un doble clic en "Verificar" disparaba dos envíos antes de que `isPending` se actualizara:
+  // se gastaba un intento extra y los efectos (sonido, animación de victoria, modal paso a
+  // paso) se ejecutaban dos veces. Este ref bloquea el segundo envío de inmediato.
+  const envioEnCursoRef = useRef(false);
+
   const submitMutation = useMutation({
     mutationFn: ({
       problemaId,
@@ -202,6 +208,10 @@ export function PracticePage() {
       respuesta: number;
       tiempoResolucion: number;
     }) => studentService.enviarRespuesta(sesionId!, problemaId, respuesta, tiempoResolucion),
+
+    onSettled: () => {
+      envioEnCursoRef.current = false;
+    },
 
     onSuccess: async (data) => {
       setMostrarFeedback(true);
@@ -225,6 +235,7 @@ export function PracticePage() {
         const efecto = EFECTOS.find(e => e.id === efectoId);
         if (efecto?.config?.animacion) {
           setEfectoVictoria({
+            id: Date.now(),
             animacion: efecto.config.animacion as AnimationType,
             duracionMs: efecto.config.duracionMs ?? 2000,
             sonido: efecto.config.sonido,
@@ -380,6 +391,8 @@ export function PracticePage() {
     );
     const respuestaNum = parseFloat(respuestaEstudiante.replace(',', '.'));
     if (isNaN(respuestaNum)) return;
+    if (envioEnCursoRef.current) return;
+    envioEnCursoRef.current = true;
 
     submitMutation.mutate({
       problemaId: problemaActual.id,
@@ -811,6 +824,7 @@ export function PracticePage() {
       {/* Efecto especial de victoria — overlay canvas al responder correctamente */}
       {efectoVictoria && (
         <VictoryEffect
+          key={efectoVictoria.id}
           animacion={efectoVictoria.animacion}
           duracionMs={efectoVictoria.duracionMs}
           sonido={efectosSonidoActivados ? efectoVictoria.sonido : undefined}

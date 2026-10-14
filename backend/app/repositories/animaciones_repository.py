@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm import AnimacionGuardada
@@ -78,7 +79,16 @@ class AnimacionesRepository:
             guardado_en=datetime.utcnow(),
         )
         self.db.add(nueva)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            # Dos peticiones simultáneas (doble clic en "Guardar") pasaron la comprobación de
+            # arriba: gana la primera y la segunda devuelve la ya guardada, sin error 500.
+            await self.db.rollback()
+            existente = await self.get_por_problema(estudiante_id, problema_id)
+            if existente:
+                return existente, None
+            raise
         await self.db.refresh(nueva)
         return nueva, eliminada
 

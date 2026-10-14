@@ -89,6 +89,9 @@ export function VictoryEffect({ animacion, duracionMs, onDone, sonido, audioVolu
   // efecto se limpie y reinicie (reproduciendo la animación dos veces).
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // En desarrollo, React.StrictMode ejecuta cada efecto dos veces; sin esta marca el sonido
+  // de la victoria sonaba doble. La animación visual ya se limpia en el cleanup.
+  const sonidoReproducidoRef = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,7 +100,8 @@ export function VictoryEffect({ animacion, duracionMs, onDone, sonido, audioVolu
     if (!ctx) return;
 
     // Reproducir sonido del efecto al inicio (si hay audio activo)
-    if (sonido && audioVolumen && audioVolumen > 0) {
+    if (sonido && audioVolumen && audioVolumen > 0 && !sonidoReproducidoRef.current) {
+      sonidoReproducidoRef.current = true;
       playSound(sonido, (audioVolumen / 100) * 0.85);
     }
 
