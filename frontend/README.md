@@ -118,12 +118,15 @@ Aliases disponibles:
 
 ## Deployment
 
-### Vercel
+### Producción
+
+Durante la validación el frontend estuvo en Vercel; esa integración está suspendida. `vercel.json` se conserva como referencia (redirige todas las rutas a `index.html`). Para volver a publicarlo en esa u otra plataforma:
+
 ```bash
-vercel --prod
+npm run build   # tsc && vite build, salida en dist
 ```
 
-Variables de entorno en Vercel:
+Variable de entorno necesaria:
 - `VITE_API_BASE_URL`: URL del backend en producción
 
 ## Licencia

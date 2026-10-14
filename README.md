@@ -11,7 +11,7 @@ Se desarrolló como trabajo de graduación de la Licenciatura en Ingeniería de 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
 
-> **Estado del proyecto.** La versión presentada en la tesis está etiquetada como `v1.0-tesis`. Durante la tesis se trabajó con un alcance acotado (operaciones con decimales de sexto grado), y actualmente el sistema se está reestructurando para volverlo modular y poder incorporar nuevos temas. La infraestructura de producción usada durante la validación se dio de baja al concluir el proyecto, por lo que **no hay una demo en línea por ahora**.
+> **Estado del proyecto.** Proyecto concluido. El período de validación con estudiantes terminó y la versión presentada en la tesis está etiquetada como `v1.0-tesis`; no hay desarrollo en curso. Se trabajó con un alcance acotado (operaciones con decimales de sexto grado). La infraestructura de producción usada durante la validación se dio de baja al concluir el proyecto, por lo que **no hay una demo en línea**.
 
 ---
 
@@ -27,7 +27,7 @@ Se desarrolló como trabajo de graduación de la Licenciatura en Ingeniería de 
 - [Pruebas](#pruebas)
 - [Despliegue](#despliegue)
 - [Privacidad y seguridad](#privacidad-y-seguridad)
-- [Hoja de ruta](#hoja-de-ruta)
+- [Trabajo futuro](#trabajo-futuro)
 - [Autor](#autor)
 
 ---
@@ -111,7 +111,7 @@ El uso del sistema estuvo asociado a una mejora estadísticamente significativa,
 ## Arquitectura
 
 ```
-React + TypeScript (Vercel)  ──HTTPS / JSON──▶  FastAPI (Railway)  ──▶  PostgreSQL
+React + TypeScript  ──HTTPS / JSON──▶  FastAPI  ──▶  PostgreSQL
                                                      │
                                                      └──▶  API de DeepSeek
 ```
@@ -126,7 +126,7 @@ El backend sigue una arquitectura en tres capas: **Router → Service → Reposi
 | Seguridad | JWT (python-jose, HS256), Argon2 (passlib) |
 | Base de datos | PostgreSQL 15 |
 | Modelo de lenguaje | API de DeepSeek |
-| Despliegue | Railway (backend y base de datos) y Vercel (frontend) |
+| Despliegue | Durante la validación: Railway (backend y base de datos) y Vercel (frontend); hoy no hay un despliegue activo |
 
 ---
 
@@ -215,8 +215,8 @@ cd frontend && ./test.sh      # ESLint + Vitest + compilación
 
 | Componente | Pruebas | Cobertura |
 |---|---|---|
-| Backend (pytest, SQLite en memoria) | 177 | 56.6% de líneas |
-| Frontend (Vitest) | 62 | 9.4% de sentencias |
+| Backend (pytest, SQLite en memoria) | 189 | 58.1% de líneas |
+| Frontend (Vitest) | 65 | 10.1% de sentencias |
 
 Las pruebas del backend cubren la autenticación y el control de acceso, la validación de respuestas, la generación de problemas, las reglas adaptativas, los modelos de ML, la detección de errores, las pistas, las medallas y la integración con el modelo de lenguaje. Las del frontend se concentran en la validación de respuestas, la generación de animaciones y la protección de rutas.
 
@@ -224,9 +224,12 @@ Las pruebas del backend cubren la autenticación y el control de acceso, la vali
 
 ## Despliegue
 
-- **Backend (Railway):** Nixpacks instala las dependencias con Poetry. Al arrancar se aplican las migraciones (`alembic upgrade head`) y se inicia Uvicorn. Railway verifica el estado con `GET /health`, que también comprueba la conexión a la base de datos.
-- **Frontend (Vercel):** compila con `tsc && vite build`. `vercel.json` redirige todas las rutas a `index.html` para el enrutamiento del lado del cliente.
-- Con ambas plataformas conectadas a GitHub, cada push a `master` despliega automáticamente. `deploy.sh` permite un despliegue manual que ejecuta las pruebas antes de publicar.
+Durante la validación el backend y la base de datos estuvieron en Railway y el frontend en Vercel. Esa infraestructura se dio de baja al concluir el proyecto y la integración de Vercel con GitHub está suspendida, así que **un push a `master` no despliega nada**. Los archivos de configuración se conservan como referencia para volver a publicar el sistema, en esas plataformas o en cualquier otra con PostgreSQL:
+
+- **Backend:** `backend/railway.toml` y `backend/nixpacks.toml` (Python 3.11). El comando de arranque aplica las migraciones y levanta Uvicorn: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`. `GET /health` comprueba la conexión a la base de datos y responde 503 si falla. Variables obligatorias: `DATABASE_URL`, `SECRET_KEY` y `ADMIN_PASSWORD` (ver `backend/.env.example`).
+- **Frontend:** se compila con `tsc && vite build` (salida en `dist`) y necesita `VITE_API_BASE_URL` con la URL del backend. `frontend/vercel.json` redirige todas las rutas a `index.html` para el enrutamiento del lado del cliente.
+- **CORS:** los orígenes permitidos se toman de `BACKEND_CORS_ORIGINS` (lista JSON).
+- `deploy.sh` es el script de despliegue manual de la validación: ejecuta las pruebas y publica con las herramientas de Railway y Vercel (`railway up` y `vercel --prod`), por lo que solo sirve si se vuelven a configurar esas cuentas.
 
 En producción, `ENVIRONMENT=production` oculta la documentación de la API (`/docs`, `/redoc` y `/openapi.json`).
 
@@ -246,7 +249,9 @@ Si encuentras un problema de seguridad, repórtalo de forma privada al autor en 
 
 ---
 
-## Hoja de ruta
+## Trabajo futuro
+
+Ideas para extender el sistema si se retoma; hoy no hay desarrollo en curso.
 
 - [ ] Reestructuración modular para incorporar nuevos temas además de los decimales.
 - [ ] Integrar el módulo experimental de regla de tres, que hoy existe en el repositorio pero no formó parte de la validación.

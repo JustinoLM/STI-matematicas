@@ -145,12 +145,14 @@ La documentación se genera automáticamente con FastAPI:
 
 ## Deployment
 
-### Railway (Producción)
+### Producción
 
-1. Conectar repositorio a Railway
-2. Configurar variables de entorno
-3. Variables obligatorias: `DATABASE_URL`, `SECRET_KEY`, `ADMIN_PASSWORD`
-4. Desplegar con `railway up` (ver `deploy.sh`); no hay despliegue automático versionado
+Durante la validación el backend estuvo en Railway; esa infraestructura se dio de baja. La configuración (`railway.toml`, `nixpacks.toml`) se conserva como referencia y sirve para cualquier plataforma con PostgreSQL:
+
+1. Conectar el repositorio a la plataforma elegida
+2. Configurar las variables de entorno obligatorias: `DATABASE_URL`, `SECRET_KEY`, `ADMIN_PASSWORD`
+3. Comando de arranque: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`
+4. No hay despliegue automático versionado; `deploy.sh` es el script manual de la validación (usa `railway up`)
 
 ## Licencia
 

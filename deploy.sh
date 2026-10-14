@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# Script maestro de deployment manual
+# Script maestro de deployment manual.
+# NOTA: es el script de la validación. Usa las CLI de Railway y Vercel; esa infraestructura se dio
+# de baja, por lo que solo funciona si se vuelven a configurar esas cuentas.
 
 echo "=========================================="
 echo "🚀 DEPLOYMENT MANUAL - STI"
@@ -89,12 +91,10 @@ echo "=========================================="
 echo -e "${GREEN}✅ DEPLOYMENT COMPLETO${NC}"
 echo "=========================================="
 echo ""
-echo "🔗 URLs:"
-echo "  Backend:  https://sti-backend.railway.app"
-echo "  Frontend: https://sti-frontend.vercel.app"
+echo "🔗 URLs: las que muestren Railway y Vercel al terminar el despliegue."
 echo ""
 echo "📝 Próximos pasos:"
-echo "  1. Verificar health check: curl https://sti-backend.railway.app/health"
+echo "  1. Verificar health check: curl <URL del backend>/health"
 echo "  2. Probar frontend en navegador"
 echo "  3. Verificar logs: railway logs (backend) y vercel logs (frontend)"
 echo ""
