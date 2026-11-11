@@ -131,3 +131,8 @@ async def test_al_cerrar_se_espera_a_los_jobs_en_curso():
     tarea.cancel()                      # APScheduler cancela la tarea al apagarse
     await scheduler_service.stop_scheduler()
     assert terminados == [True]         # pero el trabajo real alcanzó a terminar
+
+
+def test_el_pais_por_defecto_de_una_organizacion_es_panama():
+    from app.models.organization import Organizacion
+    assert Organizacion.__table__.c.pais.default.arg == "Panamá"

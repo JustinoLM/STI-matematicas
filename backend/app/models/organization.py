@@ -28,7 +28,7 @@ class Organizacion(Base):
     codigo = Column(String(50), nullable=False, unique=True, index=True)
     descripcion = Column(Text, nullable=True)
     ciudad = Column(String(100), nullable=True)
-    pais = Column(String(100), nullable=True, default="Colombia")
+    pais = Column(String(100), nullable=True, default="Panamá")
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     activa = Column(Integer, default=1, nullable=False)  # 1=activa, 0=inactiva
 
