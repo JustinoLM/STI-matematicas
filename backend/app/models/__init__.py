@@ -83,6 +83,14 @@ from app.models.regla_de_tres import (
     TipoProporcion,
 )
 
+# Organización escolar: salón, año lectivo, matrícula y trimestres
+from app.models.school import (
+    AnioLectivo,
+    Matricula,
+    Salon,
+    Trimestre,
+)
+
 # User and authentication models
 from app.models.user import (
     Estudiante,
@@ -129,6 +137,11 @@ __all__ = [
     "Medalla",
     "EstudianteMedalla",
     "TransaccionPuntos",
+    # Organización escolar
+    "Salon",
+    "AnioLectivo",
+    "Matricula",
+    "Trimestre",
     # Group
     "Grupo",
     "EstudianteGrupo",

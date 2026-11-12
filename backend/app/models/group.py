@@ -1,13 +1,14 @@
 """
 Modelos de grupos escolares y membresía de estudiantes.
 
-Grupo representa una clase/sección escolar.
+Grupo es un subconjunto opcional de estudiantes dentro de un año lectivo de un salón
+(por ejemplo, para desafíos). Se cierra junto con el año lectivo y queda de solo lectura.
 EstudianteGrupo es la tabla asociativa para la relación N:M.
 """
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -15,30 +16,31 @@ from app.core.database import Base
 
 class Grupo(Base):
     """
-    Grupo escolar (clase/sección).
-    
+    Grupo dentro de un año lectivo.
+
     Relaciones:
-    - Pertenece a un Profesor (N:1)
-    - Tiene múltiples Estudiantes (N:M via EstudianteGrupo)
-    - Tiene múltiples ConfiguracionesPractica (1:N)
+    - Pertenece a un AnioLectivo (N:1); el profesor es el del año lectivo
+    - Tiene múltiples Estudiantes (N:M via EstudianteGrupo), todos matriculados en ese año
     - Participa en múltiples DesafiosGrupales (N:M)
     """
     __tablename__ = "grupo"
     
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(255), nullable=False)
-    profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=False, index=True)
-    codigo_grupo = Column(String(50), unique=True, nullable=False, index=True)
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), nullable=False, index=True)
     activo = Column(Boolean, default=True, nullable=False)
-    
+
     # Relaciones
-    profesor = relationship("Profesor", back_populates="grupos")
+    anio_lectivo = relationship("AnioLectivo", back_populates="grupos")
     estudiantes = relationship("EstudianteGrupo", back_populates="grupo")
-    configuraciones_practica = relationship("ConfiguracionPractica", back_populates="grupo")
     desafios = relationship("GrupoDesafio", back_populates="grupo")
-    
+
+    __table_args__ = (
+        UniqueConstraint("anio_lectivo_id", "nombre", name="uq_grupo_anio_nombre"),
+    )
+
     def __repr__(self):
-        return f"<Grupo(id={self.id}, nombre={self.nombre}, codigo={self.codigo_grupo})>"
+        return f"<Grupo(id={self.id}, nombre={self.nombre}, anio_lectivo_id={self.anio_lectivo_id})>"
 
 
 class EstudianteGrupo(Base):

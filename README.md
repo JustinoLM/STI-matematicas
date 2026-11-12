@@ -215,7 +215,7 @@ cd frontend && ./test.sh      # ESLint + Vitest + compilación
 
 | Componente | Pruebas | Cobertura |
 |---|---|---|
-| Backend (pytest, SQLite en memoria) | 189 | 58.1% de líneas |
+| Backend (pytest, PostgreSQL) | 190 | 58.1% de líneas |
 | Frontend (Vitest) | 65 | 10.1% de sentencias |
 
 Las pruebas del backend cubren la autenticación y el control de acceso, la validación de respuestas, la generación de problemas, las reglas adaptativas, los modelos de ML, la detección de errores, las pistas, las medallas y la integración con el modelo de lenguaje. Las del frontend se concentran en la validación de respuestas, la generación de animaciones y la protección de rutas.

@@ -75,7 +75,7 @@ async def test_desafios_y_participacion_se_exportan_con_la_regla_del_sistema():
             await _desafio_completado(db, espectador, sesiones_en_ventana=2)   # no alcanza el mínimo
 
         desafios = await _get(c, "desafios")
-        assert desafios["columnas"][:5] == ["id_desafio", "nombre", "tipo", "grupo", "objetivo"]
+        assert desafios["columnas"][:8] == ["id_desafio", "nombre", "tipo", "salon", "anio", "estado", "grupo", "objetivo"]
         assert len(desafios["filas"]) == 2
         assert all(f["completado"] == "Sí" for f in desafios["filas"])
         assert sorted(f["estudiantes_participantes"] for f in desafios["filas"]) == [0, 1]

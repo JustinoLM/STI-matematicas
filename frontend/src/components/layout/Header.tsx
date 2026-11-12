@@ -76,7 +76,7 @@ export function Header({ userName, userRole, onLogout, onMenuToggle }: HeaderPro
               {perfil.grupo_nombre && (
                 <div className="flex items-center gap-1">
                   <Users className="h-4 w-4" />
-                  <span>{perfil.grupo_nombre}</span>
+                  <span>Salón {perfil.grupo_nombre}</span>
                 </div>
               )}
               {perfil.profesor_nombre && (

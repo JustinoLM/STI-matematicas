@@ -21,7 +21,6 @@ from app.models.adaptive import (
 )
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.gamification import Desbloqueable, PersonalizacionEstudiante
-from app.models.group import EstudianteGrupo
 from app.models.problem import Intento, Problema
 from app.models.user import Estudiante
 
@@ -377,62 +376,34 @@ class AdaptiveRepository:
         return mejor_racha
     
     async def get_grupo_info(self, estudiante_id: int) -> Optional[dict]:
-        """Obtiene el nombre del grupo y del profesor asignado al estudiante."""
-        from app.models.group import EstudianteGrupo, Grupo
-        from app.models.user import Profesor
+        """Salón activo del estudiante y su profesor (claves grupo_nombre y profesor_nombre)."""
+        from app.services.school_service import SchoolService
 
-        result = await self.db.execute(
-            select(Grupo.nombre, Profesor.nombre_completo)
-            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == Grupo.id)
-            .join(Profesor, Grupo.profesor_id == Profesor.id)
-            .where(
-                and_(
-                    EstudianteGrupo.estudiante_id == estudiante_id,
-                    EstudianteGrupo.activo == True,
-                    Grupo.activo == True,
-                )
-            )
-            .limit(1)
-        )
-        row = result.first()
-        if row:
-            return {"grupo_nombre": row[0], "profesor_nombre": row[1]}
-        return None
+        info = await SchoolService(self.db).info_salon_estudiante(estudiante_id)
+        if info is None:
+            return None
+        return {"grupo_nombre": info["salon_nombre"], "profesor_nombre": info["profesor_nombre"]}
 
     async def get_config_practica_estudiante(self, estudiante_id: int):
-        """Obtiene la ConfiguracionPractica activa del grupo del estudiante, o None."""
-        from app.models.group import EstudianteGrupo, Grupo
+        """
+        ConfiguracionPractica activa más reciente del año lectivo del salón del estudiante,
+        o None si no tiene salón activo o el profesor no ha aplicado ninguna.
+        """
         from app.models.practice_config import ConfiguracionPractica
+        from app.models.school import MATRICULA_ACTIVA, Matricula
 
-        # Primero obtener el grupo_id activo del estudiante
-        grupo_result = await self.db.execute(
-            select(Grupo.id)
-            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == Grupo.id)
-            .where(
-                and_(
-                    EstudianteGrupo.estudiante_id == estudiante_id,
-                    EstudianteGrupo.activo == True,
-                    Grupo.activo == True,
-                )
-            )
-            .limit(1)
+        anio_activo = select(Matricula.anio_lectivo_id).where(
+            and_(Matricula.estudiante_id == estudiante_id, Matricula.estado == MATRICULA_ACTIVA)
         )
-        grupo_row = grupo_result.first()
-        if not grupo_row:
-            return None
-
-        grupo_id = grupo_row[0]
-
-        # Obtener la config activa más reciente
         config_result = await self.db.execute(
             select(ConfiguracionPractica)
             .where(
                 and_(
-                    ConfiguracionPractica.grupo_id == grupo_id,
+                    ConfiguracionPractica.anio_lectivo_id.in_(anio_activo),
                     ConfiguracionPractica.activa == True,
                 )
             )
-            .order_by(ConfiguracionPractica.fecha_aplicacion.desc())
+            .order_by(ConfiguracionPractica.fecha_aplicacion.desc(), ConfiguracionPractica.id.desc())
             .limit(1)
         )
         return config_result.scalar_one_or_none()
@@ -493,25 +464,18 @@ class AdaptiveRepository:
     # ============================================
 
     def _condiciones_ventana_desafio(self, desafio: DesafioGrupal) -> list:
-        condiciones = [
-            SesionPractica.estado == EstadoSesion.COMPLETADA,
-            SesionPractica.fecha_fin >= desafio.fecha_creacion,
-        ]
-        if desafio.fecha_limite:
-            condiciones.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
-        return condiciones
+        from app.services.desafios_service import condiciones_ventana
 
-    async def get_participantes_desafio(self, grupo_id: int, desafio: DesafioGrupal) -> List[int]:
+        return condiciones_ventana(desafio)
+
+    async def get_participantes_desafio(self, desafio: DesafioGrupal, grupo_id: Optional[int]) -> List[int]:
         """
-        Miembros activos del grupo que participaron en el desafío: completaron al menos
-        MIN_SESIONES_PARTICIPACION_DESAFIO sesiones dentro de la ventana del desafío.
+        Miembros del equipo (grupo o salón completo) que participaron en el desafío:
+        completaron al menos MIN_SESIONES_PARTICIPACION_DESAFIO sesiones en su ventana.
         """
-        miembros = await self.db.execute(
-            select(EstudianteGrupo.estudiante_id).where(
-                and_(EstudianteGrupo.grupo_id == grupo_id, EstudianteGrupo.activo == True)  # noqa: E712
-            )
-        )
-        miembros_ids = [row[0] for row in miembros.all()]
+        from app.services.desafios_service import miembros_equipo
+
+        miembros_ids = await miembros_equipo(self.db, desafio, grupo_id)
         if not miembros_ids:
             return []
         result = await self.db.execute(
@@ -526,13 +490,14 @@ class AdaptiveRepository:
         return [row[0] for row in result.all()]
 
     async def contar_desafios_grupales_participados(self, estudiante_id: int) -> int:
-        """Desafíos grupales completados por un grupo del estudiante en los que él participó."""
+        """Desafíos completados por un equipo del estudiante (también de años cerrados) en los que él participó."""
+        from app.services.desafios_service import condicion_equipos_del_estudiante
+
         completados = await self.db.execute(
             select(DesafioGrupal)
             .join(GrupoDesafio, GrupoDesafio.desafio_id == DesafioGrupal.id)
-            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == GrupoDesafio.grupo_id)
             .where(and_(
-                EstudianteGrupo.estudiante_id == estudiante_id,
+                condicion_equipos_del_estudiante(estudiante_id, solo_matricula_activa=False),
                 GrupoDesafio.puntos_otorgados == True,  # noqa: E712
                 DesafioGrupal.eliminado == False,  # noqa: E712
             ))

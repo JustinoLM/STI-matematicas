@@ -116,6 +116,20 @@ async def get_current_student(
     return current_user
 
 
+async def get_current_student_con_salon(
+    current_student: Estudiante = Depends(get_current_student),
+    db: AsyncSession = Depends(get_db),
+) -> Estudiante:
+    """
+    Estudiante autenticado que tiene un salón activo. Sin salón no puede practicar:
+    responde 403 con codigo="SIN_SALON" y un mensaje que le pide consultar a su profesor.
+    """
+    from app.services.school_service import SchoolService
+
+    await SchoolService(db).exigir_salon(current_student.id)
+    return current_student
+
+
 async def get_current_teacher(
     current_user: Usuario = Depends(get_current_active_user)
 ) -> Profesor:
@@ -163,6 +177,7 @@ async def require_admin(token: str = Depends(oauth2_scheme)) -> None:
 # Anotaciones tipo para usar en endpoints
 CurrentUser = Annotated[Usuario, Depends(get_current_active_user)]
 CurrentStudent = Annotated[Estudiante, Depends(get_current_student)]
+CurrentStudentConSalon = Annotated[Estudiante, Depends(get_current_student_con_salon)]
 CurrentTeacher = Annotated[Profesor, Depends(get_current_teacher)]
 DBSession = Annotated[AsyncSession, Depends(get_db)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

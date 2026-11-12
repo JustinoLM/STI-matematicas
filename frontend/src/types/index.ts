@@ -168,15 +168,71 @@ export interface EstadisticasEstudiante {
 }
 
 // ==================== TEACHER ====================
+
+/** Trimestre de la organización en un año (lo edita el administrador). */
+export interface Trimestre {
+  numero: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+/** Un salón en un año lectivo, visto por su profesor. */
+export interface SalonResumen {
+  anio_lectivo_id: number;
+  salon_id: number;
+  nombre: string;
+  grado: number;
+  anio: number;
+  estado: 'activo' | 'cerrado';
+  cerrado: boolean;
+  cantidad_estudiantes: number;
+  cantidad_grupos: number;
+}
+
+export interface EstudianteDelSalon {
+  estudiante_id: number;
+  codigo_estudiante: string;
+  nombre_completo: string;
+  nivel_actual: number;
+  precision_ultimos_15: number;
+  fecha_ingreso: string;
+}
+
+export interface GrupoDelSalon {
+  id: number;
+  nombre: string;
+  estudiantes_ids: number[];
+}
+
+export interface SalonDetalle extends SalonResumen {
+  profesor_nombre: string;
+  trimestres: Trimestre[];
+  estudiantes: EstudianteDelSalon[];
+  grupos: GrupoDelSalon[];
+  configuracion: ConfiguracionPractica | null;
+}
+
+export interface CandidatoSalon {
+  id: number;
+  codigo_estudiante: string;
+  nombre_completo: string;
+  salon_actual: string | null;
+  en_este_salon: boolean;
+}
+
+/** Grupo: subconjunto opcional de estudiantes dentro de un salón (año lectivo). */
 export interface Grupo {
   id: number;
   nombre: string;
-  codigo_grupo: string;
   activo: boolean;
-  profesor_id: number;
+  anio_lectivo_id: number;
+  salon_nombre: string;
+  anio: number;
+  cerrado: boolean;
+  estudiantes_ids?: number[];
   cantidad_estudiantes: number;
-  promedio_precision: number;
-  problemas_resueltos_hoy: number;
+  promedio_precision?: number;
+  problemas_resueltos_hoy?: number;
   estudiantes?: EstudianteEnGrupo[];
 }
 
@@ -232,8 +288,8 @@ export interface DesafioEstudiante {
   fecha_creacion: string;
   fecha_limite?: string;
   completado: boolean;
-  // Progreso del grupo del estudiante
-  grupo_id: number;
+  // Progreso del equipo del estudiante (grupo_id null = todo el salón)
+  grupo_id: number | null;
   grupo_nombre: string;
   progreso_actual: number;
   porcentaje: number;
@@ -252,6 +308,10 @@ export interface DesafioEstudiante {
 export interface DesafioGrupal {
   id: number;
   profesor_id: number;
+  anio_lectivo_id: number;
+  salon_nombre: string;
+  anio: number;
+  estado: 'activo' | 'completado' | 'no_completado';
   nombre: string;
   descripcion?: string;
   tipo: TipoDesafioGrupal;
@@ -268,7 +328,7 @@ export interface DesafioGrupal {
 }
 
 export interface ProgresoGrupoDesafio {
-  grupo_id: number;
+  grupo_id: number | null;  // null = todo el salón
   nombre_grupo: string;
   progreso_actual: number;
   objetivo_cantidad: number;
@@ -278,7 +338,7 @@ export interface ProgresoGrupoDesafio {
 
 export interface ConfiguracionPractica {
   id: number;
-  grupo_id: number;
+  anio_lectivo_id: number;
   operaciones_permitidas: string[];
   niveles_permitidos: number[];
   rango_min: number;
@@ -415,8 +475,9 @@ export interface EstudianteStatsItem {
 }
 
 export interface GrupoStatsResponse {
-  grupo_id: number;
+  grupo_id: number;        // id del grupo o, con tipo "salon", del año lectivo
   grupo_nombre: string;
+  tipo?: 'grupo' | 'salon';
   total_estudiantes: number;
   distribucion_perfiles: DistribucionPerfiles;
   resumen_alertas: AlertaResumen;

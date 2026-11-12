@@ -1,4 +1,4 @@
-"""Modelo de configuración de prácticas por grupo."""
+"""Modelo de configuración de prácticas por año lectivo del salón."""
 
 from datetime import datetime
 
@@ -9,13 +9,13 @@ from app.core.database import Base
 
 
 class ConfiguracionPractica(Base):
-    """Configuración de práctica aplicada a un grupo."""
+    """Configuración de práctica (decimales) aplicada al año lectivo de un salón."""
     
     __tablename__ = "configuracion_practica"
     __table_args__ = {'extend_existing': True}
     
     id = Column(Integer, primary_key=True, index=True)
-    grupo_id = Column(Integer, ForeignKey("grupo.id"), nullable=False, index=True)
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), nullable=False, index=True)
     aplicada_por_profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=False)
     
     operaciones_permitidas = Column(JSON, nullable=False)
@@ -30,8 +30,8 @@ class ConfiguracionPractica(Base):
     fecha_aplicacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     activa = Column(Boolean, default=True, nullable=False)
     
-    grupo = relationship("Grupo", back_populates="configuraciones_practica")
+    anio_lectivo = relationship("AnioLectivo")
     aplicada_por_profesor = relationship("Profesor", back_populates="configuraciones")
     
     def __repr__(self):
-        return f"<ConfiguracionPractica(id={self.id}, grupo_id={self.grupo_id})>"
+        return f"<ConfiguracionPractica(id={self.id}, anio_lectivo_id={self.anio_lectivo_id})>"

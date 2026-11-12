@@ -14,7 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, and_, cast, func, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,7 @@ from app.models.hints import UsoPista
 from app.models.llm import AnimacionGuardada, MensajeMotivacional
 from app.models.organization import Organizacion
 from app.models.problem import Intento
+from app.models.school import ANIO_ACTIVO, AnioLectivo, Matricula, Salon
 from app.models.user import Estudiante, Profesor
 from app.repositories.gamification_repository import GamificationRepository
 from app.schemas.organization import (
@@ -49,6 +50,7 @@ from app.schemas.organization import (
     OrganizacionResponse,
 )
 from app.services.ml_service import ml_service
+from app.services.school_service import SchoolService
 
 # Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -180,6 +182,36 @@ async def detalle_organizacion(org_id: int, db: DBSession):
     )
 
 
+async def _exigir_sin_salon_activo_estudiante(db, est_id: int, nueva_org: Optional[int]) -> None:
+    """Un estudiante en un salón activo no puede cambiar de organización: primero lo quita su profesor."""
+    info = await SchoolService(db).info_salon_estudiante(est_id)
+    if info is None:
+        return
+    salon = await db.get(Salon, info["salon_id"])
+    if salon is not None and salon.organizacion_id != nueva_org:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El estudiante está en el salón {info['salon_nombre']} ({info['anio']}). "
+                "Su profesor debe quitarlo del salón antes de cambiarlo de organización."
+            ),
+        )
+
+
+async def _exigir_sin_salones_activos_profesor(db, prof_id: int) -> None:
+    """Un profesor con salones abiertos no puede cambiar de organización ni eliminarse."""
+    abiertos = (await db.execute(
+        select(func.count(AnioLectivo.id)).where(and_(
+            AnioLectivo.profesor_id == prof_id, AnioLectivo.estado == ANIO_ACTIVO
+        ))
+    )).scalar() or 0
+    if abiertos:
+        raise HTTPException(
+            status_code=409,
+            detail=f"El profesor tiene {abiertos} salón(es) abiertos este año. Ciérralos primero.",
+        )
+
+
 @router.put("/admin/organizations/{org_id}/professors/{prof_id}", response_model=dict)
 async def asignar_org_a_profesor(org_id: int, prof_id: int, db: DBSession):
     """Asigna el profesor a la organización (o quita asignación si org_id=0)."""
@@ -190,6 +222,8 @@ async def asignar_org_a_profesor(org_id: int, prof_id: int, db: DBSession):
     prof = result.scalar_one_or_none()
     if not prof:
         raise HTTPException(status_code=404, detail="Profesor no encontrado")
+    if prof.organizacion_id != org_id:
+        await _exigir_sin_salones_activos_profesor(db, prof_id)
 
     prof.organizacion_id = org_id
     await db.commit()
@@ -203,6 +237,7 @@ async def quitar_org_a_profesor(org_id: int, prof_id: int, db: DBSession):
     prof = result.scalar_one_or_none()
     if not prof:
         raise HTTPException(status_code=404, detail="Profesor no encontrado")
+    await _exigir_sin_salones_activos_profesor(db, prof_id)
 
     prof.organizacion_id = None
     await db.commit()
@@ -218,6 +253,7 @@ async def asignar_org_a_estudiante(org_id: int, est_id: int, db: DBSession):
     est = result.scalar_one_or_none()
     if not est:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    await _exigir_sin_salon_activo_estudiante(db, est_id, org_id)
 
     est.organizacion_id = org_id
     await db.commit()
@@ -231,6 +267,7 @@ async def quitar_org_a_estudiante(org_id: int, est_id: int, db: DBSession):
     est = result.scalar_one_or_none()
     if not est:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    await _exigir_sin_salon_activo_estudiante(db, est_id, None)
 
     est.organizacion_id = None
     await db.commit()
@@ -244,6 +281,16 @@ async def eliminar_organizacion(org_id: int, db: DBSession):
     Desvincula a todos sus miembros (organizacion_id → None) antes de borrar.
     """
     org = await _get_org_or_404(org_id, db)
+
+    # Los salones (y su historial) no se borran: una organización con salones se conserva
+    total_salones = (await db.execute(
+        select(func.count(Salon.id)).where(Salon.organizacion_id == org_id)
+    )).scalar() or 0
+    if total_salones:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La organización tiene {total_salones} salón(es) con historial; no se puede eliminar.",
+        )
 
     # Desvincular profesores y estudiantes
     profs = await db.execute(select(Profesor).where(Profesor.organizacion_id == org_id))
@@ -262,8 +309,8 @@ async def eliminar_organizacion(org_id: int, db: DBSession):
 @router.delete("/admin/professors/{prof_id}", response_model=dict)
 async def eliminar_profesor(prof_id: int, db: DBSession):
     """
-    Elimina un profesor. Cascade manual:
-    elimina sus grupos (y las relaciones estudiante-grupo de esos grupos).
+    Elimina un profesor que no tiene salones (ni abiertos ni en el historial).
+    Un profesor con historial de salones se conserva: sus años lectivos lo referencian.
     """
     result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
     prof = result.scalar_one_or_none()
@@ -271,14 +318,14 @@ async def eliminar_profesor(prof_id: int, db: DBSession):
         raise HTTPException(status_code=404, detail="Profesor no encontrado")
 
     nombre = prof.nombre_completo
-
-    # 1) Obtener grupos del profesor y eliminar sus relaciones estudiante-grupo
-    grupos_result = await db.execute(select(Grupo).where(Grupo.profesor_id == prof_id))
-    grupos = grupos_result.scalars().all()
-    for grupo in grupos:
-        await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.grupo_id == grupo.id))
-        await db.delete(grupo)
-    await db.flush()
+    total_anios = (await db.execute(
+        select(func.count(AnioLectivo.id)).where(AnioLectivo.profesor_id == prof_id)
+    )).scalar() or 0
+    if total_anios:
+        raise HTTPException(
+            status_code=409,
+            detail=f"El profesor tiene {total_anios} salón(es) en su historial; no se puede eliminar.",
+        )
 
     # 2) Eliminar el profesor
     await db.delete(prof)
@@ -320,6 +367,7 @@ async def eliminar_estudiante(est_id: int, db: DBSession):
     await db.execute(sa_delete(PersonalizacionEstudiante).where(PersonalizacionEstudiante.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteMedalla).where(EstudianteMedalla.estudiante_id == est_id))
     await db.execute(sa_delete(EstudianteGrupo).where(EstudianteGrupo.estudiante_id == est_id))
+    await db.execute(sa_delete(Matricula).where(Matricula.estudiante_id == est_id))
     await db.flush()
 
     # 5) Tablas que referencian usuario.id (mismo id)
@@ -336,13 +384,12 @@ async def eliminar_estudiante(est_id: int, db: DBSession):
 class EditarEstudianteRequest(BaseModel):
     nombre_completo: Optional[str] = None
     genero: Optional[str] = None
-    grado_academico: Optional[str] = None
     edad: Optional[int] = None
 
 
 @router.patch("/admin/students/{est_id}", response_model=dict)
 async def editar_estudiante(est_id: int, data: EditarEstudianteRequest, db: DBSession):
-    """Edita campos básicos de un estudiante (nombre, género, sección, edad)."""
+    """Edita campos básicos de un estudiante (nombre, género, edad). El grado sale de su salón."""
     result = await db.execute(select(Estudiante).where(Estudiante.id == est_id))
     est = result.scalar_one_or_none()
     if not est:
@@ -351,8 +398,6 @@ async def editar_estudiante(est_id: int, data: EditarEstudianteRequest, db: DBSe
         est.nombre_completo = data.nombre_completo
     if data.genero is not None:
         est.genero = data.genero
-    if data.grado_academico is not None:
-        est.grado_academico = data.grado_academico
     if data.edad is not None:
         est.edad = data.edad
     await db.commit()
@@ -367,6 +412,7 @@ async def listar_todos_usuarios(db: DBSession):
 
     profesores = profs_result.scalars().all()
     estudiantes = ests_result.scalars().all()
+    salones = await SchoolService(db).salones_de_estudiantes([e.id for e in estudiantes])
 
     # Pre-test: PerfilEstudiante.diagnostico_completado
     perfiles_res = await db.execute(
@@ -391,8 +437,6 @@ async def listar_todos_usuarios(db: DBSession):
                 "activo": bool(p.activo),
                 "fecha_creacion": p.fecha_creacion.isoformat() if p.fecha_creacion else None,
                 "ultimo_acceso": p.ultimo_acceso.isoformat() if p.ultimo_acceso else None,
-                # Secciones que enseña el profesor (para filtrado de estudiantes)
-                "secciones_asignadas": p.secciones_asignadas or [],
             }
             for p in profesores
         ],
@@ -402,7 +446,8 @@ async def listar_todos_usuarios(db: DBSession):
                 "codigo": e.codigo_estudiante,
                 "nombre_completo": e.nombre_completo,
                 "organizacion_id": e.organizacion_id,
-                "grado_academico": e.grado_academico,
+                "salon_nombre": salones.get(e.id, {}).get("salon_nombre"),
+                "grado": salones.get(e.id, {}).get("grado"),
                 "genero": e.genero.value if e.genero else None,
                 "edad": e.edad,
                 "activo": bool(e.activo),
@@ -414,65 +459,6 @@ async def listar_todos_usuarios(db: DBSession):
             }
             for e in estudiantes
         ],
-    }
-
-
-# ─── Admin: Secciones por profesor ───────────────────────────────────────────
-
-class SeccionesProfesorRequest(BaseModel):
-    secciones: list[str]  # Ej: ["6A", "6B"]
-
-
-@router.get("/admin/organizations/{org_id}/grados", response_model=list)
-async def listar_grados_org(org_id: int, db: DBSession):
-    """
-    Devuelve los valores únicos de `grado_academico` de los estudiantes
-    de la organización, ordenados alfabéticamente.
-    Sirve para poblar los checkboxes en la UI del admin.
-    """
-    await _get_org_or_404(org_id, db)
-    result = await db.execute(
-        select(Estudiante.grado_academico)
-        .where(
-            Estudiante.organizacion_id == org_id,
-            Estudiante.grado_academico.is_not(None),
-            Estudiante.grado_academico != "",
-        )
-        .distinct()
-        .order_by(Estudiante.grado_academico)
-    )
-    return [row[0] for row in result.all()]
-
-
-@router.patch("/admin/professors/{prof_id}/secciones", response_model=dict)
-async def actualizar_secciones_profesor(
-    prof_id: int,
-    payload: SeccionesProfesorRequest,
-    db: DBSession,
-):
-    """
-    Actualiza las secciones (grados) que enseña el profesor.
-    Pasar lista vacía [] para eliminar el filtro (ve todos los estudiantes de la org).
-    """
-    result = await db.execute(select(Profesor).where(Profesor.id == prof_id))
-    profesor = result.scalar_one_or_none()
-    if not profesor:
-        raise HTTPException(status_code=404, detail="Profesor no encontrado")
-
-    # Normalizar: quitar duplicados y ordenar
-    secciones_limpias = sorted(set(s.strip() for s in payload.secciones if s.strip()))
-    profesor.secciones_asignadas = secciones_limpias if secciones_limpias else None
-    await db.commit()
-
-    return {
-        "success": True,
-        "profesor_id": prof_id,
-        "secciones_asignadas": profesor.secciones_asignadas or [],
-        "mensaje": (
-            f"Secciones actualizadas: {', '.join(secciones_limpias)}"
-            if secciones_limpias
-            else "Filtro de secciones eliminado (ve todos los estudiantes de la org)"
-        ),
     }
 
 
@@ -616,7 +602,10 @@ async def sistema_stats(db: DBSession):
     # Totales de usuarios y estructura
     total_est = await db.scalar(select(func.count()).select_from(Estudiante))
     total_prof = await db.scalar(select(func.count()).select_from(Profesor))
-    total_grupos = await db.scalar(select(func.count()).select_from(Grupo))
+    total_grupos = await db.scalar(select(func.count()).select_from(Grupo).where(Grupo.activo.is_(True)))
+    total_salones_activos = await db.scalar(
+        select(func.count()).select_from(AnioLectivo).where(AnioLectivo.estado == ANIO_ACTIVO)
+    )
     total_orgs = await db.scalar(select(func.count()).select_from(Organizacion))
 
     # Sesiones de práctica
@@ -647,6 +636,7 @@ async def sistema_stats(db: DBSession):
         "total_estudiantes": total_est or 0,
         "total_profesores": total_prof or 0,
         "total_grupos": total_grupos or 0,
+        "total_salones_activos": total_salones_activos or 0,
         "total_organizaciones": total_orgs or 0,
         "sesiones_hoy": sesiones_hoy or 0,
         "sesiones_semana": sesiones_semana or 0,

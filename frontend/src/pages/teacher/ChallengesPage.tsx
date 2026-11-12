@@ -1,6 +1,7 @@
 /**
  * Gestión de desafíos del profesor.
- * Lista de desafíos activos y completados con progreso por grupo.
+ * Lista de desafíos activos y completados con progreso por equipo (grupo o salón completo).
+ * Un desafío sin terminar al cerrarse el año lectivo queda como "no completado".
  */
 
 import { useState } from 'react';
@@ -123,14 +124,15 @@ export function ChallengesPage() {
   // Filtrar desafíos por tab
   const filteredDesafios = desafios?.filter((d) => {
     if (d.eliminado) return false;
-    if (selectedTab === 'active') return !d.completado && !d.vencido;
-    if (selectedTab === 'expired') return d.vencido && !d.completado;
+    const noCompletado = d.estado === 'no_completado';
+    if (selectedTab === 'active') return !d.completado && !d.vencido && !noCompletado;
+    if (selectedTab === 'expired') return (d.vencido || noCompletado) && !d.completado;
     return d.completado; // 'completed'
   });
 
   // Contar desafíos
-  const activeCount   = desafios?.filter((d) => !d.completado && !d.vencido && !d.eliminado).length || 0;
-  const expiredCount  = desafios?.filter((d) => d.vencido && !d.completado && !d.eliminado).length || 0;
+  const activeCount   = desafios?.filter((d) => !d.completado && !d.vencido && d.estado !== 'no_completado' && !d.eliminado).length || 0;
+  const expiredCount  = desafios?.filter((d) => (d.vencido || d.estado === 'no_completado') && !d.completado && !d.eliminado).length || 0;
   const completedCount = desafios?.filter((d) => d.completado && !d.eliminado).length || 0;
 
   const handleDeleteClick = (desafioId: number) => {
@@ -250,12 +252,18 @@ export function ChallengesPage() {
                           <div className="space-y-2 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="text-xl font-semibold">{desafio.nombre}</h3>
+                              <Badge variant="outline">Salón {desafio.salon_nombre} · {desafio.anio}</Badge>
 
                               {/* Badge de estado */}
                               {desafio.completado ? (
                                 <Badge className="bg-green-100 text-green-700 border-green-300">
                                   <Trophy className="h-3 w-3 mr-1" />
                                   Completado
+                                </Badge>
+                              ) : desafio.estado === 'no_completado' ? (
+                                <Badge className="bg-gray-100 text-gray-700 border-gray-300">
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  No completado (año cerrado)
                                 </Badge>
                               ) : vencido ? (
                                 <Badge className="bg-orange-100 text-orange-700 border-orange-300">
@@ -344,8 +352,8 @@ export function ChallengesPage() {
                             </div>
                           </div>
 
-                          {/* Botón eliminar (disponible en activos y vencidos) */}
-                          {!desafio.completado && (
+                          {/* Botón eliminar (disponible en activos y vencidos, no con el año cerrado) */}
+                          {!desafio.completado && desafio.estado === 'activo' && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -369,7 +377,7 @@ export function ChallengesPage() {
                               )}
                             </h4>
                             {desafio.progreso_grupos.map((progreso) => (
-                              <div key={progreso.grupo_id} className="space-y-2">
+                              <div key={progreso.grupo_id ?? "salon"} className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
                                   <div className="flex items-center gap-2">
                                     <span className="font-medium">{progreso.nombre_grupo}</span>
@@ -417,7 +425,7 @@ export function ChallengesPage() {
                       <XCircle className="h-16 w-16 text-orange-300 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold mb-2">Sin desafíos vencidos</h3>
                       <p className="text-muted-foreground">
-                        Los desafíos que expiren sin completarse aparecerán aquí
+                        Los desafíos que expiren o se cierren con el año sin completarse aparecerán aquí
                       </p>
                     </>
                   ) : (

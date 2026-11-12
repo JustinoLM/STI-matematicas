@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Target, Star, BookOpen, CheckSquare,
   Shield, Zap, Timer, Trophy, Coins, Info,
@@ -145,6 +145,9 @@ function calcularPuntosSugeridos(tipo: TipoDesafioGrupal, objetivo: number): num
 
 export default function CreateChallengePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const salonParam = searchParams.get('salon');
+  const grupoParam = searchParams.get('grupo');
 
   const [nombre, setNombre]                         = useState('');
   const [descripcion, setDescripcion]               = useState('');
@@ -155,15 +158,25 @@ export default function CreateChallengePage() {
   const [recompensaTexto, setRecompensaTexto]       = useState('');
   const [recompensaPuntos, setRecompensaPuntos]     = useState('');
   const [fechaLimite, setFechaLimite]               = useState('');
-  const [gruposIds, setGruposIds]                   = useState<number[]>([]);
+  // Salón (año lectivo) del desafío y, opcionalmente, algunos de sus grupos.
+  // Sin grupos seleccionados, todo el salón es un solo equipo.
+  const [salonId, setSalonId]                       = useState<number | null>(salonParam ? parseInt(salonParam) : null);
+  const [gruposIds, setGruposIds]                   = useState<number[]>(grupoParam ? [parseInt(grupoParam)] : []);
 
   const meta    = TIPOS[tipo];
   const objNum  = parseInt(objetivoCantidad) || 0;
   const sugerido = objNum > 0 ? calcularPuntosSugeridos(tipo, objNum) : meta.puntosMin;
 
+  const { data: todosLosSalones } = useQuery({
+    queryKey: ['teacher', 'salones'],
+    queryFn: () => teacherService.getSalones(),
+  });
+  const salones = (todosLosSalones ?? []).filter((s) => !s.cerrado);
+
   const { data: grupos } = useQuery({
-    queryKey: ['teacher', 'groups'],
-    queryFn: () => teacherService.getGrupos(),
+    queryKey: ['teacher', 'groups', salonId],
+    queryFn: () => teacherService.getGrupos(salonId as number),
+    enabled: !!salonId,
   });
 
   const crearMutation = useMutation({
@@ -177,7 +190,7 @@ export default function CreateChallengePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre || !objetivoCantidad || gruposIds.length === 0) return;
+    if (!nombre || !objetivoCantidad || !salonId) return;
     if (meta.tieneParam && !parametroAdicional) return;
 
     crearMutation.mutate({
@@ -192,6 +205,7 @@ export default function CreateChallengePage() {
       recompensa_puntos:
         (tipoRecompensa === 'puntos' || tipoRecompensa === 'ambos') && recompensaPuntos
           ? parseInt(recompensaPuntos) : undefined,
+      anio_lectivo_id: salonId,
       grupos_ids: gruposIds,
       fecha_limite: fechaLimite || undefined,
     });
@@ -421,63 +435,89 @@ export default function CreateChallengePage() {
           </CardContent>
         </Card>
 
-        {/* ── Grupos ─────────────────────────────────────────────────── */}
+        {/* ── Salón y equipos ────────────────────────────────────────── */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Grupos Participantes *</CardTitle>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm"
-                  onClick={() => grupos && setGruposIds(grupos.map((g) => g.id))}>
-                  Todos
-                </Button>
-                <Button type="button" variant="outline" size="sm"
-                  onClick={() => setGruposIds([])}>
-                  Ninguno
-                </Button>
-              </div>
-            </div>
+            <CardTitle>Salón y equipos *</CardTitle>
           </CardHeader>
-          <CardContent>
-            {grupos && grupos.length > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {grupos.map((grupo) => (
-                  <label
-                    key={grupo.id}
-                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
-                      gruposIds.includes(grupo.id)
-                        ? 'border-primary bg-primary/5'
-                        : 'border-muted hover:border-muted-foreground/50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={gruposIds.includes(grupo.id)}
-                      onChange={() => toggleGrupo(grupo.id)}
-                      className="h-4 w-4"
-                    />
-                    <div>
-                      <p className="font-medium">{grupo.nombre}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {grupo.cantidad_estudiantes} estudiantes
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            ) : (
+          <CardContent className="space-y-4">
+            {salones.length === 0 ? (
               <div className="text-center py-8">
                 <Target className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No tienes grupos creados</p>
-                <Link to="/teacher/groups/new">
+                <p className="text-muted-foreground">No tienes salones abiertos este año</p>
+                <Link to="/teacher/salones">
                   <Button variant="link">
-                    <Plus className="mr-2 h-4 w-4" />Crear primer grupo
+                    <Plus className="mr-2 h-4 w-4" />Crear mi salón
                   </Button>
                 </Link>
               </div>
-            )}
-            {gruposIds.length === 0 && grupos && grupos.length > 0 && (
-              <p className="text-sm text-red-500 mt-3">* Debes seleccionar al menos un grupo</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="salon-desafio">Salón</Label>
+                  <select
+                    id="salon-desafio"
+                    value={salonId ?? ''}
+                    onChange={(e) => { setSalonId(e.target.value ? parseInt(e.target.value) : null); setGruposIds([]); }}
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  >
+                    <option value="">Selecciona un salón...</option>
+                    {salones.map((s) => (
+                      <option key={s.anio_lectivo_id} value={s.anio_lectivo_id}>
+                        {s.nombre} ({s.grado}.º grado) — {s.cantidad_estudiantes} estudiantes
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">Los desafíos son siempre dentro de un mismo salón.</p>
+                </div>
+
+                {salonId && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Equipos</Label>
+                      {grupos && grupos.length > 0 && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setGruposIds([])}>
+                          Todo el salón
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {gruposIds.length === 0
+                        ? 'Todo el salón compite como un solo equipo. Si quieres equipos, marca algunos grupos.'
+                        : `Cada grupo marcado es un equipo (${gruposIds.length}).`}
+                    </p>
+                    {grupos && grupos.length > 0 ? (
+                      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                        {grupos.map((grupo) => (
+                          <label
+                            key={grupo.id}
+                            className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                              gruposIds.includes(grupo.id)
+                                ? 'border-primary bg-primary/5'
+                                : 'border-muted hover:border-muted-foreground/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={gruposIds.includes(grupo.id)}
+                              onChange={() => toggleGrupo(grupo.id)}
+                              className="h-4 w-4"
+                            />
+                            <div>
+                              <p className="font-medium">{grupo.nombre}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {grupo.cantidad_estudiantes} estudiantes
+                              </p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Este salón no tiene grupos.</p>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -493,7 +533,7 @@ export default function CreateChallengePage() {
               !nombre ||
               !objetivoCantidad ||
               (meta.tieneParam && !parametroAdicional) ||
-              gruposIds.length === 0 ||
+              !salonId ||
               crearMutation.isPending
             }
           >
@@ -504,7 +544,7 @@ export default function CreateChallengePage() {
         {crearMutation.isError && (
           <Card className="border-red-500">
             <CardContent className="p-4">
-              <p className="text-sm text-red-500">Error al crear el desafío. Intenta nuevamente.</p>
+              <p className="text-sm text-red-500">{crearMutation.error?.message || 'Error al crear el desafío. Intenta nuevamente.'}</p>
             </CardContent>
           </Card>
         )}

@@ -11,7 +11,13 @@ Endpoints:
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.dependencies import CurrentStudent, CurrentTeacher, DBSession, ReglaDeTresServiceDep
+from app.api.dependencies import (
+    CurrentStudent,
+    CurrentStudentConSalon,
+    CurrentTeacher,
+    DBSession,
+    ReglaDeTresServiceDep,
+)
 from app.models.user import Estudiante
 from app.schemas.regla_de_tres import (
     NotasReglaTresResponse,
@@ -19,13 +25,14 @@ from app.schemas.regla_de_tres import (
     SubmitRespuestaR3Request,
     SubmitRespuestaR3Response,
 )
+from app.services.school_service import SchoolService
 
 router = APIRouter()
 
 
 @router.post("/practice/start", response_model=SesionReglaTresStartResponse)
 async def iniciar_practica(
-    current_student: CurrentStudent,
+    current_student: CurrentStudentConSalon,
     regla_service: ReglaDeTresServiceDep,
 ):
     return await regla_service.iniciar_practica(estudiante_id=current_student.id)
@@ -52,18 +59,8 @@ async def obtener_notas_profesor(
     regla_service: ReglaDeTresServiceDep,
     db: DBSession,
 ):
-    """Notas de regla de tres de los estudiantes visibles para este profesor."""
-    if not current_teacher.organizacion_id:
-        return NotasReglaTresResponse(estudiantes=[])
-
-    stmt = select(Estudiante.id).where(Estudiante.organizacion_id == current_teacher.organizacion_id)
-    secciones = current_teacher.secciones_asignadas or []
-    if secciones:
-        stmt = stmt.where(Estudiante.grado_academico.in_(secciones))
-
-    result = await db.execute(stmt)
-    estudiante_ids = [row[0] for row in result.all()]
-
+    """Notas de regla de tres de los estudiantes de los salones activos del profesor."""
+    estudiante_ids = await SchoolService(db).ids_estudiantes_del_profesor(current_teacher.id)
     return await regla_service.obtener_notas(estudiante_ids)
 
 

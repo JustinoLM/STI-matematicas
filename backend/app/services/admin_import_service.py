@@ -223,7 +223,7 @@ class AdminImportService:
                 nombre_completo=row[1] or codigo,
                 genero=genero,
                 organizacion_id=org_id,
-                grado_academico=row[3],
+                # row[3] (grado) se acepta pero se ignora: el grado sale del salón
                 edad=_int_or_none(row[4]),
                 puntos_totales=_int_or_none(row[6]) or 0,
                 activo=True,

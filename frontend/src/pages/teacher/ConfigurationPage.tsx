@@ -1,6 +1,6 @@
 /**
- * Configuración de prácticas por grupo.
- * Permite al profesor configurar restricciones de práctica para grupos específicos.
+ * Configuración de prácticas (decimales) por salón.
+ * Permite al profesor configurar restricciones de práctica para cada salón del año en curso.
  */
 
 import { useState, useEffect } from 'react';
@@ -16,11 +16,11 @@ import { Label } from '@/components/ui/label';
 
 export function ConfigurationPage() {
   const [searchParams] = useSearchParams();
-  const grupoIdParam = searchParams.get('grupo');
+  const salonIdParam = searchParams.get('salon');
 
-  // State del formulario
-  const [grupoId, setGrupoId] = useState<number | null>(
-    grupoIdParam ? parseInt(grupoIdParam) : null
+  // State del formulario (salonId = id del año lectivo del salón)
+  const [salonId, setSalonId] = useState<number | null>(
+    salonIdParam ? parseInt(salonIdParam) : null
   );
   const [operacionesPermitidas, setOperacionesPermitidas] = useState<string[]>([
     'suma',
@@ -38,17 +38,18 @@ export function ConfigurationPage() {
     nivel_3: true,
   });
 
-  // Obtener grupos
-  const { data: grupos } = useQuery({
-    queryKey: ['teacher', 'groups'],
-    queryFn: () => teacherService.getGrupos(),
+  // Salones del año en curso (los cerrados son de solo lectura)
+  const { data: todosLosSalones } = useQuery({
+    queryKey: ['teacher', 'salones'],
+    queryFn: () => teacherService.getSalones(),
   });
+  const salones = (todosLosSalones ?? []).filter((s) => !s.cerrado);
 
-  // Obtener configuración actual del grupo
+  // Obtener configuración actual del salón
   const { data: configuracionActual } = useQuery({
-    queryKey: ['teacher', 'group', grupoId, 'configuration'],
-    queryFn: () => teacherService.getConfiguracionGrupo(grupoId!),
-    enabled: !!grupoId,
+    queryKey: ['teacher', 'salon', salonId, 'configuration'],
+    queryFn: () => teacherService.getConfiguracionSalon(salonId!),
+    enabled: !!salonId,
   });
 
   // Cargar configuración actual si existe
@@ -66,7 +67,7 @@ export function ConfigurationPage() {
   // Mutation para crear configuración
   const crearConfiguracionMutation = useMutation({
     mutationFn: (data: {
-      grupo_id: number;
+      anio_lectivo_id: number;
       operaciones_permitidas: string[];
       niveles_permitidos: number[];
       rango_min: number;
@@ -75,17 +76,17 @@ export function ConfigurationPage() {
       pistas_habilitadas: Record<string, boolean>;
     }) => teacherService.crearConfiguracion(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId, 'configuration'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'salon', salonId] });
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!grupoId) return;
+    if (!salonId) return;
 
     crearConfiguracionMutation.mutate({
-      grupo_id: grupoId,
+      anio_lectivo_id: salonId,
       operaciones_permitidas: operacionesPermitidas,
       niveles_permitidos: nivelesPermitidos,
       rango_min: parseFloat(rangoMin),
@@ -133,28 +134,28 @@ export function ConfigurationPage() {
       <div>
         <h1 className="text-3xl font-bold">Configuración de Práctica</h1>
         <p className="text-muted-foreground">
-          Personaliza las restricciones y parámetros de práctica por grupo
+          Personaliza las restricciones y parámetros de práctica de cada salón
         </p>
       </div>
 
-      {/* Selección de Grupo */}
+      {/* Selección de salón */}
       <Card>
         <CardHeader>
-          <CardTitle>Seleccionar Grupo</CardTitle>
+          <CardTitle>Seleccionar salón</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <Label htmlFor="grupo">Grupo</Label>
+            <Label htmlFor="salon">Salón</Label>
             <select
-              id="grupo"
-              value={grupoId || ''}
-              onChange={(e) => setGrupoId(e.target.value ? parseInt(e.target.value) : null)}
+              id="salon"
+              value={salonId || ''}
+              onChange={(e) => setSalonId(e.target.value ? parseInt(e.target.value) : null)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">Selecciona un grupo...</option>
-              {grupos?.map((grupo) => (
-                <option key={grupo.id} value={grupo.id}>
-                  {grupo.nombre} ({grupo.codigo_grupo})
+              <option value="">Selecciona un salón...</option>
+              {salones.map((salon) => (
+                <option key={salon.anio_lectivo_id} value={salon.anio_lectivo_id}>
+                  {salon.nombre} ({salon.grado}.º grado, {salon.anio})
                 </option>
               ))}
             </select>
@@ -162,7 +163,7 @@ export function ConfigurationPage() {
               <div className="flex items-center gap-2 mt-2">
                 <AlertCircle className="h-4 w-4 text-blue-500" />
                 <span className="text-sm text-muted-foreground">
-                  Este grupo tiene configuración activa desde:{' '}
+                  Este salón tiene configuración activa desde:{' '}
                   {new Date(configuracionActual.fecha_aplicacion).toLocaleDateString('es-ES')}
                 </span>
               </div>
@@ -171,7 +172,7 @@ export function ConfigurationPage() {
         </CardContent>
       </Card>
 
-      {grupoId && (
+      {salonId && (
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
             {/* Operaciones Permitidas */}
@@ -344,13 +345,13 @@ export function ConfigurationPage() {
               )}
               {crearConfiguracionMutation.isError && (
                 <span className="text-sm text-red-500 font-medium flex items-center gap-1">
-                  ✗ Error al guardar. Intenta nuevamente.
+                  ✗ {crearConfiguracionMutation.error?.message || 'Error al guardar. Intenta nuevamente.'}
                 </span>
               )}
               <Button
                 type="submit"
                 disabled={
-                  !grupoId ||
+                  !salonId ||
                   operacionesPermitidas.length === 0 ||
                   nivelesPermitidos.length === 0 ||
                   crearConfiguracionMutation.isPending
@@ -368,13 +369,13 @@ export function ConfigurationPage() {
         </form>
       )}
 
-      {!grupoId && (
+      {!salonId && (
         <Card>
           <CardContent className="text-center py-12">
             <Settings className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Selecciona un Grupo</h3>
+            <h3 className="text-lg font-semibold mb-2">Selecciona un salón</h3>
             <p className="text-muted-foreground">
-              Elige un grupo para configurar los parámetros de práctica
+              Elige un salón para configurar los parámetros de práctica
             </p>
           </CardContent>
         </Card>

@@ -58,7 +58,6 @@ class UserRepository:
         nombre_completo: str,
         genero: str = "masculino",
         organizacion_id: Optional[int] = None,
-        grado_academico: Optional[str] = None,
         edad: Optional[int] = None,
     ) -> Estudiante:
         """
@@ -74,7 +73,6 @@ class UserRepository:
             nombre_completo=nombre_completo,
             genero=genero,
             organizacion_id=organizacion_id,
-            grado_academico=grado_academico,
             edad=edad,
             activo=True
         )

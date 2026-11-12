@@ -4,6 +4,8 @@ Router de estadísticas de grupo para el panel analítico del profesor.
 Expone:
   GET  /api/stats/groups/{grupo_id}              → estadísticas completas
   POST /api/stats/groups/{grupo_id}/ai-analysis  → análisis IA bajo demanda
+  GET  /api/stats/salones/{anio_lectivo_id}      → estadísticas del salón completo
+  POST /api/stats/salones/{anio_lectivo_id}/ai-analysis
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -43,6 +45,34 @@ async def get_estadisticas_grupo(
             detail="Grupo no encontrado o no tienes acceso a él",
         )
     return stats
+
+
+@router.get("/salones/{anio_lectivo_id}", response_model=GrupoStatsResponse)
+async def get_estadisticas_salon(
+    anio_lectivo_id: int,
+    current_teacher: CurrentTeacher,
+    db: AsyncSession = Depends(get_db),
+):
+    """Estadísticas del salón completo (año lectivo), con los mismos datos que las de un grupo."""
+    stats = await StatsService(db).get_salon_stats(anio_lectivo_id, current_teacher.id)
+    if stats is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Salón no encontrado o no tienes acceso a él",
+        )
+    return stats
+
+
+@router.post("/salones/{anio_lectivo_id}/ai-analysis", response_model=AnalisisIAResponse)
+async def analizar_salon_con_ia(
+    anio_lectivo_id: int,
+    current_teacher: CurrentTeacher,
+    db: AsyncSession = Depends(get_db),
+):
+    """Análisis pedagógico del salón completo bajo demanda (DeepSeek R1, sin caché)."""
+    return await StatsService(db).analizar_con_ia(
+        anio_lectivo_id, current_teacher.id, LLMService(), es_salon=True
+    )
 
 
 @router.post("/groups/{grupo_id}/ai-analysis", response_model=AnalisisIAResponse)

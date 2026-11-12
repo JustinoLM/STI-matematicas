@@ -3,6 +3,7 @@
  */
 
 import apiClient, { ADMIN_TOKEN_KEY } from './api';
+import type { Trimestre } from '@/types';
 
 export interface CreateStudentPayload {
   codigo_estudiante: string;
@@ -10,7 +11,6 @@ export interface CreateStudentPayload {
   genero: 'masculino' | 'femenino';
   password: string;
   organizacion_id?: number;
-  grado_academico?: string;
   edad?: number;
 }
 
@@ -20,7 +20,6 @@ export interface BulkStudentRow {
   genero: 'masculino' | 'femenino';
   password: string;
   organizacion_id?: number;
-  grado_academico?: string;
   edad?: number;
 }
 
@@ -51,6 +50,24 @@ export interface CreateTeacherPayload {
   institucion?: string;
   organizacion_id?: number;
   grado_academico?: string;
+}
+
+export interface SalonOrganizacion {
+  salon_id: number;
+  nombre: string;
+  grado: number;
+  anio_lectivo_id: number | null;
+  anio: number | null;
+  estado: 'activo' | 'cerrado' | null;
+  profesor_nombre: string | null;
+  total_estudiantes: number;
+}
+
+export interface CierreAnioResult {
+  anio: number;
+  anios_cerrados: number;
+  matriculas_cerradas: number;
+  desafios_no_completados: number;
 }
 
 export interface CreateOrgPayload {
@@ -96,11 +113,10 @@ export interface UsuarioAdmin {
   activo: boolean;
   fecha_creacion: string | null;
   ultimo_acceso: string | null;
-  // Solo en profesores
-  secciones_asignadas?: string[];
-  // Solo en estudiantes
+  // Solo en estudiantes (el grado sale del salón activo)
   puntos_totales?: number;
-  grado_academico?: string;
+  salon_nombre?: string | null;
+  grado?: number | null;
   genero?: string;
   edad?: number | null;
   pre_test_completado?: boolean;
@@ -179,17 +195,30 @@ export const adminService = {
     const response = await apiClient.post<ImportResumenExcel>('/admin/import/excel', formData);
     return response.data;
   },
-  async getGradosOrg(orgId: number): Promise<string[]> {
-    const response = await apiClient.get<string[]>(`/admin/organizations/${orgId}/grados`);
+  // ── Organización escolar: salones, trimestres y cierre del año ──
+  async getSalonesOrg(orgId: number): Promise<SalonOrganizacion[]> {
+    const response = await apiClient.get<SalonOrganizacion[]>(`/admin/organizations/${orgId}/salones`);
     return response.data;
   },
-  async actualizarSeccionesProfesor(profId: number, secciones: string[]): Promise<void> {
-    await apiClient.patch(`/admin/professors/${profId}/secciones`, { secciones });
+  async getTrimestres(orgId: number, anio: number): Promise<Trimestre[]> {
+    const response = await apiClient.get<Trimestre[]>(`/admin/organizations/${orgId}/trimestres/${anio}`);
+    return response.data;
+  },
+  async actualizarTrimestres(
+    orgId: number, anio: number, trimestres: { fecha_inicio: string; fecha_fin: string }[]
+  ): Promise<Trimestre[]> {
+    const response = await apiClient.put<Trimestre[]>(
+      `/admin/organizations/${orgId}/trimestres/${anio}`, { trimestres }
+    );
+    return response.data;
+  },
+  async cerrarAnio(orgId: number, anio: number): Promise<CierreAnioResult> {
+    const response = await apiClient.post<CierreAnioResult>(`/admin/organizations/${orgId}/anios/${anio}/cerrar`);
+    return response.data;
   },
   async editarEstudiante(estId: number, data: {
     nombre_completo?: string;
     genero?: string;
-    grado_academico?: string;
     edad?: number;
   }): Promise<void> {
     await apiClient.patch(`/admin/students/${estId}`, data);

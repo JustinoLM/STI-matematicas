@@ -1321,38 +1321,31 @@ class AdaptiveService:
         - problemas_rapidos      → +N correctos si velocidad <= parametro_adicional seg/problema
         - practicas_rapidas      → +1 si tiempo_total <= parametro_adicional * 60 seg
 
-        Cuando un grupo completa un desafío por primera vez y hay recompensa_puntos,
-        se otorgan puntos de tienda a todos los estudiantes activos del grupo
+        Los equipos del estudiante son sus grupos activos y el salón completo de su matrícula
+        activa. Cuando un equipo completa un desafío por primera vez y hay recompensa_puntos,
+        se otorgan puntos de tienda a los participantes del equipo
         usando GamificationRepository para registrar la transacción correctamente.
         """
         from sqlalchemy import and_, or_, select
 
-        from app.models.challenge import DesafioGrupal, GrupoDesafio
-        from app.models.group import EstudianteGrupo
+        from app.models.challenge import (
+            DESAFIO_ACTIVO,
+            DESAFIO_COMPLETADO,
+            DesafioGrupal,
+            GrupoDesafio,
+        )
         from app.repositories.gamification_repository import GamificationRepository
+        from app.services.desafios_service import condicion_equipos_del_estudiante
 
         db = self.adaptive_repo.db
 
-        # Grupos activos a los que pertenece el estudiante
-        result = await db.execute(
-            select(EstudianteGrupo.grupo_id)
-            .where(and_(
-                EstudianteGrupo.estudiante_id == estudiante_id,
-                EstudianteGrupo.activo == True,
-            ))
-        )
-        grupos_ids = [row[0] for row in result.all()]
-
-        if not grupos_ids:
-            return
-
-        # Desafíos activos asignados a esos grupos
+        # Desafíos activos de los equipos del estudiante (solo su salón activo)
         result = await db.execute(
             select(GrupoDesafio, DesafioGrupal)
             .join(DesafioGrupal, GrupoDesafio.desafio_id == DesafioGrupal.id)
             .where(and_(
-                GrupoDesafio.grupo_id.in_(grupos_ids),
-                DesafioGrupal.completado == False,
+                condicion_equipos_del_estudiante(estudiante_id, solo_matricula_activa=True),
+                DesafioGrupal.estado == DESAFIO_ACTIVO,
                 DesafioGrupal.eliminado == False,
                 or_(DesafioGrupal.fecha_limite.is_(None), DesafioGrupal.fecha_limite >= datetime.utcnow()),
             ))
@@ -1397,14 +1390,14 @@ class AdaptiveService:
             # ── Detectar primera compleción y otorgar puntos de tienda ─────────
             grupo_completo = gd.progreso_actual >= desafio.objetivo_cantidad
             if grupo_completo and not gd.puntos_otorgados:
-                desafio.completado = True
+                desafio.estado = DESAFIO_COMPLETADO
                 gd.puntos_otorgados = True
 
                 # Otorgar puntos solo a estudiantes que participaron activamente
                 # (≥ 3 sesiones completadas dentro de la ventana del desafío)
                 if desafio.recompensa_puntos and desafio.recompensa_puntos > 0:
                     participantes_ids = await self.adaptive_repo.get_participantes_desafio(
-                        gd.grupo_id, desafio
+                        desafio, gd.grupo_id
                     )
 
                     # Solo los participantes reciben la recompensa

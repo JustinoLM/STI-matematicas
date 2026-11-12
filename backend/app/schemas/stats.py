@@ -87,8 +87,9 @@ class EstudianteStatsItem(BaseModel):
 
 class GrupoStatsResponse(BaseModel):
     """Estadísticas completas de un grupo para el panel analítico del profesor."""
-    grupo_id: int
+    grupo_id: int          # id del grupo o, con tipo="salon", del año lectivo
     grupo_nombre: str
+    tipo: str = "grupo"    # "grupo" | "salon"
     total_estudiantes: int
 
     # Distribución de perfiles ML

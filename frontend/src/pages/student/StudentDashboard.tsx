@@ -118,6 +118,9 @@ export function StudentDashboard() {
   // ── Diagnóstico completado ─────────────────────────────────────────────────
   const diagnosticoCompletado = perfil?.diagnostico_completado ?? true; // true mientras carga (no interrumpir UX)
 
+  // ── Salón: sin salón activo no se puede practicar (grupo_nombre = nombre del salón) ──
+  const sinSalon = !loadingPerfil && !!perfil && !perfil.grupo_nombre;
+
   // ── Post-test ──────────────────────────────────────────────────────────────
   const { data: postTestEstado } = useQuery({
     queryKey: ['post-test-estado'],
@@ -132,12 +135,15 @@ export function StudentDashboard() {
     { title: 'Práctica',       description: 'Resolver problemas',    icon: BookOpen,   path: '/student/practice',   color: 'bg-blue-500'   },
     { title: 'Inventario',     description: 'Mis desbloqueables',    icon: ShoppingBag,path: '/student/inventory',  color: 'bg-purple-500' },
     { title: 'Progreso',       description: 'Ver estadísticas',      icon: TrendingUp, path: '/student/progress',   color: 'bg-green-500'  },
-    { title: 'Desafío Grupal', description: 'Colaborar con tu grupo',icon: Users,      path: '/student/challenges', color: 'bg-red-500'    },
+    { title: 'Desafío Grupal', description: 'Colaborar con tu salón',icon: Users,      path: '/student/challenges', color: 'bg-red-500'    },
   ];
 
   const handleNavegacion = (path: string) => {
+    // Sin salón no hay práctica: el aviso de arriba le pide consultar a su profesor
+    if (path === '/student/practice' && sinSalon) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     // Post-test pendiente → redirigir al post-test
-    if (path === '/student/practice' && postTestPendiente) {
+    } else if (path === '/student/practice' && postTestPendiente) {
       navigate('/student/post-test');
     // Diagnóstico no completado → redirigir al diagnóstico
     } else if (path === '/student/practice' && !diagnosticoCompletado) {
@@ -177,8 +183,27 @@ export function StudentDashboard() {
         </Card>
       )}
 
+      {/* Aviso: estudiante sin salón */}
+      {sinSalon && (
+        <Card className="border-2 border-amber-400 bg-amber-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-lg bg-amber-400 text-white flex-shrink-0">
+                <Users className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-base text-amber-900">Todavía no estás en ningún salón</p>
+                <p className="text-sm text-amber-800">
+                  Consulta a tu profesor para que te asigne a uno. Cuando lo haga, podrás practicar.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Banner de diagnóstico pendiente */}
-      {!loadingPerfil && !diagnosticoCompletado && (
+      {!loadingPerfil && !sinSalon && !diagnosticoCompletado && (
         <Card
           className="cursor-pointer border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-colors"
           onClick={() => navigate('/student/diagnostic')}

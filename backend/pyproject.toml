@@ -19,7 +19,6 @@ passlib = {extras = ["argon2"], version = "^1.7.4"}
 python-multipart = "^0.0.6"
 httpx = "^0.25.2"
 asyncpg = "^0.31.0"
-aiosqlite = "^0.22.1"
 greenlet = "^3.3.0"
 scikit-learn = "^1.8.0"
 numpy = "^2.4.0"

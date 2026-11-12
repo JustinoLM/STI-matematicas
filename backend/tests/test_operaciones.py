@@ -6,6 +6,7 @@ registro de peticiones (JSON), scheduler con un solo ejecutor y cierre ordenado.
 import asyncio
 import json
 import logging
+from types import SimpleNamespace
 
 import pytest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,7 +17,7 @@ from app.core.config import settings
 from app.core.logging_config import JsonFormatter
 from app.main import app, urls_documentacion
 from app.services import scheduler_service
-from tests.conftest import TestSessionLocal, test_engine
+from tests.conftest import TestSessionLocal
 
 # ─── Documentación y CORS ────────────────────────────────────────────────────
 
@@ -89,7 +90,9 @@ def test_el_formato_json_incluye_los_campos_propios():
 
 @pytest.mark.asyncio
 async def test_sin_postgresql_el_proceso_siempre_es_el_ejecutor(monkeypatch):
-    monkeypatch.setattr(scheduler_service, "engine", test_engine)   # SQLite en memoria
+    # Engine falso de otro motor: no se abre ninguna conexión ni se toma el bloqueo.
+    otro_motor = SimpleNamespace(dialect=SimpleNamespace(name="otro"))
+    monkeypatch.setattr(scheduler_service, "engine", otro_motor)
     assert await scheduler_service._adquirir_bloqueo() is True
 
 

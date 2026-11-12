@@ -19,10 +19,8 @@ from app.models.adaptive import (
     TipoAlerta,
 )
 from app.models.error import ErrorComun, EstudianteError
-from app.models.group import EstudianteGrupo, Grupo
 from app.models.organization import Organizacion
 from app.models.problem import Intento, Operacion, Problema, TipoSesion
-from app.models.user import Profesor
 from app.repositories.adaptive_repository import AdaptiveRepository
 from app.repositories.gamification_repository import GamificationRepository
 from app.repositories.practice_repository import PracticeRepository
@@ -30,6 +28,7 @@ from app.repositories.problem_repository import ProblemRepository
 from app.services.practice_service import PracticeService
 from app.services.teacher_service import TeacherService
 from tests.conftest import TestSessionLocal, admin_headers
+from tests.salones_helpers import salon_con_estudiantes
 
 
 async def _crear_estudiante(c: AsyncClient, codigo: str, org_id=None):
@@ -272,14 +271,7 @@ async def test_el_profesor_ve_las_alertas_de_posible_trampa():
     async with AsyncClient(app=app, base_url="http://test") as c:
         est, _ = await _crear_estudiante(c, "ANO005")
     async with TestSessionLocal() as db:
-        prof = Profesor(codigo_profesor="PROFT01", password_hash="x", tipo_usuario="profesor",
-                        nombre_completo="Profesor de prueba")
-        db.add(prof)
-        await db.flush()
-        grupo = Grupo(nombre="G1", profesor_id=prof.id, codigo_grupo="GRP-T1")
-        db.add(grupo)
-        await db.flush()
-        db.add(EstudianteGrupo(estudiante_id=est, grupo_id=grupo.id, activo=True))
+        prof, _al = await salon_con_estudiantes(db, [est])
         db.add(PerfilEstudiante(estudiante_id=est))
         await db.flush()
         s = await _sesion_completada(db, est, 2.0, {"×": 6})

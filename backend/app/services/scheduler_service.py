@@ -170,8 +170,8 @@ async def _adquirir_bloqueo() -> bool:
     Intenta ser el proceso que ejecuta los jobs programados.
 
     En PostgreSQL usa un bloqueo consultivo de sesión (`pg_try_advisory_lock`) sostenido por
-    una conexión dedicada durante toda la vida del proceso. Con otro motor (pruebas con
-    SQLite) no hay otros procesos y siempre devuelve True.
+    una conexión dedicada durante toda la vida del proceso. Con otro motor no hay
+    otros procesos que coordinar y siempre devuelve True.
     """
     global _conexion_bloqueo
     if engine.dialect.name != "postgresql":

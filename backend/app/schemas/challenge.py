@@ -37,8 +37,8 @@ class DesafioEstudianteResponse(BaseModel):
     fecha_limite: Optional[datetime] = None
     completado: bool
 
-    # Progreso del grupo al que pertenece el estudiante
-    grupo_id: int
+    # Progreso del equipo del estudiante (grupo_id None = el salón completo)
+    grupo_id: Optional[int] = None
     grupo_nombre: str
     progreso_actual: int
     porcentaje: float       # 0.0 – 100.0 (ya acotado)

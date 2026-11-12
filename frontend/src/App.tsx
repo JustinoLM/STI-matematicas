@@ -34,7 +34,8 @@ import { ReglaDeTresPracticePage } from '@/pages/student/ReglaDeTresPracticePage
 
 // Teacher
 import TeacherDashboard from '@/pages/teacher/TeacherDashboard';
-import GroupsPage from '@/pages/teacher/GroupsPage';
+import SalonesPage from '@/pages/teacher/SalonesPage';
+import SalonDetailPage from '@/pages/teacher/SalonDetailPage';
 import GroupDetailPage from '@/pages/teacher/GroupDetailPage';
 import StudentsPage from '@/pages/teacher/StudentsPage';
 import StudentDetailPage from '@/pages/teacher/StudentDetailPage';
@@ -195,7 +196,9 @@ function App() {
               >
                 <Routes>
                   <Route path="dashboard" element={<TeacherDashboard />} />
-                  <Route path="groups" element={<GroupsPage />} />
+                  <Route path="salones" element={<SalonesPage />} />
+                  <Route path="salones/:id" element={<SalonDetailPage />} />
+                  <Route path="groups" element={<Navigate to="/teacher/salones" replace />} />
                   <Route path="groups/:id" element={<GroupDetailPage />} />
                   <Route path="students" element={<StudentsPage />} />
                   <Route path="students/:id" element={<StudentDetailPage />} />

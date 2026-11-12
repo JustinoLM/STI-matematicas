@@ -1,7 +1,8 @@
 """
 Router de desafíos grupales para estudiantes.
 
-Expone los desafíos asignados al grupo del estudiante autenticado,
+Expone los desafíos de los equipos del estudiante autenticado en su salón activo
+(sus grupos o el salón completo),
 calculando el progreso en tiempo real desde SesionPractica (misma
 lógica que el panel del profesor para garantizar consistencia).
 """
@@ -17,118 +18,20 @@ from app.api.dependencies import CurrentStudent
 from app.core.database import get_db
 from app.models.adaptive import EstadoSesion, SesionPractica
 from app.models.challenge import DesafioGrupal, GrupoDesafio
-from app.models.group import EstudianteGrupo, Grupo
+from app.models.group import Grupo
 from app.models.user import Estudiante
 from app.schemas.challenge import ContribuidorInfo, DesafioEstudianteResponse
+from app.services.desafios_service import (
+    NOMBRE_EQUIPO_SALON,
+    calcular_progreso,
+    condicion_equipos_del_estudiante,
+    miembros_equipo,
+)
 
 router = APIRouter()
 
 # Mínimo de sesiones completadas en la ventana del desafío para calificar a la recompensa
 MIN_SESIONES_PARA_RECOMPENSA = 3
-
-
-async def _calcular_progreso_estudiante(
-    db: AsyncSession,
-    desafio: DesafioGrupal,
-    grupo_id: int,
-) -> int:
-    """
-    Calcula el progreso real del grupo en un desafío consultando SesionPractica.
-
-    Ventana de tiempo: [fecha_creacion, fecha_limite] (idéntica a teacher_service).
-    Si no hay fecha_limite, se cuentan todas las sesiones desde la creación.
-
-    Tipos soportados:
-    - problemas_resueltos   → SUMA de problemas_correctos
-    - sesiones_completadas  → COUNT de sesiones completadas
-    - practicas_sin_errores → COUNT de sesiones con ≤ Y incorrectos
-    - problemas_rapidos     → SUMA de correctos en sesiones con velocidad ≤ Y
-    - practicas_rapidas     → COUNT de sesiones en ≤ Y minutos
-    """
-    # Estudiantes activos del grupo
-    result = await db.execute(
-        select(EstudianteGrupo.estudiante_id).where(
-            and_(
-                EstudianteGrupo.grupo_id == grupo_id,
-                EstudianteGrupo.activo == True,
-            )
-        )
-    )
-    estudiantes_ids = [row[0] for row in result.all()]
-
-    if not estudiantes_ids:
-        return 0
-
-    # ── Condiciones base de ventana temporal (igual que teacher_service) ──
-    condiciones = [
-        SesionPractica.estudiante_id.in_(estudiantes_ids),
-        SesionPractica.estado == EstadoSesion.COMPLETADA,
-        SesionPractica.fecha_fin >= desafio.fecha_creacion,  # solo desde creación
-    ]
-    # Cap al vencimiento: sesiones después del límite no cuentan
-    if desafio.fecha_limite:
-        condiciones.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
-
-    base_where = and_(*condiciones)
-
-    # ── 1. Resolver X problemas ──────────────────────────────────────────
-    if desafio.tipo == "problemas_resueltos":
-        result = await db.execute(
-            select(func.coalesce(func.sum(SesionPractica.problemas_correctos), 0))
-            .where(and_(base_where, SesionPractica.problemas_correctos.isnot(None)))
-        )
-        return int(result.scalar() or 0)
-
-    # ── 2. Resolver X prácticas ──────────────────────────────────────────
-    elif desafio.tipo == "sesiones_completadas":
-        result = await db.execute(
-            select(func.count(SesionPractica.id)).where(base_where)
-        )
-        return int(result.scalar() or 0)
-
-    # ── 3. Resolver X prácticas con máximo Y errores ─────────────────────
-    elif desafio.tipo == "practicas_sin_errores":
-        max_errores = desafio.parametro_adicional or 0
-        result = await db.execute(
-            select(func.count(SesionPractica.id))
-            .where(and_(
-                base_where,
-                SesionPractica.problemas_incorrectos.isnot(None),
-                SesionPractica.problemas_incorrectos <= max_errores,
-            ))
-        )
-        return int(result.scalar() or 0)
-
-    # ── 4. Resolver X problemas en Y o menos segundos/problema ───────────
-    elif desafio.tipo == "problemas_rapidos":
-        max_seg = desafio.parametro_adicional or 999
-        result = await db.execute(
-            select(func.coalesce(func.sum(SesionPractica.problemas_correctos), 0))
-            .where(and_(
-                base_where,
-                SesionPractica.velocidad_promedio.isnot(None),
-                SesionPractica.velocidad_promedio <= max_seg,
-                SesionPractica.problemas_correctos.isnot(None),
-            ))
-        )
-        return int(result.scalar() or 0)
-
-    # ── 5. Resolver X prácticas en Y o menos minutos ─────────────────────
-    elif desafio.tipo == "practicas_rapidas":
-        max_min = desafio.parametro_adicional or 999
-        max_seg_total = max_min * 60
-        result = await db.execute(
-            select(func.count(SesionPractica.id))
-            .where(and_(
-                base_where,
-                SesionPractica.tiempo_total_segundos.isnot(None),
-                SesionPractica.tiempo_total_segundos <= max_seg_total,
-            ))
-        )
-        return int(result.scalar() or 0)
-
-    # Tipo desconocido: devolver 0
-    return 0
 
 
 async def _sesiones_en_ventana(
@@ -196,29 +99,14 @@ async def mis_desafios(
     la participación individual y el ranking de contribuidores.
     """
 
-    # 1. Grupos activos del estudiante
-    grupos_result = await db.execute(
-        select(EstudianteGrupo.grupo_id).where(
-            and_(
-                EstudianteGrupo.estudiante_id == current_student.id,
-                EstudianteGrupo.activo == True,
-            )
-        )
-    )
-    grupo_ids = [row[0] for row in grupos_result.fetchall()]
-
-    if not grupo_ids:
-        return []
-
-    # 2. Desafíos grupales asignados a esos grupos (no eliminados)
+    # 1. Desafíos de los equipos del estudiante en su salón activo (grupos o salón completo)
     desafios_result = await db.execute(
-        select(DesafioGrupal, GrupoDesafio, Grupo)
+        select(DesafioGrupal, GrupoDesafio)
         .join(GrupoDesafio, GrupoDesafio.desafio_id == DesafioGrupal.id)
-        .join(Grupo, Grupo.id == GrupoDesafio.grupo_id)
         .where(
             and_(
-                GrupoDesafio.grupo_id.in_(grupo_ids),
-                DesafioGrupal.eliminado == False,
+                condicion_equipos_del_estudiante(current_student.id, solo_matricula_activa=True),
+                DesafioGrupal.eliminado == False,  # noqa: E712
             )
         )
         .order_by(DesafioGrupal.fecha_creacion.desc())
@@ -231,9 +119,18 @@ async def mis_desafios(
     ahora = datetime.utcnow()
     resultado: List[DesafioEstudianteResponse] = []
 
-    for desafio, grupo_desafio, grupo in rows:
-        # 3. Progreso del grupo en tiempo real
-        progreso = await _calcular_progreso_estudiante(db, desafio, grupo.id)
+    for desafio, grupo_desafio in rows:
+        # 2. Equipo: un grupo del salón o el salón completo
+        if grupo_desafio.grupo_id is None:
+            grupo_nombre = NOMBRE_EQUIPO_SALON
+        else:
+            grupo_nombre = (await db.execute(
+                select(Grupo.nombre).where(Grupo.id == grupo_desafio.grupo_id)
+            )).scalar_one()
+        miembros_ids = await miembros_equipo(db, desafio, grupo_desafio.grupo_id)
+
+        # 3. Progreso del equipo en tiempo real
+        progreso = await calcular_progreso(db, desafio, miembros_ids)
 
         # 4. Porcentaje acotado a 100
         porcentaje = (
@@ -256,16 +153,7 @@ async def mis_desafios(
         califica = mi_sesiones >= MIN_SESIONES_PARA_RECOMPENSA
         faltan = max(0, MIN_SESIONES_PARA_RECOMPENSA - mi_sesiones)
 
-        # 7. Top contribuidores del grupo
-        miembros_result = await db.execute(
-            select(EstudianteGrupo.estudiante_id).where(
-                and_(
-                    EstudianteGrupo.grupo_id == grupo.id,
-                    EstudianteGrupo.activo == True,
-                )
-            )
-        )
-        miembros_ids = [row[0] for row in miembros_result.all()]
+        # 7. Top contribuidores del equipo
         top = await _top_contribuidores(db, desafio, miembros_ids)
 
         resultado.append(
@@ -281,8 +169,8 @@ async def mis_desafios(
                 fecha_creacion=desafio.fecha_creacion,
                 fecha_limite=desafio.fecha_limite,
                 completado=desafio.completado or grupo_completado,
-                grupo_id=grupo.id,
-                grupo_nombre=grupo.nombre,
+                grupo_id=grupo_desafio.grupo_id,
+                grupo_nombre=grupo_nombre,
                 progreso_actual=progreso,
                 porcentaje=porcentaje,
                 grupo_completado=grupo_completado,

@@ -43,7 +43,7 @@ const studentNav: NavItem[] = [
 
 const teacherNav: NavItem[] = [
   { title: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
-  { title: 'Grupos', href: '/teacher/groups', icon: Users },
+  { title: 'Salones', href: '/teacher/salones', icon: Users },
   { title: 'Estudiantes', href: '/teacher/students', icon: GraduationCap },
   { title: 'Estadísticas', href: '/teacher/stats', icon: BarChart2 },
   { title: 'Regla de Tres', href: '/teacher/regla-de-tres', icon: Scale },

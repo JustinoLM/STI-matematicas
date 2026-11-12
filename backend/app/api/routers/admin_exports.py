@@ -32,13 +32,16 @@ from app.models.adaptive import (
 )
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.gamification import EstudianteMedalla, Medalla, TipoTransaccion, TransaccionPuntos
-from app.models.group import EstudianteGrupo, Grupo
+from app.models.group import Grupo
 from app.models.organization import Organizacion
+from app.models.school import AnioLectivo, Salon
 from app.models.user import Estudiante
 from app.repositories.adaptive_repository import (
     MIN_SESIONES_PARTICIPACION_DESAFIO,
     AdaptiveRepository,
 )
+from app.services.desafios_service import NOMBRE_EQUIPO_SALON, miembros_equipo
+from app.services.school_service import SchoolService
 
 # Todos los endpoints exigen token de administrador (POST /api/auth/admin-login)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -76,18 +79,21 @@ async def exportar_estudiantes(
     stmt = (
         select(Estudiante, Organizacion)
         .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
-        .order_by(Organizacion.nombre, Estudiante.grado_academico, Estudiante.nombre_completo)
+        .order_by(Organizacion.nombre, Estudiante.nombre_completo)
     )
     if org_id:
         stmt = stmt.where(Estudiante.organizacion_id == org_id)
     rows = (await db.execute(stmt)).all()
+    salones = await SchoolService(db).salones_de_estudiantes([est.id for est, _ in rows])
+    rows.sort(key=lambda r: ((r[1].nombre if r[1] else ""), salones.get(r[0].id, {}).get("salon_nombre") or "~"))
 
     data = [
         {
             "codigo_estudiante": est.codigo_estudiante,
             "nombre_completo": _nombre(est, con_nombres),
             "genero": est.genero.value if est.genero else "",
-            "grado_academico": _fmt(est.grado_academico),
+            # Misma posición que la antigua columna de grado (la importación la ignora)
+            "salon": _fmt(salones.get(est.id, {}).get("salon_nombre")),
             "edad": _fmt(est.edad),
             "organizacion": org.nombre if org else "",
             "puntos_actuales": est.puntos_totales or 0,
@@ -121,8 +127,10 @@ async def exportar_diagnostico(
     )
     if org_id:
         stmt_est = stmt_est.where(Estudiante.organizacion_id == org_id)
-    stmt_est = stmt_est.order_by(Estudiante.grado_academico, Estudiante.nombre_completo)
+    stmt_est = stmt_est.order_by(Estudiante.nombre_completo)
     estudiantes = (await db.execute(stmt_est)).all()
+    salones = await SchoolService(db).salones_de_estudiantes([est.id for est, _ in estudiantes])
+    estudiantes.sort(key=lambda r: salones.get(r[0].id, {}).get("salon_nombre") or "~")
 
     # Pre-test por estudiante
     stmt_pre = select(PruebaDiagnostica)
@@ -182,7 +190,7 @@ async def exportar_diagnostico(
         row = {
             "codigo_estudiante":    est.codigo_estudiante,
             "nombre_estudiante":    _nombre(est, con_nombres),
-            "grado":                _fmt(est.grado_academico),
+            "grado":                _fmt(salones.get(est.id, {}).get("grado")),
             "organizacion":         org.nombre if org else "",
             # — Pre-test —
             "pre_completado":       "Sí" if pre_completado else "No",
@@ -501,15 +509,16 @@ async def exportar_resumen(db: DBSession):
             )).all()
         )
 
-        # Desafíos grupales de los grupos con estudiantes de la organización
+        # Desafíos grupales de los salones de la organización
         desafios_org = (await db.execute(
             select(
                 func.count(func.distinct(GrupoDesafio.desafio_id)),
                 func.count(func.distinct(GrupoDesafio.desafio_id)).filter(GrupoDesafio.puntos_otorgados.is_(True)),
             )
             .join(DesafioGrupal, DesafioGrupal.id == GrupoDesafio.desafio_id)
-            .join(EstudianteGrupo, EstudianteGrupo.grupo_id == GrupoDesafio.grupo_id)
-            .where(and_(EstudianteGrupo.estudiante_id.in_(est_ids), DesafioGrupal.eliminado.is_(False)))
+            .join(AnioLectivo, AnioLectivo.id == DesafioGrupal.anio_lectivo_id)
+            .join(Salon, Salon.id == AnioLectivo.salon_id)
+            .where(and_(Salon.organizacion_id == org.id, DesafioGrupal.eliminado.is_(False)))
         )).one()
 
         data.append({
@@ -531,32 +540,34 @@ async def exportar_resumen(db: DBSession):
 
 async def _filas_desafios(db, org_id: Optional[int]):
     """
-    Una fila por (desafío, grupo) con los miembros activos del grupo.
-    Con `org_id` solo cuentan los grupos con al menos un estudiante de esa organización.
-    Devuelve [(desafio, grupo_desafio, grupo, [(estudiante, organizacion)])].
+    Una fila por (desafío, equipo) con los miembros del equipo. El equipo es un grupo del
+    salón o el salón completo. Con `org_id` solo cuentan los desafíos de salones de esa
+    organización. Devuelve [(desafio, grupo_desafio, al, salon, nombre_equipo, [(estudiante, organizacion)])].
     """
     stmt = (
-        select(DesafioGrupal, GrupoDesafio, Grupo)
+        select(DesafioGrupal, GrupoDesafio, AnioLectivo, Salon)
         .join(GrupoDesafio, GrupoDesafio.desafio_id == DesafioGrupal.id)
-        .join(Grupo, Grupo.id == GrupoDesafio.grupo_id)
+        .join(AnioLectivo, AnioLectivo.id == DesafioGrupal.anio_lectivo_id)
+        .join(Salon, Salon.id == AnioLectivo.salon_id)
         .where(DesafioGrupal.eliminado.is_(False))
-        .order_by(DesafioGrupal.fecha_creacion, DesafioGrupal.id, Grupo.nombre)
+        .order_by(DesafioGrupal.fecha_creacion, DesafioGrupal.id, GrupoDesafio.id)
     )
+    if org_id:
+        stmt = stmt.where(Salon.organizacion_id == org_id)
     filas = []
-    for desafio, gd, grupo in (await db.execute(stmt)).all():
-        miembros_stmt = (
+    for desafio, gd, al, salon in (await db.execute(stmt)).all():
+        if gd.grupo_id is None:
+            nombre_equipo = NOMBRE_EQUIPO_SALON
+        else:
+            nombre_equipo = (await db.execute(select(Grupo.nombre).where(Grupo.id == gd.grupo_id))).scalar_one()
+        ids = await miembros_equipo(db, desafio, gd.grupo_id)
+        miembros = (await db.execute(
             select(Estudiante, Organizacion)
-            .join(EstudianteGrupo, EstudianteGrupo.estudiante_id == Estudiante.id)
             .outerjoin(Organizacion, Organizacion.id == Estudiante.organizacion_id)
-            .where(and_(EstudianteGrupo.grupo_id == grupo.id, EstudianteGrupo.activo.is_(True)))
+            .where(Estudiante.id.in_(ids))
             .order_by(Estudiante.codigo_estudiante)
-        )
-        if org_id:
-            miembros_stmt = miembros_stmt.where(Estudiante.organizacion_id == org_id)
-        miembros = (await db.execute(miembros_stmt)).all()
-        if org_id and not miembros:
-            continue
-        filas.append((desafio, gd, grupo, miembros))
+        )).all() if ids else []
+        filas.append((desafio, gd, al, salon, nombre_equipo, miembros))
     return filas
 
 
@@ -566,19 +577,23 @@ async def exportar_desafios(
     org_id: Optional[int] = Query(None),
 ):
     """
-    Desafíos grupales: una fila por desafío y grupo, con su ventana de fechas, el progreso
-    del grupo, si lo completó y cuántos miembros participaron (completaron al menos
-    MIN_SESIONES_PARTICIPACION_DESAFIO sesiones dentro de la ventana).
+    Desafíos grupales: una fila por desafío y equipo (grupo o salón completo), con su
+    salón, su ventana de fechas, el progreso del equipo, si lo completó y cuántos miembros
+    participaron (completaron al menos MIN_SESIONES_PARTICIPACION_DESAFIO sesiones dentro
+    de la ventana).
     """
     repo = AdaptiveRepository(db)
     data = []
-    for desafio, gd, grupo, _miembros in await _filas_desafios(db, org_id):
-        participantes = await repo.get_participantes_desafio(grupo.id, desafio)
+    for desafio, gd, al, salon, nombre_equipo, _miembros in await _filas_desafios(db, org_id):
+        participantes = await repo.get_participantes_desafio(desafio, gd.grupo_id)
         data.append({
             "id_desafio": desafio.id,
             "nombre": desafio.nombre,
             "tipo": desafio.tipo,
-            "grupo": grupo.nombre,
+            "salon": salon.nombre,
+            "anio": al.anio,
+            "estado": desafio.estado,
+            "grupo": nombre_equipo,
             "objetivo": desafio.objetivo_cantidad,
             "parametro_adicional": _fmt(desafio.parametro_adicional),
             "fecha_inicio": _fmt(desafio.fecha_creacion),
@@ -600,13 +615,13 @@ async def exportar_participacion(
     con_nombres: bool = Query(False),
 ):
     """
-    Participación de cada miembro activo de cada grupo en cada desafío: sesiones completadas
+    Participación de cada miembro de cada equipo en cada desafío: sesiones completadas
     dentro de la ventana del desafío, si participó (mínimo de sesiones) y si cuenta para las
-    medallas de desafíos (participó y su grupo completó el desafío).
+    medallas de desafíos (participó y su equipo completó el desafío).
     """
     repo = AdaptiveRepository(db)
     data = []
-    for desafio, gd, grupo, miembros in await _filas_desafios(db, org_id):
+    for desafio, gd, _al, salon, nombre_equipo, miembros in await _filas_desafios(db, org_id):
         condiciones = repo._condiciones_ventana_desafio(desafio)
         for est, org in miembros:
             sesiones = (await db.execute(
@@ -620,7 +635,8 @@ async def exportar_participacion(
                 "codigo_estudiante": est.codigo_estudiante,
                 "nombre_estudiante": _nombre(est, con_nombres),
                 "organizacion": org.nombre if org else "",
-                "grupo": grupo.nombre,
+                "salon": salon.nombre,
+                "grupo": nombre_equipo,
                 "id_desafio": desafio.id,
                 "sesiones_en_ventana": sesiones,
                 "participo": "Sí" if participo else "No",

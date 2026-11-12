@@ -136,7 +136,6 @@ class AuthService:
             nombre_completo=data.nombre_completo,
             genero=data.genero,
             organizacion_id=data.organizacion_id,
-            grado_academico=data.grado_academico,
             edad=data.edad,
         )
 
@@ -185,7 +184,6 @@ class AuthService:
                     nombre_completo=row.nombre_completo,
                     genero=row.genero,
                     organizacion_id=row.organizacion_id,
-                    grado_academico=row.grado_academico,
                     edad=row.edad,
                 )
                 creados += 1

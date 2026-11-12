@@ -1,9 +1,10 @@
 /**
- * Página de detalle de un grupo específico.
- * Muestra estadísticas, gestión de estudiantes (agregar/quitar) y borrar grupo.
+ * Detalle de un grupo dentro de un salón.
+ * Muestra estadísticas y la gestión de sus miembros, que deben estar en el mismo salón.
+ * Si el año lectivo del salón está cerrado, el grupo es de solo lectura.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,14 +23,9 @@ import {
   X,
   Loader2,
   Eye,
-  FileSpreadsheet,
-  Download,
-  Upload,
-  CheckCircle2,
-  XCircle,
+  Lock,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { teacherService, BulkAddResult } from '@/services/teacherService';
+import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,69 +41,6 @@ export default function GroupDetailPage() {
   const [busqueda, setBusqueda] = useState('');
   const [confirmarBorrar, setConfirmarBorrar] = useState(false);
 
-  // Bulk import state
-  const [codigosPreview, setCodigosPreview] = useState<string[]>([]);
-  const [bulkResult, setBulkResult] = useState<BulkAddResult | null>(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkError, setBulkError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleBulkFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBulkResult(null);
-    setBulkError(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const wb = XLSX.read(ev.target?.result, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-        const codigos = rows
-          .map((r) => String(r['codigo_estudiante'] ?? r['codigo'] ?? '').trim().toUpperCase())
-          .filter(Boolean);
-        if (codigos.length === 0) {
-          setBulkError('No se encontraron códigos en el archivo. Verifica que la columna se llame "codigo_estudiante" o "codigo".');
-        } else {
-          setCodigosPreview(codigos);
-        }
-      } catch {
-        setBulkError('No se pudo leer el archivo. Verifica que sea CSV o Excel válido.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }, []);
-
-  const handleBulkImport = useCallback(async () => {
-    if (codigosPreview.length === 0) return;
-    setBulkLoading(true);
-    setBulkError(null);
-    try {
-      const result = await teacherService.bulkAddToGroup(grupoId, codigosPreview);
-      setBulkResult(result);
-      if (result.agregados > 0) {
-        queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId] });
-        queryClient.invalidateQueries({ queryKey: ['teacher', 'group', grupoId, 'statistics'] });
-      }
-    } catch (err) {
-      setBulkError(err instanceof Error ? err.message : 'Error al importar');
-    } finally {
-      setBulkLoading(false);
-    }
-  }, [codigosPreview, grupoId, queryClient]);
-
-  const downloadTemplate = useCallback(() => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['codigo_estudiante'],
-      ['EST001'],
-      ['EST002'],
-      ['EST003'],
-    ]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Códigos');
-    XLSX.writeFile(wb, 'plantilla_agregar_grupo.xlsx');
-  }, []);
-
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: grupo, isLoading: loadingGrupo } = useQuery({
     queryKey: ['teacher', 'group', grupoId],
@@ -121,12 +54,18 @@ export default function GroupDetailPage() {
     enabled: !!grupoId,
   });
 
-  // Todos los estudiantes de la organización
-  const { data: estudiantesOrg = [] } = useQuery({
-    queryKey: ['teacher', 'estudiantes-org'],
-    queryFn: () => teacherService.getEstudiantesOrg(),
-    enabled: !!grupoId,
+  // Estudiantes del salón: solo ellos pueden entrar al grupo
+  const anioLectivoId = grupo?.anio_lectivo_id;
+  const { data: salon } = useQuery({
+    queryKey: ['teacher', 'salon', anioLectivoId],
+    queryFn: () => teacherService.getSalonDetalle(anioLectivoId as number),
+    enabled: !!anioLectivoId,
   });
+  const estudiantesOrg = (salon?.estudiantes ?? []).map((e) => ({
+    id: e.estudiante_id,
+    codigo_estudiante: e.codigo_estudiante,
+    nombre_completo: e.nombre_completo,
+  }));
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const agregarMutation = useMutation({
@@ -151,7 +90,8 @@ export default function GroupDetailPage() {
     mutationFn: () => teacherService.eliminarGrupo(grupoId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teacher', 'groups'] });
-      navigate('/teacher/groups');
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'salon', anioLectivoId] });
+      navigate(anioLectivoId ? `/teacher/salones/${anioLectivoId}` : '/teacher/salones');
     },
   });
 
@@ -185,10 +125,10 @@ export default function GroupDetailPage() {
   if (!grupo) {
     return (
       <div className="space-y-6">
-        <Link to="/teacher/groups">
+        <Link to="/teacher/salones">
           <Button variant="ghost">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver a Grupos
+            Volver a mis salones
           </Button>
         </Link>
         <Card>
@@ -205,28 +145,25 @@ export default function GroupDetailPage() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <Link to="/teacher/groups">
+          <Link to={`/teacher/salones/${grupo.anio_lectivo_id}`}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver a Grupos
+              Volver al salón {grupo.salon_nombre}
             </Button>
           </Link>
           <h1 className="text-3xl font-bold">{grupo.nombre}</h1>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{grupo.codigo_grupo}</Badge>
-            <Badge variant={grupo.activo ? 'default' : 'secondary'}>
-              {grupo.activo ? 'Activo' : 'Inactivo'}
-            </Badge>
+            <Badge variant="outline">Salón {grupo.salon_nombre}</Badge>
+            <Badge variant="outline">{grupo.anio}</Badge>
+            {grupo.cerrado && (
+              <Badge variant="secondary" className="gap-1"><Lock className="h-3 w-3" /> Cerrado</Badge>
+            )}
           </div>
         </div>
 
         {/* Botón borrar grupo */}
         <div className="flex items-center gap-2">
-          <Link to={`/teacher/configuration?grupo=${grupoId}`}>
-            <Button variant="outline">Configurar Práctica</Button>
-          </Link>
-
-          {confirmarBorrar ? (
+          {grupo.cerrado ? null : confirmarBorrar ? (
             <div className="flex items-center gap-2 border border-red-200 bg-red-50 rounded-lg px-3 py-2">
               <span className="text-sm text-red-700 font-medium">¿Eliminar grupo?</span>
               <Button
@@ -320,19 +257,17 @@ export default function GroupDetailPage() {
 
       {/* ── Gestión de Estudiantes con Tabs ─────────────────────────────── */}
       <Tabs defaultValue="estudiantes">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className={`grid w-full ${grupo.cerrado ? 'grid-cols-1' : 'grid-cols-2'}`}>
           <TabsTrigger value="estudiantes">
             <Users className="mr-2 h-4 w-4" />
             Estudiantes ({(grupo.estudiantes ?? []).length})
           </TabsTrigger>
-          <TabsTrigger value="agregar">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Agregar
-          </TabsTrigger>
-          <TabsTrigger value="importar">
-            <Upload className="mr-2 h-4 w-4" />
-            Importar lista
-          </TabsTrigger>
+          {!grupo.cerrado && (
+            <TabsTrigger value="agregar">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Agregar del salón
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Tab 1: Estudiantes actuales del grupo */}
@@ -341,7 +276,7 @@ export default function GroupDetailPage() {
             <CardContent className="pt-4">
               {(grupo.estudiantes ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-10">
-                  No hay estudiantes en este grupo aún. Usa la pestaña "Agregar estudiantes".
+                  No hay estudiantes en este grupo aún. Usa la pestaña "Agregar del salón".
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -387,7 +322,7 @@ export default function GroupDetailPage() {
                                 size="sm"
                                 variant="ghost"
                                 className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                disabled={quitarMutation.isPending}
+                                disabled={quitarMutation.isPending || grupo.cerrado}
                                 onClick={() => quitarMutation.mutate(est.estudiante_id)}
                               >
                                 {quitarMutation.isPending ? (
@@ -426,13 +361,13 @@ export default function GroupDetailPage() {
 
               {estudiantesOrg.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">
-                  No hay estudiantes en tu organización.
+                  No hay estudiantes en este salón. Asígnalos desde la página del salón.
                 </p>
               ) : estudiantesDisponibles.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">
                   {busqueda
                     ? 'No se encontraron estudiantes con esa búsqueda.'
-                    : 'Todos los estudiantes ya están en el grupo.'}
+                    : 'Todos los estudiantes del salón ya están en el grupo.'}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -479,110 +414,6 @@ export default function GroupDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Importar lista de códigos */}
-        <TabsContent value="importar">
-          <Card>
-            <CardContent className="pt-4 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Sube un archivo CSV o Excel con una columna <code className="bg-muted px-1 rounded text-xs">codigo_estudiante</code> (o <code className="bg-muted px-1 rounded text-xs">codigo</code>). Los estudiantes deben pertenecer a tu organización.
-              </p>
-
-              {/* Acciones */}
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button variant="outline" size="sm" onClick={downloadTemplate} className="border-green-300 text-green-700 hover:bg-green-50">
-                  <Download className="h-4 w-4 mr-1" />
-                  Descargar plantilla
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  className="hidden"
-                  onChange={handleBulkFile}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { fileInputRef.current?.click(); setCodigosPreview([]); setBulkResult(null); }}
-                  className="border-green-300 text-green-700 hover:bg-green-50"
-                >
-                  <FileSpreadsheet className="h-4 w-4 mr-1" />
-                  Seleccionar archivo
-                </Button>
-              </div>
-
-              {/* Preview de códigos */}
-              {codigosPreview.length > 0 && !bulkResult && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">{codigosPreview.length} códigos detectados — vista previa (máx. 15):</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {codigosPreview.slice(0, 15).map((c, i) => (
-                      <code key={i} className="text-xs bg-muted px-2 py-1 rounded border">{c}</code>
-                    ))}
-                    {codigosPreview.length > 15 && (
-                      <span className="text-xs text-muted-foreground self-center">…y {codigosPreview.length - 15} más</span>
-                    )}
-                  </div>
-                  <Button
-                    onClick={handleBulkImport}
-                    disabled={bulkLoading}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    size="sm"
-                  >
-                    {bulkLoading ? (
-                      <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Agregando...</>
-                    ) : (
-                      <><UserPlus className="h-4 w-4 mr-1" /> Agregar {codigosPreview.length} estudiantes al grupo</>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {/* Resultado */}
-              {bulkResult && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-4 p-3 rounded-lg bg-muted">
-                    <div className="flex items-center gap-1.5 text-green-700">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span className="font-semibold">{bulkResult.agregados} agregados</span>
-                    </div>
-                    {bulkResult.errores.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-red-600">
-                        <XCircle className="h-4 w-4" />
-                        <span className="font-semibold">{bulkResult.errores.length} no encontrados</span>
-                      </div>
-                    )}
-                    <span className="text-sm text-muted-foreground">de {bulkResult.total} códigos</span>
-                  </div>
-                  {bulkResult.errores.length > 0 && (
-                    <div className="rounded border border-red-200 bg-red-50 p-2 space-y-1 max-h-40 overflow-y-auto">
-                      {bulkResult.errores.map((err, i) => (
-                        <p key={i} className="text-xs text-red-700">
-                          <code className="font-mono">{err.codigo}</code>: {err.mensaje}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setCodigosPreview([]);
-                      setBulkResult(null);
-                      if (fileInputRef.current) fileInputRef.current.value = '';
-                    }}
-                  >
-                    Nueva importación
-                  </Button>
-                </div>
-              )}
-
-              {bulkError && (
-                <p className="text-sm text-red-600">{bulkError}</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* ── Alertas y Clasificación ─────────────────────────────────────── */}
@@ -716,7 +547,7 @@ export default function GroupDetailPage() {
           </Card>
         </Link>
 
-        <Link to={`/teacher/challenges/new?grupo=${grupoId}`}>
+        <Link to={`/teacher/challenges/new?salon=${grupo.anio_lectivo_id}&grupo=${grupoId}`}>
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardContent className="p-6 flex items-center gap-4">
               <div className="p-3 rounded-lg bg-green-100">

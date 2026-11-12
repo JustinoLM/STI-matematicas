@@ -17,6 +17,7 @@ from app.api.routers import (
     admin_exports,
     admin_import,
     admin_organizations,
+    admin_salones,
     analisis,
     animaciones,
     auth,
@@ -27,6 +28,7 @@ from app.api.routers import (
     mensajes,
     practices,
     regla_de_tres,
+    salones,
     stats,
     teachers,
 )
@@ -35,6 +37,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.logging_config import configurar_logging
 from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
+from app.services.school_service import ErrorSalon
 
 configurar_logging(
     formato=settings.LOG_FORMAT or ("text" if settings.ENVIRONMENT == "development" else "json"),
@@ -112,7 +115,9 @@ app.include_router(practices.router, prefix="/api/practices", tags=["Prácticas 
 app.include_router(gamification.router, prefix="/api/gamification", tags=["Gamificación"])
 app.include_router(hints.router, prefix="/api", tags=["Pistas"])
 app.include_router(teachers.router, prefix="/api/teachers", tags=["Profesores"])
+app.include_router(salones.router, prefix="/api/teachers", tags=["Profesores - Salones"])
 app.include_router(admin_organizations.router, prefix="/api", tags=["Admin - Organizaciones"])
+app.include_router(admin_salones.router, prefix="/api", tags=["Admin - Salones y año lectivo"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["Desafíos"])
 app.include_router(enunciados.router, prefix="/api/enunciados", tags=["Enunciados Temáticos"])
 app.include_router(mensajes.router, prefix="/api/mensajes", tags=["Mensajes Motivacionales"])
@@ -122,6 +127,17 @@ app.include_router(stats.router, prefix="/api/stats", tags=["Estadísticas de Gr
 app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaciones"])
 app.include_router(regla_de_tres.router, prefix="/api/regla-de-tres", tags=["Regla de Tres"])
 app.include_router(admin_import.router, prefix="/api", tags=["Admin - Importación"])
+
+
+# ── Errores de reglas de la organización escolar (salones, años lectivos) ──
+# El detail es texto (lo lee getErrorMessage en el frontend) y `codigo` permite al frontend
+# reconocer casos concretos, como SIN_SALON.
+@app.exception_handler(ErrorSalon)
+async def error_salon_handler(request: Request, exc: ErrorSalon):
+    contenido = {"detail": exc.mensaje}
+    if exc.codigo:
+        contenido["codigo"] = exc.codigo
+    return JSONResponse(status_code=exc.status_code, content=contenido)
 
 
 # ── Handler global para excepciones no-HTTP ──────────────────────────────────

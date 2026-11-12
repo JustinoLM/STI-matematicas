@@ -14,10 +14,11 @@ from app.models.adaptive import (
     TipoAlerta,
 )
 from app.models.challenge import DesafioGrupal, GrupoDesafio
-from app.models.group import EstudianteGrupo
+from app.models.group import EstudianteGrupo, Grupo
 from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento
-from app.models.user import Estudiante, Profesor
+from app.models.school import ANIO_ACTIVO, AnioLectivo
+from app.models.user import Estudiante
 from app.repositories.teacher_repository import TeacherRepository
 from app.schemas.teacher import (
     AlertaEstudianteResponse,
@@ -32,45 +33,50 @@ from app.schemas.teacher import (
     GrupoResumen,
     ProgresoGrupoDesafio,
 )
+from app.services.desafios_service import NOMBRE_EQUIPO_SALON, calcular_progreso, miembros_equipo
+from app.services.school_service import AnioCerrado, ErrorSalon, NoEncontrado, SchoolService
 
 
 class TeacherService:
     """Service para APIs del profesor."""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TeacherRepository(db)
-    
-    # ==================== GRUPOS ====================
-    
-    async def crear_grupo(self, profesor_id: int, data: GrupoCreate) -> GrupoDetalle:
-        """Crea un grupo."""
-        grupo = await self.repo.create_grupo(
-            profesor_id=profesor_id,
-            nombre=data.nombre,
-            codigo_grupo=data.codigo_grupo
-        )
+        self.school = SchoolService(db)
+
+    # ==================== GRUPOS DEL SALÓN ====================
+
+    async def crear_grupo(self, profesor_id: int, anio_lectivo_id: int, data: GrupoCreate) -> GrupoDetalle:
+        """Crea un grupo dentro del salón (año lectivo activo) del profesor."""
+        grupo = await self.school.crear_grupo(anio_lectivo_id, profesor_id, data.nombre)
         await self.db.commit()
-        
-        return GrupoDetalle(
-            id=grupo.id,
-            nombre=grupo.nombre,
-            codigo_grupo=grupo.codigo_grupo,
-            activo=grupo.activo,
-            profesor_id=grupo.profesor_id,
-            cantidad_estudiantes=0,
-            estudiantes=[]
+        detalle = await self.get_grupo_detalle(grupo.id, profesor_id)
+        assert detalle is not None
+        return detalle
+
+    async def get_grupos(self, profesor_id: int, anio_lectivo_id: Optional[int] = None) -> List[GrupoResumen]:
+        """Grupos de los salones del profesor (opcionalmente de un solo año lectivo)."""
+        stmt = (
+            select(Grupo, AnioLectivo)
+            .join(AnioLectivo, AnioLectivo.id == Grupo.anio_lectivo_id)
+            .where(and_(AnioLectivo.profesor_id == profesor_id, Grupo.activo == True))  # noqa: E712
+            .order_by((AnioLectivo.estado == ANIO_ACTIVO).desc(), AnioLectivo.anio.desc(), Grupo.nombre)
         )
-    
-    async def get_grupos(self, profesor_id: int) -> List[GrupoResumen]:
-        """Lista grupos del profesor con resumen."""
-        grupos = await self.repo.get_grupos_profesor(profesor_id)
-        
+        if anio_lectivo_id is not None:
+            stmt = stmt.where(Grupo.anio_lectivo_id == anio_lectivo_id)
+        filas = (await self.db.execute(stmt)).all()
+
         resumenes = []
-        for grupo in grupos:
-            estudiantes_ids = [e.estudiante_id for e in grupo.estudiantes if e.activo]
-            
-            # Calcular promedio precisión
+        for grupo, al in filas:
+            await self.db.refresh(al, attribute_names=["salon"])
+            miembros = (await self.db.execute(
+                select(EstudianteGrupo.estudiante_id).where(and_(
+                    EstudianteGrupo.grupo_id == grupo.id, EstudianteGrupo.activo == True  # noqa: E712
+                ))
+            )).all()
+            estudiantes_ids = [row[0] for row in miembros]
+
             promedio = 0.0
             if estudiantes_ids:
                 result = await self.db.execute(
@@ -78,113 +84,93 @@ class TeacherService:
                     .where(PerfilEstudiante.estudiante_id.in_(estudiantes_ids))
                 )
                 promedio = float(result.scalar() or 0.0)
-            
+
             problemas_hoy = await self.repo.get_problemas_resueltos_hoy(estudiantes_ids) if estudiantes_ids else 0
-            
+
             resumenes.append(GrupoResumen(
                 id=grupo.id,
                 nombre=grupo.nombre,
-                codigo_grupo=grupo.codigo_grupo,
                 activo=grupo.activo,
+                anio_lectivo_id=al.id,
+                salon_nombre=al.salon.nombre,
+                anio=al.anio,
+                cerrado=al.estado != ANIO_ACTIVO,
+                estudiantes_ids=estudiantes_ids,
                 cantidad_estudiantes=len(estudiantes_ids),
                 promedio_precision=round(promedio * 100, 2),
-                problemas_resueltos_hoy=problemas_hoy
+                problemas_resueltos_hoy=problemas_hoy,
             ))
-        
+
         return resumenes
-    
+
     async def get_grupo_detalle(self, grupo_id: int, profesor_id: int) -> Optional[GrupoDetalle]:
-        """Obtiene detalle de grupo con estudiantes."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
+        """Detalle del grupo con sus estudiantes, o None si no es del profesor."""
+        try:
+            grupo = await self.school.grupo_del_profesor(grupo_id, profesor_id)
+        except NoEncontrado:
             return None
-        
+
         estudiantes_lista = []
         for rel in grupo.estudiantes:
             if not rel.activo:
                 continue
-            
-            # Obtener estudiante y perfil
-            result = await self.db.execute(
+            row = (await self.db.execute(
                 select(Estudiante, PerfilEstudiante)
-                .join(PerfilEstudiante, Estudiante.id == PerfilEstudiante.estudiante_id)
+                .outerjoin(PerfilEstudiante, Estudiante.id == PerfilEstudiante.estudiante_id)
                 .where(Estudiante.id == rel.estudiante_id)
-            )
-            row = result.first()
-            
+            )).first()
             if row:
                 estudiante, perfil = row
                 estudiantes_lista.append(EstudianteEnGrupo(
                     estudiante_id=estudiante.id,
                     codigo_estudiante=estudiante.codigo_estudiante,
                     nombre_completo=estudiante.nombre_completo,
-                    nivel_actual=perfil.nivel_actual,
-                    precision_ultimos_15=float(perfil.precision_ultimos_15 or 0.0) * 100,
+                    nivel_actual=perfil.nivel_actual if perfil else 1,
+                    precision_ultimos_15=float(perfil.precision_ultimos_15 or 0.0) * 100 if perfil else 0.0,
                     fecha_ingreso=rel.fecha_ingreso,
-                    activo=rel.activo
+                    activo=rel.activo,
                 ))
-        
+
+        al = grupo.anio_lectivo
         return GrupoDetalle(
             id=grupo.id,
             nombre=grupo.nombre,
-            codigo_grupo=grupo.codigo_grupo,
             activo=grupo.activo,
-            profesor_id=grupo.profesor_id,
+            anio_lectivo_id=al.id,
+            salon_nombre=al.salon.nombre,
+            anio=al.anio,
+            cerrado=al.estado != ANIO_ACTIVO,
             cantidad_estudiantes=len(estudiantes_lista),
-            estudiantes=estudiantes_lista
+            estudiantes=estudiantes_lista,
         )
-    
+
     async def agregar_estudiante(self, grupo_id: int, estudiante_id: int, profesor_id: int):
-        """Agrega estudiante a grupo. Crea PerfilEstudiante si no tiene."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
-            raise ValueError("Grupo no encontrado")
-
-        # El estudiante debe pertenecer a la organización del profesor
-        org_estudiante = (await self.db.execute(
-            select(Estudiante.organizacion_id).where(Estudiante.id == estudiante_id)
-        )).first()
-        org_profesor = (await self.db.execute(
-            select(Profesor.organizacion_id).where(Profesor.id == profesor_id)
-        )).scalar_one_or_none()
-        if org_estudiante is None or org_profesor is None or org_estudiante[0] != org_profesor:
-            raise ValueError("Estudiante no encontrado en tu organización")
-
-        await self.repo.agregar_estudiante_a_grupo(grupo_id, estudiante_id)
-        await self.repo.ensure_perfil_estudiante(estudiante_id)
+        """Agrega al grupo un estudiante del mismo salón."""
+        await self.school.agregar_a_grupo(grupo_id, estudiante_id, profesor_id)
         await self.db.commit()
-    
-    async def remover_estudiante(self, grupo_id: int, estudiante_id: int, profesor_id: int):
-        """Remueve estudiante de grupo."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
-            raise ValueError("Grupo no encontrado")
 
-        await self.repo.remover_estudiante_de_grupo(grupo_id, estudiante_id)
+    async def remover_estudiante(self, grupo_id: int, estudiante_id: int, profesor_id: int):
+        """Quita al estudiante del grupo (sigue en el salón)."""
+        await self.school.quitar_de_grupo(grupo_id, estudiante_id, profesor_id)
         await self.db.commit()
 
     async def eliminar_grupo(self, grupo_id: int, profesor_id: int):
-        """Elimina un grupo. Solo el profesor dueño puede eliminarlo."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
-            raise ValueError("Grupo no encontrado o no tienes permiso para eliminarlo")
-        await self.repo.eliminar_grupo(grupo)
+        """Desactiva el grupo. Solo su profesor, y solo con el año lectivo activo."""
+        await self.school.eliminar_grupo(grupo_id, profesor_id)
         await self.db.commit()
 
     # ==================== CONFIGURACIÓN ====================
-    
+
     async def crear_configuracion(
-        self, 
-        profesor_id: int, 
+        self,
+        profesor_id: int,
         data: ConfiguracionPracticaCreate
     ) -> ConfiguracionPracticaResponse:
-        """Crea configuración de práctica."""
-        grupo = await self.repo.get_grupo_by_id(data.grupo_id, profesor_id)
-        if not grupo:
-            raise ValueError("Grupo no encontrado")
-        
+        """Aplica una configuración de práctica (decimales) al salón."""
+        al = await self.school.anio_del_profesor(data.anio_lectivo_id, profesor_id, para_escribir=True)
+
         config = ConfiguracionPractica(
-            grupo_id=data.grupo_id,
+            anio_lectivo_id=al.id,
             aplicada_por_profesor_id=profesor_id,
             operaciones_permitidas=data.operaciones_permitidas,
             niveles_permitidos=data.niveles_permitidos,
@@ -193,170 +179,78 @@ class TeacherService:
             decimales_maximos=data.decimales_maximos,
             pistas_habilitadas=data.pistas_habilitadas
         )
-        
+
         config = await self.repo.create_configuracion(config)
         await self.db.commit()
-        
+
         return ConfiguracionPracticaResponse.model_validate(config)
-    
-    async def get_configuracion_activa(self, grupo_id: int, profesor_id: int) -> Optional[ConfiguracionPracticaResponse]:
-        """Obtiene configuración activa."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
-            return None
-        
-        config = await self.repo.get_configuracion_activa(grupo_id)
+
+    async def get_configuracion_activa(
+        self, anio_lectivo_id: int, profesor_id: int
+    ) -> Optional[ConfiguracionPracticaResponse]:
+        """Configuración activa del salón (también la de un año ya cerrado, de solo lectura)."""
+        al = await self.school.anio_del_profesor(anio_lectivo_id, profesor_id)
+        config = await self.repo.get_configuracion_activa(al.id)
         if not config:
             return None
-        
         return ConfiguracionPracticaResponse.model_validate(config)
-    
+
     # ==================== DESAFÍOS ====================
 
-    async def _calcular_progreso_desafio(
-        self, desafio: DesafioGrupal, grupo_id: int
-    ) -> int:
-        """Calcula el progreso real de un desafío para un grupo desde SesionPractica.
+    async def _calcular_progreso_desafio(self, desafio: DesafioGrupal, grupo_id: Optional[int]) -> int:
+        """Progreso real del equipo (grupo o salón completo) en el desafío."""
+        miembros = await miembros_equipo(self.db, desafio, grupo_id)
+        return await calcular_progreso(self.db, desafio, miembros)
 
-        Ventana de tiempo: [fecha_creacion, fecha_limite] (si fecha_limite existe).
+    async def _detalle_desafio(self, desafio: DesafioGrupal, ahora: datetime) -> DesafioGrupalDetalle:
+        """Detalle con el progreso de cada equipo.
 
-        Tipos soportados (de más fácil a más difícil):
-        - problemas_resueltos    → SUM(problemas_correctos)
-        - sesiones_completadas   → COUNT(sesiones)
-        - practicas_sin_errores  → COUNT(sesiones donde incorrectos <= parametro_adicional)
-        - problemas_rapidos      → SUM(correctos) de sesiones donde velocidad_promedio <= parametro_adicional seg
-        - practicas_rapidas      → COUNT(sesiones donde tiempo_total <= parametro_adicional * 60 seg)
+        Estados mostrados:
+        - completado=True → todos los equipos alcanzaron el objetivo
+        - vencido=True → la fecha límite pasó sin completarse
+        - estado="no_completado" → se cerró con el año lectivo sin terminar
         """
-        # Estudiantes activos en el grupo
-        result = await self.db.execute(
-            select(EstudianteGrupo.estudiante_id)
-            .where(and_(
-                EstudianteGrupo.grupo_id == grupo_id,
-                EstudianteGrupo.activo == True,
-            ))
-        )
-        estudiantes_ids = [row[0] for row in result.all()]
+        al = (await self.db.execute(
+            select(AnioLectivo).where(AnioLectivo.id == desafio.anio_lectivo_id)
+        )).scalar_one()
+        await self.db.refresh(al, attribute_names=["salon"])
+        relaciones = (await self.db.execute(
+            select(GrupoDesafio).where(GrupoDesafio.desafio_id == desafio.id).order_by(GrupoDesafio.id)
+        )).scalars().all()
 
-        if not estudiantes_ids:
-            return 0
-
-        # Condiciones base: ventana de tiempo del desafío
-        condiciones = [
-            SesionPractica.estudiante_id.in_(estudiantes_ids),
-            SesionPractica.estado == EstadoSesion.COMPLETADA,
-            SesionPractica.fecha_fin >= desafio.fecha_creacion,
-        ]
-        # Si tiene fecha límite, solo cuentan sesiones ANTES del vencimiento
-        if desafio.fecha_limite:
-            condiciones.append(SesionPractica.fecha_fin <= desafio.fecha_limite)
-
-        base_where = and_(*condiciones)
-
-        # ── 1. Resolver X problemas ──────────────────────────────────────────
-        if desafio.tipo == "problemas_resueltos":
-            result = await self.db.execute(
-                select(func.coalesce(func.sum(SesionPractica.problemas_correctos), 0))
-                .where(and_(base_where, SesionPractica.problemas_correctos.isnot(None)))
-            )
-            return int(result.scalar() or 0)
-
-        # ── 2. Resolver X prácticas ──────────────────────────────────────────
-        elif desafio.tipo == "sesiones_completadas":
-            result = await self.db.execute(
-                select(func.count(SesionPractica.id)).where(base_where)
-            )
-            return int(result.scalar() or 0)
-
-        # ── 3. Resolver X prácticas con máximo Y errores ─────────────────────
-        elif desafio.tipo == "practicas_sin_errores":
-            max_errores = desafio.parametro_adicional or 0
-            result = await self.db.execute(
-                select(func.count(SesionPractica.id))
-                .where(and_(
-                    base_where,
-                    SesionPractica.problemas_incorrectos.isnot(None),
-                    SesionPractica.problemas_incorrectos <= max_errores,
-                ))
-            )
-            return int(result.scalar() or 0)
-
-        # ── 4. Resolver X problemas en Y o menos segundos/problema ───────────
-        elif desafio.tipo == "problemas_rapidos":
-            max_seg = desafio.parametro_adicional or 999
-            result = await self.db.execute(
-                select(func.coalesce(func.sum(SesionPractica.problemas_correctos), 0))
-                .where(and_(
-                    base_where,
-                    SesionPractica.velocidad_promedio.isnot(None),
-                    SesionPractica.velocidad_promedio <= max_seg,
-                    SesionPractica.problemas_correctos.isnot(None),
-                ))
-            )
-            return int(result.scalar() or 0)
-
-        # ── 5. Resolver X prácticas en Y o menos minutos ─────────────────────
-        elif desafio.tipo == "practicas_rapidas":
-            max_min = desafio.parametro_adicional or 999
-            max_seg_total = max_min * 60
-            result = await self.db.execute(
-                select(func.count(SesionPractica.id))
-                .where(and_(
-                    base_where,
-                    SesionPractica.tiempo_total_segundos.isnot(None),
-                    SesionPractica.tiempo_total_segundos <= max_seg_total,
-                ))
-            )
-            return int(result.scalar() or 0)
-
-        # Tipo desconocido: devolver 0
-        return 0
-
-    async def crear_desafio_grupal(
-        self, 
-        profesor_id: int, 
-        data: DesafioGrupalCreate
-    ) -> DesafioGrupalDetalle:
-        """Crea desafío grupal."""
-        desafio = DesafioGrupal(
-            profesor_id=profesor_id,
-            nombre=data.nombre,
-            descripcion=data.descripcion,
-            tipo=data.tipo,
-            objetivo_cantidad=data.objetivo_cantidad,
-            parametro_adicional=data.parametro_adicional,
-            recompensa_texto=data.recompensa_texto,
-            recompensa_puntos=data.recompensa_puntos,
-            fecha_limite=data.fecha_limite
-        )
-        
-        desafio = await self.repo.create_desafio_grupal(desafio)
-        await self.repo.asignar_desafio_a_grupos(desafio.id, data.grupos_ids)
-        await self.db.commit()
-        
-        # Obtener progreso de grupos
-        result = await self.db.execute(
-            select(GrupoDesafio)
-            .where(GrupoDesafio.desafio_id == desafio.id)
-        )
-        relaciones = result.scalars().all()
-        
         progreso_grupos = []
+        todos_completados = len(relaciones) > 0
         for rel in relaciones:
-            grupo = await self.repo.get_grupo_by_id(rel.grupo_id, profesor_id)
-            if grupo:
-                progreso_real = await self._calcular_progreso_desafio(desafio, rel.grupo_id)
-                progreso_grupos.append(ProgresoGrupoDesafio(
-                    grupo_id=grupo.id,
-                    nombre_grupo=grupo.nombre,
-                    progreso_actual=progreso_real,
-                    objetivo_cantidad=desafio.objetivo_cantidad,
-                    porcentaje=min(round((progreso_real / desafio.objetivo_cantidad) * 100, 1), 100.0),
-                    completado=progreso_real >= desafio.objetivo_cantidad,
-                ))
+            if rel.grupo_id is None:
+                nombre = NOMBRE_EQUIPO_SALON
+            else:
+                grupo = (await self.db.execute(select(Grupo).where(Grupo.id == rel.grupo_id))).scalar_one()
+                nombre = grupo.nombre
+            progreso_real = await self._calcular_progreso_desafio(desafio, rel.grupo_id)
+            completado_equipo = progreso_real >= desafio.objetivo_cantidad
+            if not completado_equipo:
+                todos_completados = False
+            progreso_grupos.append(ProgresoGrupoDesafio(
+                grupo_id=rel.grupo_id,
+                nombre_grupo=nombre,
+                progreso_actual=progreso_real,
+                objetivo_cantidad=desafio.objetivo_cantidad,
+                porcentaje=min(round((progreso_real / desafio.objetivo_cantidad) * 100, 1), 100.0),
+                completado=completado_equipo,
+            ))
 
+        vencido = (
+            desafio.fecha_limite is not None
+            and desafio.fecha_limite < ahora
+            and not todos_completados
+        )
         return DesafioGrupalDetalle(
             id=desafio.id,
             profesor_id=desafio.profesor_id,
+            anio_lectivo_id=al.id,
+            salon_nombre=al.salon.nombre,
+            anio=al.anio,
+            estado=desafio.estado,
             nombre=desafio.nombre,
             descripcion=desafio.descripcion,
             tipo=desafio.tipo,
@@ -366,100 +260,79 @@ class TeacherService:
             recompensa_puntos=desafio.recompensa_puntos,
             fecha_creacion=desafio.fecha_creacion,
             fecha_limite=desafio.fecha_limite,
-            completado=desafio.completado,
-            vencido=False,  # Recién creado, nunca vencido
+            completado=todos_completados,
+            vencido=vencido,
             eliminado=desafio.eliminado,
             progreso_grupos=progreso_grupos,
         )
-    
-    async def get_desafios(self, profesor_id: int) -> List[DesafioGrupalDetalle]:
-        """Lista desafíos del profesor con progreso calculado en tiempo real.
 
-        Estados posibles:
-        - completado=True, vencido=False → Todos los grupos alcanzaron el objetivo
-        - completado=False, vencido=True → Fecha límite expiró sin completarse
-        - completado=False, vencido=False → Activo, aún en curso
-        """
+    async def crear_desafio_grupal(
+        self,
+        profesor_id: int,
+        data: DesafioGrupalCreate
+    ) -> DesafioGrupalDetalle:
+        """Crea un desafío dentro de un salón: para algunos de sus grupos o para el salón completo."""
+        al = await self.school.anio_del_profesor(data.anio_lectivo_id, profesor_id, para_escribir=True)
+
+        grupos_ids = sorted(set(data.grupos_ids))
+        if grupos_ids:
+            validos = set((await self.db.execute(
+                select(Grupo.id).where(and_(
+                    Grupo.id.in_(grupos_ids),
+                    Grupo.anio_lectivo_id == al.id,
+                    Grupo.activo == True,  # noqa: E712
+                ))
+            )).scalars().all())
+            if validos != set(grupos_ids):
+                raise ErrorSalon("Los grupos del desafío deben ser del mismo salón.")
+        equipos: List[Optional[int]] = list(grupos_ids) if grupos_ids else [None]
+
+        desafio = DesafioGrupal(
+            profesor_id=profesor_id,
+            anio_lectivo_id=al.id,
+            nombre=data.nombre,
+            descripcion=data.descripcion,
+            tipo=data.tipo,
+            objetivo_cantidad=data.objetivo_cantidad,
+            parametro_adicional=data.parametro_adicional,
+            recompensa_texto=data.recompensa_texto,
+            recompensa_puntos=data.recompensa_puntos,
+            fecha_limite=data.fecha_limite
+        )
+
+        desafio = await self.repo.create_desafio_grupal(desafio)
+        await self.repo.asignar_desafio_a_grupos(desafio.id, equipos)
+        await self.db.commit()
+
+        return await self._detalle_desafio(desafio, datetime.utcnow())
+
+    async def get_desafios(self, profesor_id: int) -> List[DesafioGrupalDetalle]:
+        """Lista desafíos del profesor con progreso calculado en tiempo real."""
         desafios = await self.repo.get_desafios_profesor(profesor_id)
         ahora = datetime.utcnow()
+        return [await self._detalle_desafio(d, ahora) for d in desafios]
 
-        resultado = []
-        for desafio in desafios:
-            result = await self.db.execute(
-                select(GrupoDesafio)
-                .where(GrupoDesafio.desafio_id == desafio.id)
-            )
-            relaciones = result.scalars().all()
-
-            progreso_grupos = []
-            todos_completados = len(relaciones) > 0  # True hasta que alguno falle
-
-            for rel in relaciones:
-                grupo = await self.repo.get_grupo_by_id(rel.grupo_id, profesor_id)
-                if grupo:
-                    progreso_real = await self._calcular_progreso_desafio(desafio, rel.grupo_id)
-                    completado_grupo = progreso_real >= desafio.objetivo_cantidad
-
-                    if not completado_grupo:
-                        todos_completados = False
-
-                    porcentaje = min(
-                        round((progreso_real / desafio.objetivo_cantidad) * 100, 1),
-                        100.0,
-                    )
-                    progreso_grupos.append(ProgresoGrupoDesafio(
-                        grupo_id=grupo.id,
-                        nombre_grupo=grupo.nombre,
-                        progreso_actual=progreso_real,
-                        objetivo_cantidad=desafio.objetivo_cantidad,
-                        porcentaje=porcentaje,
-                        completado=completado_grupo,
-                    ))
-
-            # Un desafío está vencido si su fecha límite pasó y NO fue completado
-            vencido = (
-                desafio.fecha_limite is not None
-                and desafio.fecha_limite < ahora
-                and not todos_completados
-            )
-
-            resultado.append(DesafioGrupalDetalle(
-                id=desafio.id,
-                profesor_id=desafio.profesor_id,
-                nombre=desafio.nombre,
-                descripcion=desafio.descripcion,
-                tipo=desafio.tipo,
-                objetivo_cantidad=desafio.objetivo_cantidad,
-                parametro_adicional=desafio.parametro_adicional,
-                recompensa_texto=desafio.recompensa_texto,
-                recompensa_puntos=desafio.recompensa_puntos,
-                fecha_creacion=desafio.fecha_creacion,
-                fecha_limite=desafio.fecha_limite,
-                completado=todos_completados,
-                vencido=vencido,
-                eliminado=desafio.eliminado,
-                progreso_grupos=progreso_grupos,
-            ))
-
-        return resultado
-    
     async def eliminar_desafio(self, desafio_id: int, profesor_id: int):
-        """Elimina desafío."""
+        """Elimina (soft delete) un desafío de un año lectivo activo."""
         desafio = await self.repo.get_desafio_by_id(desafio_id, profesor_id)
         if not desafio:
             raise ValueError("Desafío no encontrado")
-        
+        al = await self.school.anio_del_profesor(desafio.anio_lectivo_id, profesor_id)
+        if al.estado != ANIO_ACTIVO:
+            raise AnioCerrado()
+
         await self.repo.eliminar_desafio(desafio)
         await self.db.commit()
-    
+
     # ==================== MONITOREO ====================
-    
+
     async def get_estadisticas_grupo(self, grupo_id: int, profesor_id: int) -> Optional[EstadisticasGrupo]:
         """Obtiene estadísticas del grupo."""
-        grupo = await self.repo.get_grupo_by_id(grupo_id, profesor_id)
-        if not grupo:
+        try:
+            grupo = await self.school.grupo_del_profesor(grupo_id, profesor_id)
+        except NoEncontrado:
             return None
-        
+
         estudiantes_ids = [e.estudiante_id for e in grupo.estudiantes if e.activo]
         if not estudiantes_ids:
             return EstadisticasGrupo(
@@ -573,21 +446,8 @@ class TeacherService:
         - PROMOCION_RAPIDA: ≥ 2 subidas de nivel en las últimas 3 sesiones completadas
         - POSIBLE_TRAMPA: alertas guardadas al completar cada práctica (ver PracticeService)
         """
-        grupos = await self.repo.get_grupos_profesor(profesor_id)
-        grupos_ids = [g.id for g in grupos]
-
-        if not grupos_ids:
-            return []
-
-        # IDs únicos de estudiantes activos en los grupos del profesor
-        result = await self.db.execute(
-            select(EstudianteGrupo.estudiante_id)
-            .where(and_(
-                EstudianteGrupo.grupo_id.in_(grupos_ids),
-                EstudianteGrupo.activo == True
-            ))
-        )
-        estudiantes_ids = list(set(row[0] for row in result.all()))
+        # Estudiantes de los salones activos del profesor
+        estudiantes_ids = list(set(await self.school.ids_estudiantes_del_profesor(profesor_id)))
 
         if not estudiantes_ids:
             return []

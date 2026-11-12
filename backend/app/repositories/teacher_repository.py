@@ -7,9 +7,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.adaptive import PerfilEstudiante
 from app.models.challenge import DesafioGrupal, GrupoDesafio
-from app.models.group import EstudianteGrupo, Grupo
 from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento
 
@@ -20,131 +18,36 @@ class TeacherRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    # ==================== GRUPOS ====================
-    
-    async def get_grupos_profesor(self, profesor_id: int) -> List[Grupo]:
-        """Obtiene grupos del profesor."""
-        result = await self.db.execute(
-            select(Grupo)
-            .where(Grupo.profesor_id == profesor_id)
-            .options(selectinload(Grupo.estudiantes))
-        )
-        return list(result.scalars().all())
-    
-    async def get_grupo_by_id(self, grupo_id: int, profesor_id: int) -> Optional[Grupo]:
-        """Obtiene grupo por ID verificando profesor."""
-        result = await self.db.execute(
-            select(Grupo)
-            .where(and_(Grupo.id == grupo_id, Grupo.profesor_id == profesor_id))
-            .options(selectinload(Grupo.estudiantes))
-        )
-        return result.scalar_one_or_none()
-    
-    async def create_grupo(self, profesor_id: int, nombre: str, codigo_grupo: str) -> Grupo:
-        """Crea un grupo."""
-        grupo = Grupo(
-            profesor_id=profesor_id,
-            nombre=nombre,
-            codigo_grupo=codigo_grupo
-        )
-        self.db.add(grupo)
-        await self.db.flush()
-        return grupo
-    
-    async def eliminar_grupo(self, grupo: Grupo):
-        """Elimina un grupo y todas sus relaciones de estudiantes."""
-        # Primero eliminar relaciones estudiante-grupo
-        from sqlalchemy import delete as sa_delete
-        await self.db.execute(
-            sa_delete(EstudianteGrupo).where(EstudianteGrupo.grupo_id == grupo.id)
-        )
-        await self.db.delete(grupo)
-        await self.db.flush()
-    
-    async def agregar_estudiante_a_grupo(self, grupo_id: int, estudiante_id: int) -> EstudianteGrupo:
-        """Agrega estudiante a grupo. Si ya existía (soft-deleted), lo reactiva."""
-        result = await self.db.execute(
-            select(EstudianteGrupo).where(and_(
-                EstudianteGrupo.grupo_id == grupo_id,
-                EstudianteGrupo.estudiante_id == estudiante_id
-            ))
-        )
-        relacion = result.scalar_one_or_none()
-        if relacion:
-            relacion.activo = True
-        else:
-            relacion = EstudianteGrupo(
-                estudiante_id=estudiante_id,
-                grupo_id=grupo_id
-            )
-            self.db.add(relacion)
-        await self.db.flush()
-        return relacion
-    
-    async def ensure_perfil_estudiante(self, estudiante_id: int):
-        """Crea PerfilEstudiante si el estudiante no tiene uno todavía."""
-        result = await self.db.execute(
-            select(PerfilEstudiante).where(PerfilEstudiante.estudiante_id == estudiante_id)
-        )
-        if not result.scalar_one_or_none():
-            perfil = PerfilEstudiante(estudiante_id=estudiante_id)
-            self.db.add(perfil)
-            await self.db.flush()
+    # Los grupos, salones y matrículas viven en app.services.school_service.
 
-    async def remover_estudiante_de_grupo(self, grupo_id: int, estudiante_id: int):
-        """Remueve estudiante de grupo."""
-        await self.db.execute(
-            select(EstudianteGrupo)
-            .where(and_(
-                EstudianteGrupo.grupo_id == grupo_id,
-                EstudianteGrupo.estudiante_id == estudiante_id
-            ))
-        )
-        # Soft delete
-        result = await self.db.execute(
-            select(EstudianteGrupo).where(and_(
-                EstudianteGrupo.grupo_id == grupo_id,
-                EstudianteGrupo.estudiante_id == estudiante_id
-            ))
-        )
-        relacion = result.scalar_one_or_none()
-        if relacion:
-            relacion.activo = False
-            await self.db.flush()
-    
     # ==================== CONFIGURACIÓN ====================
     
     async def create_configuracion(self, config: ConfiguracionPractica) -> ConfiguracionPractica:
-        """Crea configuración de práctica."""
-        # Desactivar configs anteriores
-        await self.db.execute(
-            select(ConfiguracionPractica)
-            .where(ConfiguracionPractica.grupo_id == config.grupo_id)
-        )
+        """Crea la configuración del año lectivo y desactiva las anteriores."""
         result = await self.db.execute(
             select(ConfiguracionPractica)
-            .where(ConfiguracionPractica.grupo_id == config.grupo_id)
+            .where(ConfiguracionPractica.anio_lectivo_id == config.anio_lectivo_id)
         )
-        configs_anteriores = result.scalars().all()
-        for c in configs_anteriores:
-            c.activa = False
-        
+        for anterior in result.scalars().all():
+            anterior.activa = False
+
         self.db.add(config)
         await self.db.flush()
         return config
-    
-    async def get_configuracion_activa(self, grupo_id: int) -> Optional[ConfiguracionPractica]:
-        """Obtiene configuración activa de un grupo."""
+
+    async def get_configuracion_activa(self, anio_lectivo_id: int) -> Optional[ConfiguracionPractica]:
+        """Configuración activa más reciente del año lectivo."""
         result = await self.db.execute(
             select(ConfiguracionPractica)
             .where(and_(
-                ConfiguracionPractica.grupo_id == grupo_id,
-                ConfiguracionPractica.activa == True
+                ConfiguracionPractica.anio_lectivo_id == anio_lectivo_id,
+                ConfiguracionPractica.activa == True  # noqa: E712
             ))
-            .order_by(ConfiguracionPractica.fecha_aplicacion.desc())
+            .order_by(ConfiguracionPractica.fecha_aplicacion.desc(), ConfiguracionPractica.id.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
-    
+
     # ==================== DESAFÍOS ====================
     
     async def create_desafio_grupal(self, desafio: DesafioGrupal) -> DesafioGrupal:
@@ -153,8 +56,8 @@ class TeacherRepository:
         await self.db.flush()
         return desafio
     
-    async def asignar_desafio_a_grupos(self, desafio_id: int, grupos_ids: List[int]):
-        """Asigna desafío a grupos."""
+    async def asignar_desafio_a_grupos(self, desafio_id: int, grupos_ids: List[Optional[int]]):
+        """Crea los equipos del desafío (grupo_id None = el salón completo)."""
         for grupo_id in grupos_ids:
             relacion = GrupoDesafio(
                 desafio_id=desafio_id,

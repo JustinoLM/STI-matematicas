@@ -12,13 +12,9 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (${{ matrix.motor }})
+    name: Backend (PostgreSQL)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        motor: [sqlite, postgres]
 
     services:
       postgres:
@@ -40,7 +36,6 @@ jobs:
         working-directory: backend
 
     env:
-      TEST_DB_ENGINE: ${{ matrix.motor }}
       TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sti_test
       # Valores solo para pruebas: no hay .env en CI. conftest.py sobrescribe DATABASE_URL.
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sti_test

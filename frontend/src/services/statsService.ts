@@ -1,19 +1,23 @@
 /**
- * Servicio de estadísticas de grupo para el panel analítico del profesor.
+ * Servicio de estadísticas para el panel analítico del profesor: de un salón completo
+ * (año lectivo) o de un grupo dentro del salón.
  */
 
 import apiClient, { getErrorMessage, TIMEOUT_LLM_R1_MS } from './api';
 import type { GrupoStatsResponse, AnalisisIAResponse } from '@/types';
 
+export type AmbitoStats = 'salon' | 'grupo';
+
+const ruta = (ambito: AmbitoStats, id: number) =>
+  ambito === 'salon' ? `/stats/salones/${id}` : `/stats/groups/${id}`;
+
 export const statsService = {
   /**
-   * Obtiene estadísticas completas de un grupo (perfiles ML, alertas, niveles, actividad).
+   * Obtiene estadísticas completas (perfiles ML, alertas, niveles, actividad).
    */
-  async getGrupoStats(grupoId: number): Promise<GrupoStatsResponse> {
+  async getStats(ambito: AmbitoStats, id: number): Promise<GrupoStatsResponse> {
     try {
-      const response = await apiClient.get<GrupoStatsResponse>(
-        `/stats/groups/${grupoId}`
-      );
+      const response = await apiClient.get<GrupoStatsResponse>(ruta(ambito, id));
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -21,13 +25,13 @@ export const statsService = {
   },
 
   /**
-   * Genera análisis pedagógico del grupo bajo demanda con DeepSeek.
+   * Genera análisis pedagógico bajo demanda con DeepSeek.
    * Sin caché — cada llamada genera un análisis fresco.
    */
-  async analizarConIA(grupoId: number): Promise<AnalisisIAResponse> {
+  async analizarConIA(ambito: AmbitoStats, id: number): Promise<AnalisisIAResponse> {
     try {
       const response = await apiClient.post<AnalisisIAResponse>(
-        `/stats/groups/${grupoId}/ai-analysis`,
+        `${ruta(ambito, id)}/ai-analysis`,
         undefined,
         { timeout: TIMEOUT_LLM_R1_MS }
       );

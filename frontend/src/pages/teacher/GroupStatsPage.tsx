@@ -1,7 +1,7 @@
 /**
- * Panel de estadísticas analíticas de grupo para el profesor.
+ * Panel de estadísticas analíticas de un salón completo o de un grupo dentro del salón.
  *
- * Acceso: /teacher/stats (selector de grupo integrado)
+ * Acceso: /teacher/stats (selector de salón o grupo integrado)
  * Muestra perfiles ML, alertas, niveles por operación,
  * actividad y análisis IA bajo demanda con exportación PDF.
  */
@@ -47,11 +47,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { teacherService } from '@/services/teacherService';
-import { statsService } from '@/services/statsService';
+import { statsService, AmbitoStats } from '@/services/statsService';
 import type {
   GrupoStatsResponse,
   EstudianteStatsItem,
   Grupo,
+  SalonResumen,
 } from '@/types';
 
 // ── Registro de módulos de Chart.js ─────────────────────────────────────────
@@ -283,7 +284,9 @@ function EstudianteRow({ est }: { est: EstudianteStatsItem }) {
 // ── Componente principal ─────────────────────────────────────────────────────
 
 export default function GroupStatsPage() {
-  const [grupoSeleccionado, setGrupoSeleccionado] = useState<number | null>(null);
+  // Selección: un salón completo (id del año lectivo) o un grupo del salón
+  const [seleccion, setSeleccion] = useState<{ ambito: AmbitoStats; id: number } | null>(null);
+  const grupoSeleccionado = seleccion?.id ?? null;
   const [analisisTexto, setAnalisisTexto] = useState<string | null>(null);
   const [exportModal, setExportModal] = useState(false);
   const [exportSections, setExportSections] = useState({
@@ -302,32 +305,36 @@ export default function GroupStatsPage() {
   const [filtroPerfil, setFiltroPerfil] = useState<string | null>(null);
   const [filtroAlerta, setFiltroAlerta] = useState<'todos' | 'con' | 'sin'>('todos');
 
-  /** Resetea todos los filtros y vuelve al selector de grupo */
+  /** Resetea todos los filtros y vuelve al selector */
   const handleCambiarGrupo = () => {
-    setGrupoSeleccionado(null);
+    setSeleccion(null);
     setFiltroBusqueda('');
     setFiltroNivel(null);
     setFiltroPerfil(null);
     setFiltroAlerta('todos');
   };
 
-  // Grupos del profesor
+  // Salones y grupos del profesor (los de años cerrados también: el historial es consultable)
+  const { data: salones } = useQuery<SalonResumen[]>({
+    queryKey: ['teacher', 'salones'],
+    queryFn: () => teacherService.getSalones(),
+  });
   const { data: grupos } = useQuery<Grupo[]>({
     queryKey: ['teacher', 'groups'],
     queryFn: () => teacherService.getGrupos(),
   });
 
-  // Estadísticas del grupo seleccionado
+  // Estadísticas de la selección
   const { data: stats, isLoading: loadingStats } = useQuery<GrupoStatsResponse>({
-    queryKey: ['stats', 'grupo', grupoSeleccionado],
-    queryFn: () => statsService.getGrupoStats(grupoSeleccionado!),
-    enabled: !!grupoSeleccionado,
+    queryKey: ['stats', seleccion?.ambito, grupoSeleccionado],
+    queryFn: () => statsService.getStats(seleccion!.ambito, seleccion!.id),
+    enabled: !!seleccion,
     staleTime: 2 * 60 * 1000, // 2 minutos
   });
 
   // Análisis IA (bajo demanda)
   const analizarMutation = useMutation({
-    mutationFn: () => statsService.analizarConIA(grupoSeleccionado!),
+    mutationFn: () => statsService.analizarConIA(seleccion!.ambito, seleccion!.id),
     onSuccess: (data) => setAnalisisTexto(data.texto),
   });
 
@@ -337,50 +344,72 @@ export default function GroupStatsPage() {
     setExportModal(false);
     // Generamos análisis si fue seleccionado y aún no existe
     if (exportSections.analisis && !analisisTexto) {
-      const res = await statsService.analizarConIA(grupoSeleccionado!);
+      const res = await statsService.analizarConIA(seleccion!.ambito, seleccion!.id);
       setAnalisisTexto(res.texto);
     }
     setTimeout(() => window.print(), 300);
   };
 
-  // ── Sin grupo seleccionado: selector ────────────────────────────────────────
-  if (!grupoSeleccionado) {
+  // ── Sin selección: selector de salón o grupo ───────────────────────────────
+  if (!seleccion) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Brain className="h-6 w-6 text-indigo-500" />
-            Estadísticas de Grupo
+            Estadísticas
           </h1>
           <p className="text-muted-foreground mt-1">
-            Selecciona un grupo para ver el análisis detallado con perfiles ML y métricas.
+            Elige un salón completo o uno de sus grupos para ver el análisis con perfiles ML y métricas.
           </p>
         </div>
 
-        {!grupos ? (
-          <p className="text-muted-foreground">Cargando grupos...</p>
-        ) : grupos.length === 0 ? (
-          <p className="text-muted-foreground">No tienes grupos creados aún.</p>
+        {!salones ? (
+          <p className="text-muted-foreground">Cargando salones...</p>
+        ) : salones.length === 0 ? (
+          <p className="text-muted-foreground">No tienes salones aún.</p>
         ) : (
-          <div className="grid gap-3">
-            {grupos.map((g) => (
-              <Card
-                key={g.id}
-                className="cursor-pointer hover:shadow-md transition-shadow border hover:border-indigo-300"
-                onClick={() => setGrupoSeleccionado(g.id)}
-              >
-                <CardContent className="flex items-center justify-between py-4 px-5">
-                  <div className="flex items-center gap-3">
-                    <Users className="h-5 w-5 text-indigo-400" />
-                    <div>
-                      <p className="font-semibold">{g.nombre}</p>
-                      <p className="text-xs text-muted-foreground">{g.codigo_grupo}</p>
-                    </div>
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid gap-4">
+            {salones.map((s) => {
+              const gruposDelSalon = (grupos ?? []).filter((g) => g.anio_lectivo_id === s.anio_lectivo_id);
+              return (
+                <div key={s.anio_lectivo_id} className="space-y-2">
+                  <Card
+                    className="cursor-pointer hover:shadow-md transition-shadow border hover:border-indigo-300"
+                    onClick={() => setSeleccion({ ambito: 'salon', id: s.anio_lectivo_id })}
+                  >
+                    <CardContent className="flex items-center justify-between py-4 px-5">
+                      <div className="flex items-center gap-3">
+                        <Users className="h-5 w-5 text-indigo-400" />
+                        <div>
+                          <p className="font-semibold">Salón {s.nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {s.grado}.º grado · {s.anio} · {s.cantidad_estudiantes} estudiantes
+                            {s.cerrado ? ' · cerrado' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                  {gruposDelSalon.map((g) => (
+                    <Card
+                      key={g.id}
+                      className="ml-6 cursor-pointer hover:shadow-md transition-shadow border hover:border-indigo-300"
+                      onClick={() => setSeleccion({ ambito: 'grupo', id: g.id })}
+                    >
+                      <CardContent className="flex items-center justify-between py-3 px-5">
+                        <div>
+                          <p className="font-medium">{g.nombre}</p>
+                          <p className="text-xs text-muted-foreground">Grupo · {g.cantidad_estudiantes} estudiantes</p>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -395,7 +424,7 @@ export default function GroupStatsPage() {
           className="text-sm text-muted-foreground hover:underline mb-4 flex items-center gap-1"
           onClick={handleCambiarGrupo}
         >
-          ← Cambiar grupo
+          ← Cambiar salón o grupo
         </button>
         <div className="flex items-center gap-2 text-muted-foreground mt-8 justify-center">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
@@ -512,7 +541,7 @@ export default function GroupStatsPage() {
             className="text-xs text-muted-foreground hover:underline mb-1 flex items-center gap-1"
             onClick={handleCambiarGrupo}
           >
-            ← Cambiar grupo
+            ← Cambiar salón o grupo
           </button>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Brain className="h-5 w-5 text-indigo-500" />

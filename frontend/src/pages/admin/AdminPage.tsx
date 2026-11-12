@@ -5,7 +5,7 @@
  * Permite crear estudiantes, profesores y organizaciones sin usar la terminal.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,8 @@ import {
   XCircle,
   ClipboardCheck,
   Pencil,
+  School,
+  CalendarDays,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getErrorMessage } from '@/services/api';
@@ -145,7 +147,7 @@ function FormEstudiante({ organizaciones }: {
     codigo_estudiante: '', nombre_completo: '',
     genero: 'masculino' as 'masculino' | 'femenino',
     password: '', organizacion_id: '',
-    grado_academico: '', edad: '',
+    edad: '',
   };
   const [form, setForm] = useState(emptyForm);
   const [resultado, setResultado] = useState<UserCreated | null>(null);
@@ -173,7 +175,6 @@ function FormEstudiante({ organizaciones }: {
       genero: form.genero,
       password: form.password,
       organizacion_id: form.organizacion_id ? Number(form.organizacion_id) : undefined,
-      grado_academico: form.grado_academico.trim() || undefined,
       edad: form.edad ? Number(form.edad) : undefined,
     });
   };
@@ -248,16 +249,6 @@ function FormEstudiante({ organizaciones }: {
           {organizaciones.length === 0 && (
             <p className="text-xs text-amber-600">Crea una organización primero en la pestaña "Orgs".</p>
           )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="grado-est">Grado académico</Label>
-          <Input
-            id="grado-est"
-            placeholder="5to grado"
-            value={form.grado_academico}
-            onChange={e => setForm(f => ({ ...f, grado_academico: e.target.value }))}
-          />
         </div>
 
         <div className="space-y-2">
@@ -473,7 +464,6 @@ function EditarEstudianteModal({
 }) {
   const [nombre, setNombre] = useState(est.nombre_completo);
   const [genero, setGenero] = useState(est.genero ?? 'masculino');
-  const [grado, setGrado] = useState(est.grado_academico ?? '');
   const [edad, setEdad] = useState(est.edad != null ? String(est.edad) : '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -486,7 +476,6 @@ function EditarEstudianteModal({
       await adminService.editarEstudiante(est.id, {
         nombre_completo: nombre.trim(),
         genero,
-        grado_academico: grado.trim() || undefined,
         edad: edad ? Number(edad) : undefined,
       });
       onSaved();
@@ -520,11 +509,10 @@ function EditarEstudianteModal({
               <option value="femenino">Femenino</option>
             </select>
           </div>
+          <p className="text-xs text-muted-foreground">
+            El salón y el grado los asigna su profesor desde "Mis salones".
+          </p>
           <div className="flex gap-2">
-            <div className="flex-1">
-              <Label className="text-xs">Sección</Label>
-              <Input value={grado} onChange={e => setGrado(e.target.value)} placeholder="ej. 6D" className="h-8 text-sm mt-1" />
-            </div>
             <div className="w-20">
               <Label className="text-xs">Edad</Label>
               <Input value={edad} onChange={e => setEdad(e.target.value)} type="number" min={3} max={25} className="h-8 text-sm mt-1" />
@@ -544,109 +532,155 @@ function EditarEstudianteModal({
   );
 }
 
-// ─── Panel de secciones de un profesor ───────────────────────────────────────
+// ─── Salones, trimestres y cierre del año de una organización ───────────────
 
-function SeccionesProfesorPanel({
-  prof,
-  gradosDisponibles,
-  onSaved,
-}: {
-  prof: UsuarioAdmin;
-  gradosDisponibles: string[];
-  onSaved: () => void;
-}) {
-  const [editando, setEditando] = useState(false);
-  const [seleccionadas, setSeleccionadas] = useState<string[]>(prof.secciones_asignadas ?? []);
-  const [guardando, setGuardando] = useState(false);
+function SalonesOrgPanel({ orgId }: { orgId: number }) {
+  const anioActual = new Date().getFullYear();
+  const [anio, setAnio] = useState(anioActual);
+  const [fechas, setFechas] = useState<{ fecha_inicio: string; fecha_fin: string }[]>([]);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmarCierre, setConfirmarCierre] = useState(false);
+  const [trabajando, setTrabajando] = useState(false);
 
-  const toggle = (g: string) =>
-    setSeleccionadas(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  const { data: salones = [], refetch: refetchSalones } = useQuery({
+    queryKey: ['org-salones', orgId],
+    queryFn: () => adminService.getSalonesOrg(orgId),
+  });
 
-  const handleGuardar = async () => {
-    setGuardando(true);
+  const { data: trimestres } = useQuery({
+    queryKey: ['org-trimestres', orgId, anio],
+    queryFn: () => adminService.getTrimestres(orgId, anio),
+  });
+
+  useEffect(() => {
+    if (trimestres) setFechas(trimestres.map(t => ({ fecha_inicio: t.fecha_inicio, fecha_fin: t.fecha_fin })));
+  }, [trimestres]);
+
+  const cambiarFecha = (i: number, campo: 'fecha_inicio' | 'fecha_fin', valor: string) =>
+    setFechas(prev => prev.map((f, k) => (k === i ? { ...f, [campo]: valor } : f)));
+
+  const guardarTrimestres = async () => {
+    setTrabajando(true); setError(null); setMensaje(null);
     try {
-      await adminService.actualizarSeccionesProfesor(prof.id, seleccionadas);
-      onSaved();
-      setEditando(false);
+      await adminService.actualizarTrimestres(orgId, anio, fechas);
+      setMensaje(`Trimestres de ${anio} guardados.`);
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
-      setGuardando(false);
+      setTrabajando(false);
     }
   };
 
-  const handleCancelar = () => {
-    setSeleccionadas(prof.secciones_asignadas ?? []);
-    setEditando(false);
+  const cerrarAnio = async () => {
+    setTrabajando(true); setError(null); setMensaje(null);
+    try {
+      const r = await adminService.cerrarAnio(orgId, anio);
+      setMensaje(
+        `Año ${r.anio} cerrado: ${r.anios_cerrados} salón(es), ${r.matriculas_cerradas} estudiante(s); ` +
+        `${r.desafios_no_completados} desafío(s) quedaron como no completados.`
+      );
+      setConfirmarCierre(false);
+      refetchSalones();
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setTrabajando(false);
+    }
   };
 
-  const actuales = prof.secciones_asignadas ?? [];
+  const abiertos = salones.filter(s => s.estado === 'activo' && s.anio === anio).length;
 
   return (
-    <div className="mt-1.5">
-      {!editando ? (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-gray-500">Secciones:</span>
-          {actuales.length === 0 ? (
-            <span className="text-xs text-gray-400 italic">Todos los estudiantes de la org</span>
-          ) : (
-            actuales.map(g => (
-              <span key={g} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">{g}</span>
-            ))
-          )}
-          {gradosDisponibles.length > 0 && (
-            <button
-              onClick={() => setEditando(true)}
-              className="text-xs text-blue-500 hover:text-blue-700 underline ml-1"
-            >
-              {actuales.length === 0 ? 'Asignar secciones' : 'Editar'}
-            </button>
-          )}
-          {gradosDisponibles.length === 0 && actuales.length === 0 && (
-            <span className="text-xs text-gray-400 italic">(los estudiantes de la org necesitan grado_academico asignado)</span>
-          )}
-        </div>
+    <div className="border-t pt-3 space-y-3">
+      <h4 className="text-sm font-semibold flex items-center gap-1">
+        <School className="h-4 w-4" /> Salones ({salones.length})
+      </h4>
+      {salones.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic px-1">
+          Aún no hay salones. Los crea cada profesor desde "Mis salones".
+        </p>
       ) : (
-        <div className="bg-gray-50 rounded-lg p-3 mt-1 border border-gray-200 space-y-2">
-          <p className="text-xs font-medium text-gray-600">
-            Selecciona las secciones que enseña este profesor:
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {gradosDisponibles.map(g => {
-              const checked = seleccionadas.includes(g);
-              return (
-                <label key={g} className={[
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-full border cursor-pointer text-sm font-mono transition-colors',
-                  checked
-                    ? 'bg-blue-100 border-blue-400 text-blue-800'
-                    : 'bg-white border-gray-300 text-gray-600 hover:border-blue-300',
-                ].join(' ')}>
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={checked}
-                    onChange={() => toggle(g)}
-                  />
-                  {checked && <Check className="h-3 w-3 text-blue-600" />}
-                  {g}
-                </label>
-              );
-            })}
+        <div className="overflow-x-auto rounded border">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium">Salón</th>
+                <th className="px-2 py-1.5 text-left font-medium">Grado</th>
+                <th className="px-2 py-1.5 text-left font-medium">Año</th>
+                <th className="px-2 py-1.5 text-left font-medium">Profesor</th>
+                <th className="px-2 py-1.5 text-right font-medium">Estudiantes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salones.map(s => (
+                <tr key={s.salon_id} className="border-t">
+                  <td className="px-2 py-1.5 font-mono">{s.nombre}</td>
+                  <td className="px-2 py-1.5">{s.grado}.º</td>
+                  <td className="px-2 py-1.5">
+                    {s.anio ?? '—'}{s.estado === 'cerrado' ? ' (cerrado)' : ''}
+                  </td>
+                  <td className="px-2 py-1.5">{s.profesor_nombre ?? '—'}</td>
+                  <td className="px-2 py-1.5 text-right">{s.total_estudiantes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <h4 className="text-sm font-semibold flex items-center gap-1">
+          <CalendarDays className="h-4 w-4" /> Calendario escolar
+        </h4>
+        <select
+          value={anio}
+          onChange={e => setAnio(Number(e.target.value))}
+          className="h-7 text-xs border rounded px-1 bg-background"
+        >
+          {[anioActual - 1, anioActual, anioActual + 1].map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Fechas de los trimestres para toda la organización. Por defecto: primer lunes de marzo,
+        trimestres de 13 semanas y una semana de vacaciones entre ellos.
+      </p>
+      <div className="grid gap-2 md:grid-cols-3">
+        {fechas.map((f, i) => (
+          <div key={i} className="rounded border p-2 space-y-1">
+            <p className="text-xs font-semibold">Trimestre {i + 1}</p>
+            <Input type="date" value={f.fecha_inicio} onChange={e => cambiarFecha(i, 'fecha_inicio', e.target.value)} className="h-7 text-xs" />
+            <Input type="date" value={f.fecha_fin} onChange={e => cambiarFecha(i, 'fecha_fin', e.target.value)} className="h-7 text-xs" />
           </div>
-          {seleccionadas.length === 0 && (
-            <p className="text-xs text-amber-600">
-              ⚠️ Sin secciones → verá todos los estudiantes de la organización.
-            </p>
-          )}
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" className="h-7 text-xs" onClick={handleGuardar} disabled={guardando}>
-              {guardando ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
-              Guardar
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" className="h-7 text-xs" onClick={guardarTrimestres} disabled={trabajando || fechas.length !== 3}>
+          {trabajando ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+          Guardar trimestres
+        </Button>
+        {confirmarCierre ? (
+          <div className="flex items-center gap-2 border border-red-200 bg-red-50 rounded px-2 py-1">
+            <span className="text-xs text-red-700">
+              ¿Cerrar el año {anio}? {abiertos} salón(es) quedarán de solo lectura y sus estudiantes sin salón.
+            </span>
+            <Button size="sm" variant="destructive" className="h-6 text-xs" onClick={cerrarAnio} disabled={trabajando}>
+              Sí, cerrar
             </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleCancelar} disabled={guardando}>
+            <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setConfirmarCierre(false)}>
               Cancelar
             </Button>
           </div>
-        </div>
-      )}
+        ) : (
+          <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200"
+            onClick={() => setConfirmarCierre(true)} disabled={abiertos === 0}>
+            <Lock className="h-3 w-3 mr-1" />
+            Cerrar año {anio}
+          </Button>
+        )}
+      </div>
+      {mensaje && <p className="text-xs text-green-700">{mensaje}</p>}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
@@ -686,34 +720,30 @@ function OrgCard({ org, allUsers, notasR3, onRefresh }: {
     staleTime: 0,
   });
 
-  // Grados disponibles en la org (basado en grado_academico de sus estudiantes)
-  const { data: gradosDisponibles = [] } = useQuery({
-    queryKey: ['org-grados', org.id],
-    queryFn: () => adminService.getGradosOrg(org.id),
-    enabled: expanded,
-    staleTime: 30_000,
-  });
-
   const handleRefetchAll = () => { refetch(); onRefresh(); };
 
   const handleAsignarProf = async (profId: number) => {
     setLoadingId(`prof-${profId}`);
     try { await adminService.asignarProfesorOrg(org.id, profId); await refetch(); onRefresh(); }
+    catch (e) { window.alert(getErrorMessage(e)); }
     finally { setLoadingId(null); }
   };
   const handleQuitarProf = async (profId: number) => {
     setLoadingId(`prof-${profId}`);
     try { await adminService.quitarProfesorOrg(org.id, profId); await refetch(); onRefresh(); }
+    catch (e) { window.alert(getErrorMessage(e)); }
     finally { setLoadingId(null); }
   };
   const handleAsignarEst = async (estId: number) => {
     setLoadingId(`est-${estId}`);
     try { await adminService.asignarEstudianteOrg(org.id, estId); await refetch(); onRefresh(); }
+    catch (e) { window.alert(getErrorMessage(e)); }
     finally { setLoadingId(null); }
   };
   const handleQuitarEst = async (estId: number) => {
     setLoadingId(`est-${estId}`);
     try { await adminService.quitarEstudianteOrg(org.id, estId); await refetch(); onRefresh(); }
+    catch (e) { window.alert(getErrorMessage(e)); }
     finally { setLoadingId(null); }
   };
 
@@ -781,8 +811,6 @@ function OrgCard({ org, allUsers, notasR3, onRefresh }: {
                 </h4>
                 <div className="space-y-2">
                   {profsMiembros.map(p => {
-                    // Buscar datos del profesor en allUsers para tener secciones_asignadas
-                    const profData = allUsers?.profesores.find(u => u.id === p.id);
                     return (
                       <div key={p.id} className="bg-blue-50 rounded px-3 py-2 text-sm">
                         <div className="flex items-center justify-between">
@@ -793,14 +821,6 @@ function OrgCard({ org, allUsers, notasR3, onRefresh }: {
                             {loadingId === `prof-${p.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
                           </Button>
                         </div>
-                        {/* Panel de secciones asignadas */}
-                        {profData && (
-                          <SeccionesProfesorPanel
-                            prof={profData}
-                            gradosDisponibles={gradosDisponibles}
-                            onSaved={handleRefetchAll}
-                          />
-                        )}
                       </div>
                     );
                   })}
@@ -834,9 +854,9 @@ function OrgCard({ org, allUsers, notasR3, onRefresh }: {
                       <div key={e.id} className="flex items-center justify-between bg-green-50 rounded px-3 py-1.5 text-sm">
                         <span className="font-mono text-xs text-green-600 mr-2">{e.codigo}</span>
                         <span className="flex-1">{e.nombre_completo}</span>
-                        {estData?.grado_academico && (
+                        {estData?.salon_nombre && (
                           <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-mono mr-2">
-                            {estData.grado_academico}
+                            {estData.salon_nombre} · {estData.grado}.º
                           </span>
                         )}
                         {estData?.pre_test_completado && (
@@ -882,6 +902,8 @@ function OrgCard({ org, allUsers, notasR3, onRefresh }: {
                   </div>
                 )}
               </div>
+
+              <SalonesOrgPanel orgId={org.id} />
             </>
           )}
         </CardContent>
@@ -1076,9 +1098,9 @@ function SeccionVerUsuarios() {
       <td className="px-3 py-2 font-medium">{u.nombre_completo}</td>
       {tipo === 'estudiante' && (
         <td className="px-3 py-2">
-          {u.grado_academico
-            ? <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{u.grado_academico}</span>
-            : <span className="text-xs text-muted-foreground italic">—</span>}
+          {u.salon_nombre
+            ? <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{u.salon_nombre} · {u.grado}.º</span>
+            : <span className="text-xs text-muted-foreground italic">Sin salón</span>}
         </td>
       )}
       {tipo === 'profesor' && (
@@ -1161,8 +1183,8 @@ function SeccionVerUsuarios() {
     });
     return orgIds.map(orgId => {
       const deOrg = estudiantes.filter(e => e.organizacion_id === orgId);
-      // Secciones únicas dentro de esta org, ordenadas
-      const secciones = [...new Set(deOrg.map(e => e.grado_academico ?? ''))].sort((a, b) => {
+      // Salones activos dentro de esta org, ordenados
+      const secciones = [...new Set(deOrg.map(e => e.salon_nombre ?? ''))].sort((a, b) => {
         if (a === '') return 1;
         if (b === '') return -1;
         return a.localeCompare(b);
@@ -1171,9 +1193,9 @@ function SeccionVerUsuarios() {
         orgId,
         nombre: orgNombre(orgId) ?? 'Sin organización',
         secciones: secciones.map(sec => ({
-          nombre: sec || 'Sin sección',
+          nombre: sec ? `Salón ${sec}` : 'Sin salón',
           usuarios: deOrg
-            .filter(e => (e.grado_academico ?? '') === sec)
+            .filter(e => (e.salon_nombre ?? '') === sec)
             .sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo)),
         })),
       };
@@ -1941,7 +1963,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
               genero: (String(r['genero'] || 'masculino').toLowerCase() === 'femenino' ? 'femenino' : 'masculino') as 'masculino' | 'femenino',
               password,
               organizacion_id: r['organizacion_id'] ? Number(r['organizacion_id']) : undefined,
-              grado_academico: String(r['grado_academico'] || '').trim() || undefined,
+              // La columna grado_academico de plantillas viejas se ignora: el grado sale del salón
               edad: r['edad'] ? Number(r['edad']) : undefined,
             } as BulkStudentRow;
           });
@@ -2000,9 +2022,9 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
 
     if (tipo === 'estudiantes') {
       const wsData = XLSX.utils.aoa_to_sheet([
-        ['codigo_estudiante', 'nombre', 'apellido', 'genero', 'password', 'organizacion_id', 'grado_academico', 'edad'],
-        ['EST001', 'Juan', 'Pérez', 'masculino', 'temp123', organizaciones[0]?.id ?? '', '6A', 11],
-        ['EST002', 'María', 'García', 'femenino', 'temp123', organizaciones[0]?.id ?? '', '6A', 11],
+        ['codigo_estudiante', 'nombre', 'apellido', 'genero', 'password', 'organizacion_id', 'edad'],
+        ['EST001', 'Juan', 'Pérez', 'masculino', 'temp123', organizaciones[0]?.id ?? '', 11],
+        ['EST002', 'María', 'García', 'femenino', 'temp123', organizaciones[0]?.id ?? '', 11],
       ]);
       XLSX.utils.book_append_sheet(wb, wsData, 'Estudiantes');
     } else {
@@ -2188,7 +2210,6 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                       <th className="px-3 py-2 text-left font-medium">Código</th>
                       <th className="px-3 py-2 text-left font-medium">Nombre</th>
                       <th className="px-3 py-2 text-left font-medium">Género</th>
-                      <th className="px-3 py-2 text-left font-medium">Grado</th>
                       <th className="px-3 py-2 text-left font-medium">Edad</th>
                       <th className="px-3 py-2 text-left font-medium">Org.</th>
                     </>
@@ -2214,7 +2235,6 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
                           <td className="px-3 py-1.5 font-mono">{f.codigo_estudiante}</td>
                           <td className="px-3 py-1.5">{f.nombre_completo}</td>
                           <td className="px-3 py-1.5">{f.genero}</td>
-                          <td className="px-3 py-1.5">{f.grado_academico || '—'}</td>
                           <td className="px-3 py-1.5">{f.edad ?? '—'}</td>
                           <td className="px-3 py-1.5">{org ? org.codigo : '—'}</td>
                         </>

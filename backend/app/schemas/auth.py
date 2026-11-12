@@ -42,7 +42,7 @@ class CreateStudentRequest(BaseModel):
     genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
-    grado_academico: Optional[str] = Field(None, max_length=50)
+    # El grado ya no se guarda en el estudiante: sale del salón al que lo asigna su profesor.
     edad: Optional[int] = Field(None, ge=3, le=25)
 
     class Config:
@@ -53,7 +53,6 @@ class CreateStudentRequest(BaseModel):
                 "genero": "masculino",
                 "password": "temp123",
                 "organizacion_id": 1,
-                "grado_academico": "6A",
                 "edad": 11,
             }
         }
@@ -115,7 +114,6 @@ class StudentResponse(UserBase):
     nombre_completo: str
     genero: Genero
     narrativa_seleccionada_id: Optional[int]
-    grado_academico: Optional[str] = None
     edad: Optional[int] = None
 
     class Config:
@@ -207,7 +205,6 @@ class BulkStudentRow(BaseModel):
     genero: Genero = Genero.MASCULINO
     password: str = Field(min_length=6, max_length=100)
     organizacion_id: Optional[int] = None
-    grado_academico: Optional[str] = Field(None, max_length=50)
     edad: Optional[int] = Field(None, ge=3, le=25)
 
 

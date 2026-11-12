@@ -1,7 +1,7 @@
 /**
  * Página de búsqueda y listado de estudiantes.
- * Muestra todos los estudiantes de la misma organización del profesor.
- * Permite buscar por nombre o código de estudiante.
+ * Muestra los estudiantes de los salones del profesor en este año, con su salón y grado.
+ * Permite buscar por nombre o código y filtrar por salón y nivel.
  */
 
 import { useState } from 'react';
@@ -17,35 +17,21 @@ import { Badge } from '@/components/ui/badge';
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [nivelFiltro, setNivelFiltro] = useState<number | null>(null);
-  const [gradoFiltro, setGradoFiltro] = useState<string>('');
+  const [salonFiltro, setSalonFiltro] = useState<string>('');
 
-  // Obtener perfil del profesor (para pre-filtrar por su grado)
-  const { data: perfil } = useQuery({
-    queryKey: ['teacher', 'me'],
-    queryFn: () => teacherService.getPerfilProfesor(),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  // Obtener estudiantes de la organización del profesor
+  // Estudiantes de los salones del profesor
   const { data: estudiantes, isLoading, isError } = useQuery({
     queryKey: ['teacher', 'students'],
     queryFn: () => teacherService.getEstudiantesOrg(),
     staleTime: 2 * 60 * 1000,
   });
 
-  // Una vez cargado el perfil, pre-setear el filtro de grado si el profesor tiene uno
-  const gradoProfesor = perfil?.grado_academico ?? null;
-
-  // Grados únicos presentes en la organización
-  const gradosUnicos = Array.from(
-    new Set((estudiantes ?? []).map((e) => e.grado_academico).filter(Boolean))
+  // Salones presentes en la lista
+  const salonesUnicos = Array.from(
+    new Set((estudiantes ?? []).map((e) => e.salon_nombre).filter(Boolean))
   ).sort() as string[];
 
-  // Grado activo: el que el profesor seleccionó manualmente, o el suyo propio por defecto
-  const gradoActivo = gradoFiltro || gradoProfesor || '';
-
-  // Filtro local por nombre, código, nivel y grado
-  // El filtro de grado muestra: estudiantes del grado activo + sin grado registrado
+  // Filtro local por nombre, código, nivel y salón
   const filteredStudents = (estudiantes ?? []).filter((e) => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -55,10 +41,7 @@ export default function StudentsPage() {
       if (!matchesSearch) return false;
     }
     if (nivelFiltro !== null && e.nivel_actual !== nivelFiltro) return false;
-    if (gradoActivo) {
-      const matchesGrado = e.grado_academico === gradoActivo || e.grado_academico === null;
-      if (!matchesGrado) return false;
-    }
+    if (salonFiltro && e.salon_nombre !== salonFiltro) return false;
     return true;
   });
 
@@ -70,7 +53,7 @@ export default function StudentsPage() {
       <div>
         <h1 className="text-3xl font-bold">Estudiantes</h1>
         <p className="text-muted-foreground">
-          Estudiantes de tu organización que puedes asignar a grupos
+          Estudiantes de tus salones de este año. Para asignar estudiantes, entra a un salón.
         </p>
       </div>
 
@@ -87,14 +70,14 @@ export default function StudentsPage() {
                 className="pl-10"
               />
             </div>
-            {/* Filtro por grado */}
+            {/* Filtro por salón */}
             <select
-              value={gradoActivo}
-              onChange={(e) => setGradoFiltro(e.target.value)}
+              value={salonFiltro}
+              onChange={(e) => setSalonFiltro(e.target.value)}
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <option value="">Todos los grados</option>
-              {gradosUnicos.map((g) => (
+              <option value="">Todos los salones</option>
+              {salonesUnicos.map((g) => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
@@ -109,9 +92,9 @@ export default function StudentsPage() {
                 <option key={n} value={n}>Nivel {n}</option>
               ))}
             </select>
-            {(searchQuery || nivelFiltro !== null || gradoFiltro) && (
-              <Button variant="outline" onClick={() => { setSearchQuery(''); setNivelFiltro(null); setGradoFiltro(''); }}>
-                {gradoFiltro ? 'Limpiar filtros' : 'Ver todos los grados'}
+            {(searchQuery || nivelFiltro !== null || salonFiltro) && (
+              <Button variant="outline" onClick={() => { setSearchQuery(''); setNivelFiltro(null); setSalonFiltro(''); }}>
+                Limpiar filtros
               </Button>
             )}
           </div>
@@ -122,7 +105,7 @@ export default function StudentsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total en Organización</CardTitle>
+            <CardTitle className="text-sm font-medium">En tus salones</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -201,7 +184,7 @@ export default function StudentsPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Nombre</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">Grado</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Salón</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold">Nivel</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold">Precisión</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold">Estado</th>
@@ -221,7 +204,7 @@ export default function StudentsPage() {
                         </td>
                         <td className="px-4 py-3 font-medium">{student.nombre_completo}</td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {student.grado_academico ?? '—'}
+                          {student.salon_nombre ? `${student.salon_nombre} (${student.grado}.º)` : '—'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <Badge variant="outline">Nivel {nivel}</Badge>
@@ -265,9 +248,9 @@ export default function StudentsPage() {
             <div className="flex items-start gap-3">
               <Users className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-800">
-                <span className="font-medium">¿Cómo agregar estudiantes a un grupo en bulk?</span>
+                <span className="font-medium">¿Cómo asignar varios estudiantes a un salón?</span>
                 <span className="text-blue-700">
-                  {' '}Ve al detalle de un grupo y usa el tab "Importar" para subir una lista de códigos en CSV o Excel.
+                  {' '}Entra a tu salón y usa la pestaña "Importar lista" para subir los códigos en CSV o Excel.
                 </span>
               </div>
             </div>

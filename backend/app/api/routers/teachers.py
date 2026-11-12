@@ -3,7 +3,6 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,12 +22,12 @@ from app.schemas.teacher import (
     DesafioGrupalCreate,
     DesafioGrupalDetalle,
     EstadisticasGrupo,
-    GrupoCreate,
     GrupoDetalle,
     GrupoResumen,
 )
 from app.services.adaptive_service import AdaptiveService
 from app.services.practice_service import PracticeService
+from app.services.school_service import SchoolService
 from app.services.teacher_service import TeacherService
 
 router = APIRouter()
@@ -61,100 +60,21 @@ async def obtener_perfil_profesor(
     }
 
 
-class BulkAddStudentsRequest(BaseModel):
-    codigos: List[str]
-
-
-class BulkAddError(BaseModel):
-    fila: int
-    codigo: str
-    mensaje: str
-
-
-class BulkAddResult(BaseModel):
-    total: int
-    agregados: int
-    errores: List[BulkAddError]
-
-
 async def get_teacher_service(db: AsyncSession = Depends(get_db)) -> TeacherService:
     """Dependency para TeacherService."""
     return TeacherService(db)
 
 
-# ==================== IMPORTACIÓN MASIVA A GRUPO ====================
-
-@router.post("/groups/{group_id}/students/bulk", response_model=BulkAddResult)
-async def bulk_add_students_to_group(
-    group_id: int,
-    data: BulkAddStudentsRequest,
-    profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Añade una lista de estudiantes (por código) a un grupo en bulk.
-    Los estudiantes deben pertenecer a la misma organización del profesor.
-    Continúa aunque alguna fila falle — devuelve resumen de éxitos y errores.
-    """
-    from sqlalchemy import select as sa_select
-
-    from app.models.user import Estudiante
-
-    errores: List[BulkAddError] = []
-    agregados = 0
-
-    for i, codigo in enumerate(data.codigos, start=1):
-        codigo = codigo.strip().upper()
-        if not codigo:
-            errores.append(BulkAddError(fila=i, codigo=codigo, mensaje="Código vacío"))
-            continue
-        try:
-            # Buscar estudiante en la organización del profesor
-            result = await db.execute(
-                sa_select(Estudiante).where(
-                    Estudiante.codigo_estudiante == codigo,
-                    Estudiante.organizacion_id == profesor.organizacion_id,
-                )
-            )
-            est = result.scalar_one_or_none()
-            if not est:
-                errores.append(BulkAddError(
-                    fila=i, codigo=codigo,
-                    mensaje="Estudiante no encontrado en tu organización"
-                ))
-                continue
-            await service.agregar_estudiante(group_id, est.id, profesor.id)
-            agregados += 1
-        except ValueError as e:
-            errores.append(BulkAddError(fila=i, codigo=codigo, mensaje=str(e)))
-        except Exception:
-            errores.append(BulkAddError(
-                fila=i, codigo=codigo, mensaje="Error inesperado al agregar"
-            ))
-
-    return BulkAddResult(total=len(data.codigos), agregados=agregados, errores=errores)
-
-
 # ==================== GRUPOS ====================
-
-@router.post("/groups", response_model=GrupoDetalle, status_code=status.HTTP_201_CREATED)
-async def crear_grupo(
-    data: GrupoCreate,
-    profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service)
-):
-    """Crea un nuevo grupo."""
-    return await service.crear_grupo(profesor.id, data)
-
 
 @router.get("/groups", response_model=List[GrupoResumen])
 async def listar_grupos(
     profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service)
+    service: TeacherService = Depends(get_teacher_service),
+    anio_lectivo_id: Optional[int] = Query(None, description="Solo los grupos de este salón (año lectivo)"),
 ):
-    """Lista grupos del profesor con resumen."""
-    return await service.get_grupos(profesor.id)
+    """Lista los grupos de los salones del profesor (para crearlos: POST /salones/{id}/grupos)."""
+    return await service.get_grupos(profesor.id, anio_lectivo_id)
 
 
 @router.get("/groups/{group_id}", response_model=GrupoDetalle)
@@ -176,7 +96,7 @@ async def eliminar_grupo(
     profesor: Profesor = Depends(get_current_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
-    """Elimina un grupo y sus relaciones. Solo el dueño puede eliminarlo."""
+    """Desactiva un grupo. Solo su profesor, y solo con el año lectivo activo."""
     try:
         await service.eliminar_grupo(group_id, profesor.id)
     except ValueError as e:
@@ -190,7 +110,7 @@ async def agregar_estudiante(
     profesor: Profesor = Depends(get_current_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
-    """Agrega estudiante a grupo."""
+    """Agrega al grupo un estudiante del mismo salón."""
     try:
         await service.agregar_estudiante(group_id, student_id, profesor.id)
     except ValueError as e:
@@ -219,24 +139,11 @@ async def crear_configuracion(
     profesor: Profesor = Depends(get_current_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
-    """Crea configuración de práctica para un grupo."""
+    """Aplica una configuración de práctica (decimales) a un salón (año lectivo activo)."""
     try:
         return await service.crear_configuracion(profesor.id, data)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.get("/groups/{group_id}/configuration", response_model=ConfiguracionPracticaResponse)
-async def obtener_configuracion(
-    group_id: int,
-    profesor: Profesor = Depends(get_current_teacher),
-    service: TeacherService = Depends(get_teacher_service)
-):
-    """Obtiene configuración activa de un grupo."""
-    config = await service.get_configuracion_activa(group_id, profesor.id)
-    if not config:
-        raise HTTPException(status_code=404, detail="Configuración no encontrada")
-    return config
 
 
 # ==================== DESAFÍOS GRUPALES ====================
@@ -293,57 +200,50 @@ async def listar_alertas(
     profesor: Profesor = Depends(get_current_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
-    """Lista alertas activas de todos los grupos."""
+    """Lista alertas de los estudiantes de los salones activos del profesor."""
     return await service.get_alertas(profesor.id)
 
 
 # ==================== BÚSQUEDA & ESTUDIANTES ====================
 
 @router.get("/students", response_model=List[dict])
-async def listar_estudiantes_organizacion(
+async def listar_estudiantes_de_mis_salones(
     profesor: Profesor = Depends(get_current_teacher),
     db: AsyncSession = Depends(get_db),
     q: Optional[str] = Query(None, description="Filtrar por nombre o código"),
 ):
     """
-    Lista los estudiantes de la organización del profesor.
-
-    Filtrado por secciones:
-    - Si el profesor tiene `secciones_asignadas` (ej. ["6A", "6B"]), solo devuelve
-      estudiantes cuyo `grado_academico` esté en esa lista.
-    - Si `secciones_asignadas` está vacío o es null, devuelve todos los estudiantes
-      de la organización (comportamiento legacy).
+    Lista los estudiantes de los salones activos del profesor, con su salón y grado.
+    Para buscar estudiantes de la organización y asignarlos a un salón:
+    GET /teachers/salones/{anio_lectivo_id}/candidatos.
     """
-    if not profesor.organizacion_id:
+    school = SchoolService(db)
+    ids = await school.ids_estudiantes_del_profesor(profesor.id)
+    if not ids:
         return []
 
-    secciones: list[str] = profesor.secciones_asignadas or []
-
-    stmt = (
+    result = await db.execute(
         select(Estudiante, PerfilEstudiante)
         .outerjoin(PerfilEstudiante, Estudiante.id == PerfilEstudiante.estudiante_id)
-        .where(Estudiante.organizacion_id == profesor.organizacion_id)
+        .where(Estudiante.id.in_(ids))
+        .order_by(Estudiante.nombre_completo)
     )
-
-    # Filtrar por sección solo si el profesor tiene secciones asignadas
-    if secciones:
-        stmt = stmt.where(Estudiante.grado_academico.in_(secciones))
-
-    result = await db.execute(stmt)
-    rows = result.all()
+    salones = await school.salones_de_estudiantes(ids)
 
     datos = []
-    for e, perfil in rows:
-        # Filtro opcional de búsqueda por nombre/código
+    for e, perfil in result.all():
         if q:
             q_lower = q.lower()
             if q_lower not in e.nombre_completo.lower() and q_lower not in e.codigo_estudiante.lower():
                 continue
+        salon = salones.get(e.id, {})
         datos.append({
             "id": e.id,
             "codigo_estudiante": e.codigo_estudiante,
             "nombre_completo": e.nombre_completo,
-            "grado_academico": e.grado_academico,
+            "salon_nombre": salon.get("salon_nombre"),
+            "grado": salon.get("grado"),
+            "anio_lectivo_id": salon.get("anio_lectivo_id"),
             "activo": bool(e.activo),
             "nivel_actual": perfil.nivel_actual if perfil else 1,
             "precision_ultimos_15": round(float(perfil.precision_ultimos_15 or 0) * 100, 1) if perfil else 0.0,

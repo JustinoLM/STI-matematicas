@@ -1,11 +1,14 @@
 /**
- * Servicio de profesor (grupos, desafíos, alertas, configuración).
+ * Servicio de profesor (salones, grupos, desafíos, alertas, configuración).
  */
 
 import axios from 'axios';
 import apiClient, { getErrorMessage } from './api';
 import {
   Grupo,
+  CandidatoSalon,
+  SalonDetalle,
+  SalonResumen,
   AlertaEstudianteDetalle,
   DesafioGrupal,
   EstadisticasGrupo,
@@ -25,12 +28,14 @@ export interface BulkAddResult {
   errores: BulkAddError[];
 }
 
-/** Estudiante de la organización del profesor (endpoint GET /teachers/students). */
+/** Estudiante de los salones activos del profesor (endpoint GET /teachers/students). */
 export interface EstudianteOrg {
   id: number;
   codigo_estudiante: string;
   nombre_completo: string;
-  grado_academico: string | null;
+  salon_nombre: string | null;
+  grado: number | null;
+  anio_lectivo_id: number | null;
   activo: boolean;
   nivel_actual: number;
   precision_ultimos_15: number;
@@ -57,14 +62,81 @@ export const teacherService = {
     }
   },
 
-  // ==================== GRUPOS ====================
+  // ==================== SALONES ====================
 
-  /**
-   * Obtener todos los grupos del profesor.
-   */
-  async getGrupos(): Promise<Grupo[]> {
+  /** Salones del profesor: los del año en curso primero y luego el historial. */
+  async getSalones(): Promise<SalonResumen[]> {
     try {
-      const response = await apiClient.get<Grupo[]>('/teachers/groups');
+      const response = await apiClient.get<SalonResumen[]>('/teachers/salones');
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /** Crea el salón (o abre el existente con ese nombre) para el año actual. */
+  async crearSalon(nombre: string, grado: number): Promise<SalonDetalle> {
+    try {
+      const response = await apiClient.post<SalonDetalle>('/teachers/salones', { nombre, grado });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async getSalonDetalle(anioLectivoId: number): Promise<SalonDetalle> {
+    try {
+      const response = await apiClient.get<SalonDetalle>(`/teachers/salones/${anioLectivoId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /** Estudiantes de la organización, indicando si ya están en algún salón. */
+  async getCandidatosSalon(anioLectivoId: number, q?: string): Promise<CandidatoSalon[]> {
+    try {
+      const params = q ? { q } : {};
+      const response = await apiClient.get<CandidatoSalon[]>(`/teachers/salones/${anioLectivoId}/candidatos`, { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async asignarAlSalon(anioLectivoId: number, estudianteId: number): Promise<void> {
+    try {
+      await apiClient.post(`/teachers/salones/${anioLectivoId}/estudiantes/${estudianteId}`);
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  async quitarDelSalon(anioLectivoId: number, estudianteId: number): Promise<void> {
+    try {
+      await apiClient.delete(`/teachers/salones/${anioLectivoId}/estudiantes/${estudianteId}`);
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /** Asigna varios estudiantes al salón por código. */
+  async asignarAlSalonPorCodigos(anioLectivoId: number, codigos: string[]): Promise<BulkAddResult> {
+    try {
+      const response = await apiClient.post<BulkAddResult>(`/teachers/salones/${anioLectivoId}/estudiantes/bulk`, { codigos });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  // ==================== GRUPOS (dentro de un salón) ====================
+
+  /** Grupos de los salones del profesor (opcionalmente de un solo salón). */
+  async getGrupos(anioLectivoId?: number): Promise<Grupo[]> {
+    try {
+      const params = anioLectivoId ? { anio_lectivo_id: anioLectivoId } : {};
+      const response = await apiClient.get<Grupo[]>('/teachers/groups', { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -83,15 +155,10 @@ export const teacherService = {
     }
   },
 
-  /**
-   * Crear nuevo grupo.
-   */
-  async crearGrupo(nombre: string, codigoGrupo: string): Promise<Grupo> {
+  /** Crea un grupo dentro del salón. */
+  async crearGrupo(anioLectivoId: number, nombre: string): Promise<Grupo> {
     try {
-      const response = await apiClient.post<Grupo>('/teachers/groups', {
-        nombre,
-        codigo_grupo: codigoGrupo,
-      });
+      const response = await apiClient.post<Grupo>(`/teachers/salones/${anioLectivoId}/grupos`, { nombre });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -181,7 +248,8 @@ export const teacherService = {
     parametro_adicional?: number;
     recompensa_texto?: string;
     recompensa_puntos?: number;
-    grupos_ids: number[];
+    anio_lectivo_id: number;
+    grupos_ids: number[];  // vacío = todo el salón es un equipo
     fecha_limite?: string;
   }): Promise<DesafioGrupal> {
     try {
@@ -206,10 +274,10 @@ export const teacherService = {
   // ==================== CONFIGURACIÓN ====================
 
   /**
-   * Crear configuración de práctica para un grupo.
+   * Aplicar configuración de práctica (decimales) a un salón.
    */
   async crearConfiguracion(data: {
-    grupo_id: number;
+    anio_lectivo_id: number;
     operaciones_permitidas: string[];
     niveles_permitidos: number[];
     rango_min: number;
@@ -226,14 +294,14 @@ export const teacherService = {
   },
 
   /**
-   * Obtener configuración activa de un grupo.
+   * Obtener configuración activa de un salón.
    */
-  async getConfiguracionGrupo(grupoId: number): Promise<ConfiguracionPractica | null> {
+  async getConfiguracionSalon(anioLectivoId: number): Promise<ConfiguracionPractica | null> {
     try {
-      const response = await apiClient.get<ConfiguracionPractica>(`/teachers/groups/${grupoId}/configuration`);
+      const response = await apiClient.get<ConfiguracionPractica>(`/teachers/salones/${anioLectivoId}/configuration`);
       return response.data;
     } catch (error) {
-      // 404 = el grupo aún no tiene configuración — es esperado, no es un error
+      // 404 = el salón aún no tiene configuración — es esperado, no es un error
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         return null;
       }
@@ -244,25 +312,13 @@ export const teacherService = {
   // ==================== ESTUDIANTES ====================
 
   /**
-   * Obtener todos los estudiantes de la organización del profesor.
+   * Estudiantes de los salones activos del profesor, con su salón y grado.
    * Opcionalmente filtra por nombre o código con ?q=...
    */
   async getEstudiantesOrg(q?: string): Promise<EstudianteOrg[]> {
     try {
       const params = q ? { q } : {};
       const response = await apiClient.get<EstudianteOrg[]>('/teachers/students', { params });
-      return response.data;
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
-    }
-  },
-
-  /**
-   * Añadir estudiantes a un grupo en bulk, dado una lista de códigos.
-   */
-  async bulkAddToGroup(grupoId: number, codigos: string[]): Promise<BulkAddResult> {
-    try {
-      const response = await apiClient.post<BulkAddResult>(`/teachers/groups/${grupoId}/students/bulk`, { codigos });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

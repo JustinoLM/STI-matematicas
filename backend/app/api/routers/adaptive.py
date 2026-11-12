@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from app.api.dependencies import (
     AdaptiveServiceDep,
     CurrentStudent,
+    CurrentStudentConSalon,
     GamificationServiceDep,
     PracticeServiceDep,
 )
@@ -41,7 +42,7 @@ router = APIRouter()
 
 @router.post("/diagnostic/start")
 async def iniciar_diagnostico(
-    current_student: CurrentStudent,
+    current_student: CurrentStudentConSalon,
     adaptive_service: AdaptiveServiceDep
 ):
     """
@@ -83,7 +84,7 @@ async def enviar_diagnostico(
 
 @router.post("/practice/start", response_model=SesionStartResponse)
 async def iniciar_practica(
-    current_student: CurrentStudent,
+    current_student: CurrentStudentConSalon,
     adaptive_service: AdaptiveServiceDep
 ):
     """
@@ -194,7 +195,7 @@ async def disponibilidad_redencion(
 
 @router.post("/redencion/iniciar", response_model=SesionStartResponse)
 async def iniciar_redencion(
-    current_student: CurrentStudent,
+    current_student: CurrentStudentConSalon,
     adaptive_service: AdaptiveServiceDep
 ):
     """

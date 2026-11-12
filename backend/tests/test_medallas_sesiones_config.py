@@ -24,7 +24,6 @@ from app.models.gamification import (
 from app.models.group import EstudianteGrupo, Grupo
 from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento, Operacion, Problema, TipoSesion
-from app.models.user import Profesor
 from app.repositories.adaptive_repository import TEMAS_NARRATIVOS, AdaptiveRepository
 from app.repositories.gamification_repository import GamificationRepository
 from app.services import scheduler_service
@@ -32,6 +31,7 @@ from app.services.adaptive_service import AdaptiveService
 from app.services.gamification_service import GamificationService
 from app.services.teacher_service import TeacherService
 from tests.conftest import TestSessionLocal, admin_headers
+from tests.salones_helpers import salon_con_estudiantes
 
 
 async def _estudiante(c: AsyncClient, codigo: str):
@@ -86,17 +86,14 @@ async def test_medalla_explorador_exige_practicar_con_los_seis_temas():
 
 
 async def _desafio_completado(db, est, sesiones_en_ventana):
-    prof = Profesor(codigo_profesor=f"PD{est}", password_hash="x", tipo_usuario="profesor",
-                    nombre_completo="Profesor de prueba")
-    db.add(prof)
-    await db.flush()
-    grupo = Grupo(nombre="G", profesor_id=prof.id, codigo_grupo=f"GD{est}")
+    prof, al = await salon_con_estudiantes(db, [est])
+    grupo = Grupo(nombre="G", anio_lectivo_id=al.id)
     db.add(grupo)
     await db.flush()
     db.add(EstudianteGrupo(estudiante_id=est, grupo_id=grupo.id, activo=True))
-    desafio = DesafioGrupal(profesor_id=prof.id, nombre="Reto", tipo="sesiones_completadas",
+    desafio = DesafioGrupal(profesor_id=prof.id, anio_lectivo_id=al.id, nombre="Reto", tipo="sesiones_completadas",
                             objetivo_cantidad=5, fecha_creacion=datetime.utcnow() - timedelta(days=10),
-                            completado=True)
+                            estado="completado")
     db.add(desafio)
     await db.flush()
     db.add(GrupoDesafio(desafio_id=desafio.id, grupo_id=grupo.id, progreso_actual=5, puntos_otorgados=True))
@@ -308,15 +305,9 @@ def test_niveles_permitidos_eligen_el_nivel_mas_cercano():
 
 
 async def _grupo_con_config(db, est, **cfg):
-    prof = Profesor(codigo_profesor=f"PC{est}", password_hash="x", tipo_usuario="profesor",
-                    nombre_completo="Profesor de prueba")
-    db.add(prof)
-    await db.flush()
-    grupo = Grupo(nombre="G", profesor_id=prof.id, codigo_grupo=f"GC{est}")
-    db.add(grupo)
-    await db.flush()
-    db.add(EstudianteGrupo(estudiante_id=est, grupo_id=grupo.id, activo=True))
-    base = dict(grupo_id=grupo.id, aplicada_por_profesor_id=prof.id, operaciones_permitidas=["suma"],
+    """Salón del estudiante con una configuración de práctica (la del año lectivo)."""
+    prof, al = await salon_con_estudiantes(db, [est])
+    base = dict(anio_lectivo_id=al.id, aplicada_por_profesor_id=prof.id, operaciones_permitidas=["suma"],
                 niveles_permitidos=[1, 2, 3, 4, 5], rango_min=1, rango_max=100, decimales_maximos=2,
                 pistas_habilitadas={"nivel_1": True, "nivel_2": True, "nivel_3": True}, activa=True)
     base.update(cfg)
@@ -372,16 +363,9 @@ async def test_alerta_de_promocion_rapida():
         normal, _ = await _estudiante(c, "ALE002")
     subida = {"+": {"antes": 2, "despues": 3, "razon": "x"}}
     async with TestSessionLocal() as db:
-        prof = Profesor(codigo_profesor="PALE", password_hash="x", tipo_usuario="profesor",
-                        nombre_completo="Profesor de prueba")
-        db.add(prof)
-        await db.flush()
-        grupo = Grupo(nombre="G", profesor_id=prof.id, codigo_grupo="GALE")
-        db.add(grupo)
-        await db.flush()
+        prof, _al = await salon_con_estudiantes(db, [rapido, normal])
         for e in (rapido, normal):
             db.add(PerfilEstudiante(estudiante_id=e))
-            db.add(EstudianteGrupo(estudiante_id=e, grupo_id=grupo.id, activo=True))
         await db.flush()
         for dias, cambios in [(4, {}), (3, subida), (2, subida), (1, {})]:   # 2 subidas en las últimas 3
             db.add(_sesion(rapido, dias_atras=dias, cambios=cambios))

@@ -8,10 +8,12 @@ una vista completa del grupo.
 
 import re
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import Date, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.adaptive import (
     AlertaEstudiante,
@@ -21,6 +23,7 @@ from app.models.adaptive import (
     SesionPractica,
 )
 from app.models.group import EstudianteGrupo, Grupo
+from app.models.school import MATRICULA_ACTIVA, MATRICULA_CERRADA, AnioLectivo, Matricula
 from app.models.user import Estudiante
 from app.schemas.stats import (
     ActividadDia,
@@ -50,15 +53,15 @@ class StatsService:
         self, grupo_id: int, profesor_id: int
     ) -> Optional[GrupoStatsResponse]:
         """
-        Construye el objeto GrupoStatsResponse para un grupo del profesor.
+        Construye el objeto GrupoStatsResponse para un grupo de un salón del profesor.
 
         Retorna None si el grupo no existe o no pertenece al profesor.
         """
-        # 1. Verificar propiedad del grupo
+        # 1. Verificar propiedad del grupo (a través de su año lectivo)
         grupo_res = await self.db.execute(
-            select(Grupo).where(
-                and_(Grupo.id == grupo_id, Grupo.profesor_id == profesor_id)
-            )
+            select(Grupo)
+            .join(AnioLectivo, AnioLectivo.id == Grupo.anio_lectivo_id)
+            .where(and_(Grupo.id == grupo_id, AnioLectivo.profesor_id == profesor_id))
         )
         grupo = grupo_res.scalar_one_or_none()
         if not grupo:
@@ -79,7 +82,39 @@ class StatsService:
                 )
             )
         )
-        rows = rows_res.all()
+        return await self._construir_stats(grupo_id, grupo.nombre, rows_res.all())
+
+    async def get_salon_stats(
+        self, anio_lectivo_id: int, profesor_id: int
+    ) -> Optional[GrupoStatsResponse]:
+        """Estadísticas del salón completo (año lectivo) del profesor, o None si no es suyo."""
+        al = (await self.db.execute(
+            select(AnioLectivo)
+            .where(and_(AnioLectivo.id == anio_lectivo_id, AnioLectivo.profesor_id == profesor_id))
+            .options(selectinload(AnioLectivo.salon))
+        )).scalar_one_or_none()
+        if al is None:
+            return None
+        rows_res = await self.db.execute(
+            select(Estudiante, PerfilEstudiante)
+            .join(Matricula, Matricula.estudiante_id == Estudiante.id)
+            .outerjoin(PerfilEstudiante, PerfilEstudiante.estudiante_id == Estudiante.id)
+            .where(and_(
+                Matricula.anio_lectivo_id == anio_lectivo_id,
+                Matricula.estado.in_([MATRICULA_ACTIVA, MATRICULA_CERRADA]),
+            ))
+        )
+        stats = await self._construir_stats(
+            anio_lectivo_id, f"{al.salon.nombre} ({al.anio})", rows_res.all()
+        )
+        stats.tipo = "salon"
+        return stats
+
+    async def _construir_stats(
+        self, grupo_id: int, grupo_nombre: str, rows: list
+    ) -> GrupoStatsResponse:
+        """Estadísticas de un conjunto de estudiantes (grupo o salón)."""
+        grupo = SimpleNamespace(nombre=grupo_nombre)
 
         if not rows:
             return GrupoStatsResponse(
@@ -318,12 +353,16 @@ class StatsService:
     # ──────────────────────────────────────────────────────────────────────────
 
     async def analizar_con_ia(
-        self, grupo_id: int, profesor_id: int, llm: LLMService
+        self, grupo_id: int, profesor_id: int, llm: LLMService, es_salon: bool = False
     ) -> AnalisisIAResponse:
         """
-        Genera análisis pedagógico del grupo usando DeepSeek R1 (bajo demanda, sin caché).
+        Genera análisis pedagógico del grupo (o del salón completo, con es_salon=True)
+        usando DeepSeek R1 (bajo demanda, sin caché).
         """
-        stats = await self.get_grupo_stats(grupo_id, profesor_id)
+        if es_salon:
+            stats = await self.get_salon_stats(grupo_id, profesor_id)
+        else:
+            stats = await self.get_grupo_stats(grupo_id, profesor_id)
         if stats is None:
             return AnalisisIAResponse(
                 texto="Grupo no encontrado.", generado_por_llm=False

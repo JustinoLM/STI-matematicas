@@ -11,9 +11,8 @@ from app.models.adaptive import TipoAlerta
 # ==================== GRUPOS ====================
 
 class GrupoCreate(BaseModel):
-    """Crear grupo."""
-    nombre: str = Field(..., max_length=255)
-    codigo_grupo: str = Field(..., max_length=50)
+    """Crear un grupo dentro del salón (año lectivo)."""
+    nombre: str = Field(..., min_length=1, max_length=255)
 
 
 class EstudianteEnGrupo(BaseModel):
@@ -34,9 +33,11 @@ class GrupoDetalle(BaseModel):
     """Detalle de grupo con estudiantes."""
     id: int
     nombre: str
-    codigo_grupo: str
     activo: bool
-    profesor_id: int
+    anio_lectivo_id: int
+    salon_nombre: str
+    anio: int
+    cerrado: bool  # el año lectivo está cerrado: solo lectura
     cantidad_estudiantes: int
     estudiantes: List[EstudianteEnGrupo] = []
 
@@ -48,8 +49,12 @@ class GrupoResumen(BaseModel):
     """Resumen de grupo para listado."""
     id: int
     nombre: str
-    codigo_grupo: str
     activo: bool
+    anio_lectivo_id: int
+    salon_nombre: str
+    anio: int
+    cerrado: bool
+    estudiantes_ids: List[int] = []
     cantidad_estudiantes: int
     promedio_precision: float
     problemas_resueltos_hoy: int
@@ -61,8 +66,8 @@ class GrupoResumen(BaseModel):
 # ==================== CONFIGURACIÓN ====================
 
 class ConfiguracionPracticaCreate(BaseModel):
-    """Crear configuración de práctica."""
-    grupo_id: int
+    """Crear configuración de práctica (decimales) del salón."""
+    anio_lectivo_id: int
     operaciones_permitidas: List[str]   # "suma", "resta", "multiplicacion", "division"
     niveles_permitidos: List[int] = Field(default=[1, 2, 3, 4, 5])
     rango_min: Decimal = Field(default=0)
@@ -76,7 +81,7 @@ class ConfiguracionPracticaCreate(BaseModel):
 class ConfiguracionPracticaResponse(BaseModel):
     """Respuesta de configuración."""
     id: int
-    grupo_id: int
+    anio_lectivo_id: int
     operaciones_permitidas: List[str]
     niveles_permitidos: List[int]
     rango_min: Decimal
@@ -110,12 +115,13 @@ class DesafioGrupalCreate(BaseModel):
     recompensa_texto: Optional[str] = None                    # Recompensa física
     recompensa_puntos: Optional[int] = Field(None, ge=0)      # XP otorgados al completar
     fecha_limite: Optional[datetime] = None
-    grupos_ids: List[int]
+    anio_lectivo_id: int                                      # Salón (año lectivo) del desafío
+    grupos_ids: List[int] = []                                # Vacío = el salón completo es un equipo
 
 
 class ProgresoGrupoDesafio(BaseModel):
-    """Progreso de un grupo en desafío."""
-    grupo_id: int
+    """Progreso de un equipo en el desafío (grupo_id None = el salón completo)."""
+    grupo_id: Optional[int]
     nombre_grupo: str
     progreso_actual: int
     objetivo_cantidad: int
@@ -127,6 +133,10 @@ class DesafioGrupalDetalle(BaseModel):
     """Detalle de desafío grupal."""
     id: int
     profesor_id: int
+    anio_lectivo_id: int
+    salon_nombre: str
+    anio: int
+    estado: str  # activo | completado | no_completado
     nombre: str
     descripcion: Optional[str]
     tipo: str

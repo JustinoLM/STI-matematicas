@@ -8,7 +8,7 @@ Los usuarios son creados por administradores, no hay registro público.
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -73,8 +73,7 @@ class Estudiante(Usuario):
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
     puntos_totales = Column(Integer, default=0, nullable=False, server_default="0")
 
-    # Datos académicos y personales
-    grado_academico = Column(String(50), nullable=True)   # Ej: "5to grado"
+    # Datos personales (el grado escolar se deriva del salón de la matrícula activa)
     edad = Column(Integer, nullable=True)  # Edad en años (ej: 11)
 
     # Relaciones
@@ -118,10 +117,8 @@ class Profesor(Usuario):
     institucion = Column(String(255), nullable=True)
     organizacion_id = Column(Integer, ForeignKey("organizacion.id"), nullable=True)
     grado_academico = Column(String(100), nullable=True)  # Ej: "Licenciatura", "Maestría"
-    secciones_asignadas = Column(JSON, nullable=True)  # Ej: ["6A", "6B"] — secciones/grados que enseña
 
     # Relaciones
-    grupos = relationship("Grupo", back_populates="profesor")
     configuraciones = relationship("ConfiguracionPractica", back_populates="aplicada_por_profesor")
     desafios_grupales = relationship("DesafioGrupal", back_populates="profesor")
     organizacion = relationship("Organizacion", back_populates="profesores", foreign_keys=[organizacion_id])
