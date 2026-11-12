@@ -66,6 +66,20 @@ from app.models.ml_model import ModeloML
 from app.models.narrative import (
     Narrativa,
 )
+
+# Núcleo de práctica (fase 3b)
+from app.models.nucleo import (
+    NucleoAjusteEstudiante,
+    NucleoAsignacion,
+    NucleoDominio,
+    NucleoEvento,
+    NucleoExperiencia,
+    NucleoExtension,
+    NucleoHabilitacion,
+    NucleoIntento,
+    NucleoProblemaSesion,
+    NucleoSesion,
+)
 from app.models.organization import (
     Organizacion,
 )
@@ -155,6 +169,17 @@ __all__ = [
     "LeccionCurricular",
     "LeccionCamino",
     "PrerrequisitoDefecto",
+    # Núcleo de práctica
+    "NucleoAjusteEstudiante",
+    "NucleoAsignacion",
+    "NucleoDominio",
+    "NucleoEvento",
+    "NucleoExperiencia",
+    "NucleoExtension",
+    "NucleoHabilitacion",
+    "NucleoIntento",
+    "NucleoProblemaSesion",
+    "NucleoSesion",
     # Group
     "Grupo",
     "EstudianteGrupo",

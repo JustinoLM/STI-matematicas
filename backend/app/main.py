@@ -27,6 +27,7 @@ from app.api.routers import (
     gamification,
     hints,
     mensajes,
+    nucleo,
     practices,
     regla_de_tres,
     salones,
@@ -129,6 +130,7 @@ app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaci
 app.include_router(regla_de_tres.router, prefix="/api/regla-de-tres", tags=["Regla de Tres"])
 app.include_router(admin_import.router, prefix="/api", tags=["Admin - Importación"])
 app.include_router(curriculo.router, prefix="/api/curriculo", tags=["Currículo"])
+app.include_router(nucleo.router, prefix="/api/nucleo", tags=["Núcleo de práctica"])
 
 
 # ── Errores de reglas de la organización escolar (salones, años lectivos) ──

@@ -79,9 +79,14 @@ el plan.
 - **Criterio provisional.** Todos los valores son parámetros configurables, nunca números fijos
   en el código. Se basan en la literatura y se ajustarán con especialistas o con MEDUCA.
   - **Para declarar dominio:** al menos 80 % de aciertos en los últimos 10 problemas, en 2 o más
-    sesiones de días distintos, sin contar los aciertos que usaron la pista de nivel 3.
-  - **Para mandar a repaso:** 2 o 3 semanas sin practicar la lección.
-  - **Para volver a "en progreso":** menos de 60 % en el repaso.
+    días distintos (fecha de Panamá). Solo cuenta como acierto el primer intento sin la pista de
+    nivel 3.
+  - **Para mandar a repaso:** 14 días sin practicar la lección.
+  - **Para volver a "en progreso":** menos de 60 % en los primeros 5 problemas del repaso.
+  - El **dominio provisional** del diagnóstico se confirma o se retira con estas mismas reglas.
+  - Implementado en `backend/app/nucleo/dominio.py`; los valores están en
+    `backend/app/nucleo/parametros.py` y se pueden cambiar con claves `nucleo.*` en
+    `configuracion_sistema`.
 - **Confirmación.** El dominio se confirma o se retira siempre con la regla absoluta. La
   comparación con los compañeros solo genera **alertas**.
 
@@ -108,7 +113,9 @@ el plan.
 - **Ordenar números.** Es una forma de respuesta aparte: el niño arrastra tarjetas.
 - **Banco de respuestas para arrastrar.** Se arrastra, no se toca: según Khan Academy Kids, tocar
   favorece las respuestas al azar.
-  - **Por grado:** siempre en 1.º y 2.º, en 3.º según la lección, y teclado desde 4.º.
+  - **Por grado:** siempre en 1.º y 2.º, en 3.º según la lección, y teclado desde 4.º. Cuenta el
+    grado del **estudiante**, no el de la lección: un estudiante de 4.º que repasa una lección de
+    1.º usa teclado, salvo que tenga el banco forzado.
   - **Por estudiante:** el profesor puede forzar el banco como adaptación de accesibilidad.
   - **Cantidad de opciones:** entre 3 y 4, siempre completas (por ejemplo `{72, 62, 612}`) y no
     fichas de dígitos.
@@ -119,6 +126,16 @@ el plan.
     error de cada camino sirven para generar las opciones y para diagnosticar.
   - **Valor del acierto:** un acierto con banco cuenta igual que uno con teclado. Con 3 opciones,
     la probabilidad de alcanzar 8 de 10 solo adivinando es de aproximadamente 0,3 %.
+- **Validación (implementada en la fase 3).**
+  - Los números se comparan por su valor exacto, sin redondear.
+  - Las fracciones aceptan las equivalentes, salvo que el hueco lo desactive.
+  - Las cantidades con unidades se exigen normalizadas, salvo que el hueco acepte otra forma.
+  - Una respuesta con forma inválida (un hueco vacío, un valor que no está en el banco) no cuenta
+    como intento.
+  - Las reglas de error usan códigos con el camino delante (por ejemplo `naturales.suma.resto`).
+    Si varias reglas producen la misma respuesta, gana la primera de la lista.
+  - El problema llega a la pantalla sin las respuestas correctas, sin los datos internos del
+    generador y sin la regla de error de cada opción.
 
 ### Presentación
 
@@ -252,13 +269,30 @@ el plan.
 ### Avance
 
 - **Lo decide el sistema.** Orden de criterios: prioridad del profesor, debilidad, novedad, orden
-  curricular y repaso.
+  curricular y repaso. Como quedó implementado en la fase 3 (`backend/app/nucleo/reparto.py`):
+  1. Las lecciones prioritarias reciben la mitad de la sesión y ceden su espacio si el estudiante
+     ya las domina.
+  2. Siguen el refuerzo y la extensión, con 2 problemas cada uno.
+  3. El resto va, en orden, a las lecciones más débiles, a una lección nueva y al repaso, que
+     siempre conserva un lugar.
+  4. La sesión nunca empieza con un problema de extensión o de refuerzo.
+  5. Si no queda nada pendiente, se practican las lecciones dominadas que hace más tiempo que no
+     se ven.
+- **Lecciones nuevas.** Entran solo cuando sus prerrequisitos que también están habilitados ya
+  están dominados. Un prerrequisito que el profesor no habilitó no bloquea.
 - **Zona de extensión.**
-  - Cuando el estudiante domina una lección, se mezclan 1 o 2 problemas del paso siguiente.
+  - Va a las lecciones siguientes en el grafo de una lección habilitada que el estudiante ya
+    domina: 1 o 2 problemas por sesión.
   - Ese progreso se registra aparte, y fallar ahí no baja al estudiante.
   - Si acierta de forma sostenida, el profesor recibe un aviso de excelencia que sugiere habilitar
-    esa lección.
-  - Si falla, la extensión se pausa un tiempo, sin aviso.
+    esa lección (fase 6).
+  - Tras 2 fallos, la extensión se pausa 7 días, sin aviso.
+- **Zona de refuerzo.**
+  - Se activa cuando una lección en progreso tiene menos de 60 % con al menos 5 problemas.
+  - Va a sus prerrequisitos directos no dominados que no están habilitados, y esos problemas
+    cuentan para el dominio del prerrequisito.
+- **Sesión.** Todavía no se puede abandonar una sesión del núcleo: sigue activa hasta terminarse.
+  Hay que decidirlo antes de la fase 4.
 
 ### Diagnóstico inicial
 
@@ -287,6 +321,9 @@ el plan.
   - La experiencia es un contador aparte del saldo de puntos. `puntos_totales` es en realidad el
     saldo y baja al comprar en la tienda, así que no sirve para el nivel.
   - La fórmula del nivel y la barra de experiencia se definen en la fase 7.
+  - Desde la fase 3 ya se registra: 1 de experiencia por problema terminado y 2 por acierto al
+    primer intento (también si usó la pista de nivel 3), más el evento de "lección dominada" con
+    la marca `primera_vez`, para decidir después cómo se da el bono.
 - **Barras de progreso.** Nunca durante la práctica.
   - **Avance de cada camino:** lecciones dominadas sobre el total del camino.
   - **Avance hacia el dominio de cada lección.** Con la regla de "80 % de los últimos 10" puede
@@ -344,7 +381,7 @@ el plan.
 | 0. Preparación ✅ | Rama `tesis` con worktree, pruebas sobre PostgreSQL e integración continua mínima. Terminada en el commit `a9a85cb` |
 | 1. Organización ✅ | Salón fijo, año lectivo, trimestres, grado del estudiante, grupos dentro del salón. Terminada en el commit `20bb519` |
 | 2. Currículo como datos ✅ | Catálogo de lecciones y grafo de prerrequisitos por defecto (completo para 1.º y 2.º) |
-| 3. Núcleo de práctica | Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
+| 3. Núcleo de práctica ✅ | Paquete `backend/app/nucleo/`, tablas `nucleo_*` y API `/api/nucleo`. Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
 | 4. Pantalla genérica | Huecos, banco arrastrable, íconos agrupados en decenas, voz, ordenar; probada en tablet |
 | 5. Lecciones de 1.º | Primero suma y resta (U3, U5, U7), después números (U2, U4, U6) |
 | 6. Flujo del profesor | Catálogo, configuración por lección, plan por trimestre, tabla de dominio, alertas, ficha, asignación individual |
@@ -359,7 +396,7 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 2:** 259 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+- **Estado tras la fase 3:** 407 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
   las pruebas, de la integración continua y de las dependencias), y 65 pruebas de frontend. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
