@@ -1,0 +1,85 @@
+name: Pruebas
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (${{ matrix.motor }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        motor: [sqlite, postgres]
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sti_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      TEST_DB_ENGINE: ${{ matrix.motor }}
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sti_test
+      # Valores solo para pruebas: no hay .env en CI. conftest.py sobrescribe DATABASE_URL.
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sti_test
+      SECRET_KEY: clave-solo-para-ci-no-usar-en-produccion
+      DEEPSEEK_API_KEY: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar Poetry
+        run: pipx install poetry==2.2.1
+
+      - name: Instalar dependencias
+        run: poetry install --no-root --no-interaction
+
+      - name: Pruebas
+        run: poetry run pytest -v -o faulthandler_timeout=120
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Pruebas
+        run: npx vitest run
