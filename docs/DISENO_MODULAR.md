@@ -18,18 +18,58 @@ el plan.
     longitud, masa y capacidad, y medición del tiempo de 6.º (por ejemplo, 3 h 40 min + 2 h 35 min).
   - Queda para más adelante lo que requiere percibir o dibujar: comparar longitudes, monedas,
     reloj analógico, geometría y ordinales.
-- **Caminos por conjunto numérico.** Naturales, decimales, fracciones y enteros. Se separan
-  porque en cada uno cambian el procedimiento y los errores típicos. El sistema actual pasa a ser
-  el camino de decimales (suma, resta, multiplicación y división).
+- **Caminos por conjunto numérico.** Naturales, decimales, fracciones y enteros, más dos
+  conjuntos propios: `medida` (conversiones de unidades) y `proporcionalidad` (razones,
+  porcentajes, proporciones y regla de tres). Se separan porque en cada uno cambian el
+  procedimiento y los errores típicos. El sistema actual pasa a ser el camino de decimales (suma,
+  resta, multiplicación y división).
+- **Habilidades dentro de cada conjunto.** Un camino es un conjunto más una habilidad: por ejemplo
+  `naturales.numeracion`, `naturales.suma`, `naturales.resta`, `naturales.multiplicacion` o
+  `naturales.secuencias`.
+  - La **numeración** (conocer, componer, ubicar y comparar números, contar) es una habilidad
+    dentro de cada conjunto.
+  - El camino de **secuencias** empieza en 2.º U9 L2; contar de forma progresiva o de 10 en 10
+    (1.º) es numeración.
+- **Una lección puede pertenecer a varios caminos.** Por ejemplo, "Sumemos y restemos 3 números"
+  cuenta para suma y para resta.
 - **Progresión dentro de un camino.** En naturales, la dificultad crece con el rango, con llevar
   o pedir prestado y con la cantidad de sumandos. El paso siguiente lo define el orden del
-  programa: después de "Sumemos con totales hasta 99" (1.º) viene "Sumemos llevando" (2.º).
-- **Catálogo de lecciones y grafo.** Viven en un archivo YAML o JSON del repositorio, versionado
-  con git, que se carga en la base de datos. Cada lección registra grado, unidad, lección y camino.
+  programa: después de "Sumemos con totales hasta 99" (1.º, sin llevar) viene "Sumemos llevando"
+  (2.º).
+- **Catálogo de lecciones.** La fuente de verdad es `backend/curriculo/programa_meduca.yaml`,
+  versionado con git. Se carga en la base con `poetry run python scripts/cargar_curriculo.py`
+  (`--solo-validar` solo revisa el archivo); la carga es idempotente. Se consulta con
+  `GET /api/curriculo/lecciones?grado=N` y `GET /api/curriculo/caminos` (profesor o
+  administrador).
+  - Contiene las 168 lecciones del programa de 1.º a 6.º. Están incluidas 118 (21 de 1.º y 17 de
+    2.º); las demás aparecen igual, con el motivo de su exclusión.
+  - Campos además de grado, unidad, lección y caminos: `parcial` y `nota_parcial` (la lección solo
+    se cubre en parte), `presentacion_especial` (`semirrecta` o `cinta`), `cubierta_por` (por
+    ejemplo, el sistema actual de decimales o el módulo experimental de regla de tres) y `notas`.
+  - **Nunca se borran lecciones.** Si una lección de la base falta en el archivo, la carga se
+    detiene.
 - **El grafo cumple tres funciones:**
-  - prerrequisitos por defecto, que el profesor puede editar;
+  - prerrequisitos por defecto, que el profesor puede editar (en la fase 6, en una tabla aparte
+    por año lectivo, para que recargar el archivo nunca pise sus cambios);
   - "paso siguiente" para la zona de extensión;
   - "paso anterior" para la zona de refuerzo.
+- **Prerrequisitos mínimos.** Una lección depende solo de lo necesario para resolverla, no de todo
+  lo anterior en el programa; el orden curricular ya cuenta en el reparto de la sesión. Así no se
+  bloquean sin necesidad las lecciones que el profesor habilita de otros grados.
+  - Dentro de un camino, cada lección depende de la anterior, y la primera operación de un rango
+    depende de la numeración de ese rango.
+  - La resta de un rango depende de la suma del mismo rango, y pedir prestado depende de llevar.
+  - La validación exige ids únicos, prerrequisitos existentes, **incluidos** y de un grado igual o
+    menor, y que no haya ciclos.
+  - El grafo está completo para 1.º y 2.º; el de 3.º a 6.º queda pendiente.
+- **Exclusiones y lecciones parciales.**
+  - Fuera por ahora: lecciones prenuméricas (1.º U1, emparejar objetos de 2.º U1 L3), geometría,
+    medir con instrumentos, reloj analógico, monedas y billetes, ordinales y números romanos,
+    estadística (incluidas las medidas de tendencia central), cálculo sobre figuras (perímetro,
+    área y volumen) y álgebra, salvo "Signos de agrupación", que va a operaciones combinadas.
+  - Las lecciones de medida de 3.º a 6.º están marcadas como **parciales**: solo conversiones,
+    sin medir con instrumentos ni sobre figuras; las de tiempo, sin el reloj analógico.
+  - Lo excluido por estadística, cálculo sobre figuras y volumen se revisa en la fase 9.
 
 ### Dominio por lección
 
@@ -291,7 +331,7 @@ el plan.
 |---|---|
 | 0. Preparación ✅ | Rama `tesis` con worktree, pruebas sobre PostgreSQL e integración continua mínima. Terminada en el commit `a9a85cb` |
 | 1. Organización ✅ | Salón fijo, año lectivo, trimestres, grado del estudiante, grupos dentro del salón. Terminada en el commit `20bb519` |
-| 2. Currículo como datos | Catálogo de lecciones y grafo de prerrequisitos por defecto |
+| 2. Currículo como datos ✅ | Catálogo de lecciones y grafo de prerrequisitos por defecto (completo para 1.º y 2.º) |
 | 3. Núcleo de práctica | Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
 | 4. Pantalla genérica | Huecos, banco arrastrable, íconos agrupados en decenas, voz, ordenar; probada en tablet |
 | 5. Lecciones de 1.º | Primero suma y resta (U3, U5, U7), después números (U2, U4, U6) |
@@ -307,7 +347,7 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 1:** 223 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+- **Estado tras la fase 2:** 259 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
   las pruebas, de la integración continua y de las dependencias), y 65 pruebas de frontend. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
@@ -338,8 +378,9 @@ el plan.
 4. **Valores de los parámetros.** Hay que validarlos con especialistas o con MEDUCA: criterio de
    dominio, tiempo para mandar a repaso, duración del diagnóstico, cuántos problemas de extensión
    y refuerzo se mezclan, y cuándo salta el aviso de refuerzo.
-5. **Lecciones que enseñan una estrategia,** como "Sumemos completando a 10". Si solo se comprueba
-   el resultado, la lección pierde su propósito.
+5. **Lecciones que enseñan una estrategia,** como "Sumemos completando a 10". Resuelta en parte:
+   el generador usa huecos para los pasos de la estrategia (`8 + 5 = 8 + _ + _ = _`), así que no
+   basta con dar el resultado. Falta confirmar que esto sirve para otras lecciones de estrategia.
 6. **Proporción del modo "al azar"** del signo y de los íconos.
 7. **Revisar los PDF de Panamáticas,** poco a poco, como referencia para las plantillas de
    enunciados.
@@ -350,6 +391,11 @@ el plan.
    la fecha límite para que los demás equipos también puedan completarlo?
 10. **Traslado de un estudiante.** Si su profesor actual no lo quita del salón, nadie más puede
     asignarlo. ¿Debería poder hacerlo el administrador?
+11. **Prerrequisitos de la gráfica de cinta** (2.º U4 L4). Hoy depende de sumar llevando y de
+    restar pidiendo prestado con 2 cifras. Hay que verificar en Panamáticas qué rango usa.
+12. **Medidas de volumen** (6.º U6 L4). Quedó excluida como cálculo sobre figuras, pero si es
+    conversión de unidades debería incluirse como parcial, igual que las de superficie.
+13. **Grafo de prerrequisitos de 3.º a 6.º.** Pendiente; hace falta antes de construir esos grados.
 
 ---
 

@@ -11,7 +11,7 @@ La versión 1.0 se desarrolló como trabajo de graduación de la Licenciatura en
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
 
-> **Estado del proyecto.** En desarrollo. La versión 1.0, limitada a las operaciones con decimales de sexto grado y validada con estudiantes, está archivada en la etiqueta `v1.0-tesis`. Ahora el sistema se reestructura para admitir varios temas, empezando por primero y segundo grado; el diseño y sus fases están en [`docs/DISENO_MODULAR.md`](docs/DISENO_MODULAR.md). Ya están terminadas la preparación (pruebas en PostgreSQL e integración continua) y la organización escolar (salones, años lectivos y trimestres). No hay una demo en línea.
+> **Estado del proyecto.** En desarrollo. La versión 1.0, limitada a las operaciones con decimales de sexto grado y validada con estudiantes, está archivada en la etiqueta `v1.0-tesis`. Ahora el sistema se reestructura para admitir varios temas, empezando por primero y segundo grado; el diseño y sus fases están en [`docs/DISENO_MODULAR.md`](docs/DISENO_MODULAR.md). Ya están terminadas la preparación (pruebas en PostgreSQL e integración continua) , la organización escolar (salones, años lectivos y trimestres) y el currículo como datos (catálogo de lecciones de MEDUCA). No hay una demo en línea.
 
 ---
 
@@ -200,6 +200,7 @@ cp .env.example .env          # completa DATABASE_URL, SECRET_KEY, ADMIN_PASSWOR
 poetry install
 poetry run alembic upgrade head
 poetry run python scripts/seed_data.py
+poetry run python scripts/cargar_curriculo.py   # catálogo de lecciones desde backend/curriculo/
 poetry run uvicorn app.main:app --reload
 ```
 
@@ -233,7 +234,7 @@ Las pruebas del backend corren solo contra PostgreSQL. Usan la base de `TEST_DAT
 
 | Componente | Pruebas | Cobertura |
 |---|---|---|
-| Backend (pytest, PostgreSQL) | 223 | 61% de líneas |
+| Backend (pytest, PostgreSQL) | 259 | 61% de líneas (medida con 223) |
 | Frontend (Vitest) | 65 | 9.7% de sentencias |
 
 Las pruebas del backend cubren la autenticación y el control de acceso, la organización escolar (salones, matrículas, años lectivos, trimestres y cierre del año), la validación de respuestas, la generación de problemas, las reglas adaptativas, los modelos de ML, la detección de errores, las pistas, las medallas y la integración con el modelo de lenguaje. Las del frontend se concentran en la validación de respuestas, la generación de animaciones y la protección de rutas.
@@ -275,7 +276,8 @@ La reestructuración modular está en curso; su diseño y sus fases están en [`
 
 - [x] Fase 0: pruebas en PostgreSQL e integración continua.
 - [x] Fase 1: organización escolar (salones, años lectivos, matrículas, trimestres y grupos dentro del salón).
-- [ ] Fases 2 a 8: currículo como datos, núcleo de práctica genérico, pantalla para primeros grados, lecciones de primero y segundo grado, nuevo flujo del docente, diagnóstico adaptativo y motivación.
+- [x] Fase 2: currículo como datos (catálogo de las lecciones de MEDUCA de 1.º a 6.º y grafo de prerrequisitos de 1.º y 2.º).
+- [ ] Fases 3 a 8: núcleo de práctica genérico, pantalla para primeros grados, lecciones de primero y segundo grado, nuevo flujo del docente, diagnóstico adaptativo y motivación.
 - [ ] Llevar los decimales y el módulo experimental de regla de tres al núcleo genérico.
 - [ ] Demo pública con datos ficticios.
 - [ ] Pruebas de extremo a extremo de los flujos completos de práctica y del panel docente.
