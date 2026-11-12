@@ -1,8 +1,8 @@
 # Diseño: STI modular para varios temas (1.º a 6.º de primaria)
 
 Resultado de la sesión de diseño del 11 de noviembre de 2026. Es un documento de diseño:
-describe decisiones y preguntas abiertas, no el estado del código. La versión validada en la
-tesis está en la etiqueta `v1.0-tesis`.
+describe decisiones y preguntas abiertas, no el estado del código. La versión anterior del
+STI (solo decimales) está archivada en la etiqueta `v1.0-tesis`.
 
 Alcance de esta etapa: **primero y segundo grado completos**. De tercero a sexto solo se deja
 el plan.
@@ -222,7 +222,8 @@ el plan.
   tardan los niños, que también tienen que interpretar las figuras.
 - **Valor del resultado:** el dominio que marca es **provisional**, y la práctica lo confirma o lo
   retira con la regla absoluta. El profesor recibe el resultado.
-- **Post-test:** se retira, porque solo existía para medir el efecto en la tesis.
+- **Post-test:** se retira, porque solo existía para medir el efecto del sistema en la
+  validación de la versión anterior.
 
 ### Motivación
 
@@ -254,22 +255,24 @@ el plan.
 
 ## 4. Forma de trabajo
 
-### Conservar la versión de la tesis
+### Conservar la versión archivada
 
 - **Rama y carpeta.** La rama `tesis` está creada desde la etiqueta `v1.0-tesis` (commit
   `a027809`) y abierta con `git worktree` en `Cap 4/Proyecto-tesis`. La rama existe solo en local;
   la etiqueta sí está en el remoto.
 - **La carpeta actual no se mueve,** porque de su ruta dependen las sesiones de Claude y su
   memoria. Sigue en `master` para el desarrollo nuevo.
-- **Docker.** `docker-compose.yml` fija `container_name: sti-postgres` y el puerto `5432`: las dos
-  copias no pueden levantar su base de datos a la vez.
-- **Base de datos de la validación.** No existe en Docker: la base `sti_db` está vacía, sin
-  tablas. El Excel es el único respaldo de los datos de la validación, y una demostración en vivo
-  se hará con los datos de prueba del seed.
+- **Bases de datos locales.** Viven en PostgreSQL 14 de Homebrew, no en Docker: `sti_db`
+  (desarrollo), `sti_tesis` (copia archivada, con datos sembrados) y `sti_test` (pruebas). El
+  contenedor Docker `sti-postgres` no se usa y su volumen está vacío; si se enciende, choca con
+  Homebrew en el puerto 5432. Las dos copias del código usan los mismos puertos 8000 y 5173, así
+  que no se ejecutan a la vez.
+- **Datos de la validación.** El Excel es el único respaldo. Una demostración en vivo se hace con
+  datos sembrados.
 
 ### Cómo se construye
 
-- **Base de datos.** El sistema nuevo empieza con la base vacía, sin migrar datos de la tesis.
+- **Base de datos.** El sistema nuevo empieza con la base vacía, sin migrar datos de la versión anterior.
 - **Opción (a).** El núcleo genérico se construye **en paralelo**, en `master`, en módulos
   propios. Los decimales siguen funcionando hasta que se pasen al núcleo.
 
