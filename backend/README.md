@@ -48,10 +48,14 @@ cp .env.example .env
 # Editar .env con tus valores
 ```
 
-### 4. Iniciar base de datos (Docker)
+### 4. Preparar las bases de datos (PostgreSQL 14 o superior)
 ```bash
-# Desde la raíz del proyecto
-docker-compose up -d postgres
+# Con PostgreSQL instalado en el sistema (por ejemplo, Homebrew)
+createdb sti_db      # desarrollo
+createdb sti_test    # pruebas: el nombre debe contener "test"
+
+# O, desde la raíz del proyecto, con Docker (usa el mismo puerto 5432)
+docker compose up -d postgres
 ```
 
 ### 5. Ejecutar migraciones
@@ -70,6 +74,8 @@ La API estará disponible en:
 - **Health Check**: http://localhost:8000/health
 
 ## Testing
+
+Las pruebas corren solo contra PostgreSQL, sobre la base de `TEST_DATABASE_URL` (por defecto `postgresql+asyncpg://localhost:5432/sti_test`). El nombre de la base debe contener "test", porque se vacía en cada prueba.
 ```bash
 # Ejecutar todos los tests
 poetry run pytest
@@ -156,4 +162,4 @@ Durante la validación el backend estuvo en Railway; esa infraestructura se dio 
 
 ## Licencia
 
-Proyecto académico - Tesis de grado
+Todos los derechos reservados.

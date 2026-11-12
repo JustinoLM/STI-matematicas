@@ -131,4 +131,4 @@ Variable de entorno necesaria:
 
 ## Licencia
 
-Proyecto académico - Tesis de grado
+Todos los derechos reservados.

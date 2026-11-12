@@ -135,22 +135,31 @@ el plan.
   - Al empezar un año se crea un año lectivo nuevo y el anterior queda cerrado, de solo lectura.
     No se reinicia ni se borra nada.
 - **Quién gestiona el salón.** El profesor crea el salón y asigna o quita estudiantes.
-- **Trimestres.** Cada año lectivo tiene 3 trimestres con fechas por defecto: el primero empieza
-  en marzo, el año termina a mediados de diciembre y hay una semana de vacaciones entre
-  trimestres. Las fechas las cambia el **administrador, para toda la escuela**, no cada profesor.
-  Hoy solo existe un administrador global, así que hasta que haya administración por escuela ese
-  administrador las edita por organización.
-- **Grupos.** Pasan a ser subconjuntos opcionales dentro del salón, por ejemplo para desafíos.
+- **Trimestres.** Son por organización y año. Fechas por defecto: el año empieza el primer lunes
+  de marzo, con 3 trimestres de 13 semanas y una semana de vacaciones entre ellos (en 2026 va del
+  2 de marzo al 11 de diciembre). Las fechas las cambia el **administrador, para toda la
+  escuela**, no cada profesor. Hoy solo existe un administrador global, así que hasta que haya
+  administración por escuela ese administrador las edita por organización.
+- **Cierre del año.** Lo hace el administrador, por organización. Después cada profesor abre su
+  salón para el año nuevo (el salón conserva su id) y vuelve a asignar a sus estudiantes.
+- **Profesores.** Un profesor puede tener varios salones el mismo año.
+- **Matrícula.** Un estudiante tiene una sola matrícula activa; lo garantiza la base de datos. Si
+  ya está en otro salón, se rechaza la asignación: su profesor actual debe quitarlo primero.
+- **Grado del estudiante.** Ya no es texto libre: sale del salón. La importación por Excel acepta
+  la columna de grado, pero la ignora.
+- **Grupos.** Son subconjuntos opcionales dentro del salón, por ejemplo para desafíos.
   - Se cierran junto con el año lectivo y quedan de solo lectura en el historial. No se
     reutilizan al año siguiente, porque un profesor puede tener salones distintos cada año.
-  - Los desafíos son siempre dentro de un mismo salón; no hay desafíos entre salones.
-  - Un desafío sin terminar al cerrar el año se cierra como "no completado", conservando los
-    puntos ya otorgados.
-  - Hoy `ConfiguracionPractica` cuelga de `Grupo` y el grupo activo se elige con `.limit(1)` sin
-    orden.
-  - `Grupo` no tiene grado.
-  - El grado del estudiante es un texto libre: hay que corregirlo para que dependa del salón.
-- **Estudiante sin salón.** No puede practicar. Ve un mensaje que le pide consultar a su profesor.
+  - Un grupo eliminado solo se desactiva.
+- **Desafíos.** Son siempre de un solo salón; no hay desafíos entre salones.
+  - Si no se eligen grupos, el salón completo compite como un solo equipo.
+  - Un desafío sin terminar al cerrar el año pasa a "no completado", conservando los puntos ya
+    otorgados.
+- **No se borra nada con historial.** No se puede eliminar un profesor ni una organización que
+  tengan salones.
+- **Estudiante sin salón.** No puede practicar: se bloquean la práctica, la redención, la regla de
+  tres y el diagnóstico. Ve un mensaje que le pide consultar a su profesor. El post-test no se
+  bloquea, porque se retirará en una fase posterior.
 
 ### Catálogo y habilitación
 
@@ -281,7 +290,7 @@ el plan.
 | Fase | Contenido |
 |---|---|
 | 0. Preparación ✅ | Rama `tesis` con worktree, pruebas sobre PostgreSQL e integración continua mínima. Terminada en el commit `a9a85cb` |
-| 1. Organización | Salón fijo, año lectivo, trimestres, grado del estudiante, grupos dentro del salón |
+| 1. Organización ✅ | Salón fijo, año lectivo, trimestres, grado del estudiante, grupos dentro del salón. Terminada en el commit `20bb519` |
 | 2. Currículo como datos | Catálogo de lecciones y grafo de prerrequisitos por defecto |
 | 3. Núcleo de práctica | Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
 | 4. Pantalla genérica | Huecos, banco arrastrable, íconos agrupados en decenas, voz, ordenar; probada en tablet |
@@ -298,11 +307,9 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 0:** 190 pruebas de backend corren tanto en SQLite como en
-  PostgreSQL 15, y 65 pruebas de frontend. El workflow `.github/workflows/pruebas.yml` las ejecuta
-  en cada push y pull request a `master`.
-- **Decisión:** las pruebas pasan a correr **solo en PostgreSQL**, el motor real. Se quita SQLite
-  de las pruebas y de la integración continua (primer paso de la fase 1).
+- **Estado tras la fase 1:** 223 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 65 pruebas de frontend. El
+  workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
 ### Riesgos
 
@@ -338,6 +345,11 @@ el plan.
    enunciados.
 8. **Programa oficial por trimestre.** Si se consigue el de MEDUCA, serviría para las sugerencias
    de habilitación.
+9. **Desafíos con varios grupos.** Hoy, cuando el primer equipo completa un desafío, el desafío
+   entero pasa a "completado" y los demás equipos dejan de sumar. ¿Debería seguir abierto hasta
+   la fecha límite para que los demás equipos también puedan completarlo?
+10. **Traslado de un estudiante.** Si su profesor actual no lo quita del salón, nadie más puede
+    asignarlo. ¿Debería poder hacerlo el administrador?
 
 ---
 

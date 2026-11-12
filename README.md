@@ -1,17 +1,17 @@
-# Sistema de Tutoría Inteligente (STI) para operaciones con números decimales
+# Sistema de Tutoría Inteligente (STI) de matemáticas para primaria
 
-Sistema web de tutoría inteligente que ayuda a estudiantes panameños de sexto grado a practicar operaciones con números decimales (suma, resta, multiplicación y división). El sistema adapta la dificultad de cada práctica al desempeño del estudiante y le da al docente un panel para seguir el progreso de su grupo.
+Sistema web de tutoría inteligente para que estudiantes panameños de primaria practiquen matemáticas. Hoy cubre las operaciones con números decimales de sexto grado (suma, resta, multiplicación y división) y se está reestructurando para incorporar los temas numéricos del programa de MEDUCA de primero a sexto grado. El sistema adapta cada práctica al desempeño del estudiante y le da al docente un panel para seguir el progreso de sus salones.
 
-Se desarrolló como trabajo de graduación de la Licenciatura en Ingeniería de Software de la Universidad Tecnológica de Panamá (UTP), Facultad de Ingeniería de Sistemas Computacionales, y se validó con estudiantes reales en una escuela pública panameña.
+La versión 1.0 se desarrolló como trabajo de graduación de la Licenciatura en Ingeniería de Software de la Universidad Tecnológica de Panamá (UTP), Facultad de Ingeniería de Sistemas Computacionales, y se validó con estudiantes reales en una escuela pública panameña.
 
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
 
-> **Estado del proyecto.** Proyecto concluido. El período de validación con estudiantes terminó y la versión presentada en la tesis está etiquetada como `v1.0-tesis`; no hay desarrollo en curso. Se trabajó con un alcance acotado (operaciones con decimales de sexto grado). La infraestructura de producción usada durante la validación se dio de baja al concluir el proyecto, por lo que **no hay una demo en línea**.
+> **Estado del proyecto.** En desarrollo. La versión 1.0, limitada a las operaciones con decimales de sexto grado y validada con estudiantes, está archivada en la etiqueta `v1.0-tesis`. Ahora el sistema se reestructura para admitir varios temas, empezando por primero y segundo grado; el diseño y sus fases están en [`docs/DISENO_MODULAR.md`](docs/DISENO_MODULAR.md). Ya están terminadas la preparación (pruebas en PostgreSQL e integración continua) y la organización escolar (salones, años lectivos y trimestres). No hay una demo en línea.
 
 ---
 
@@ -46,16 +46,17 @@ Se desarrolló como trabajo de graduación de la Licenciatura en Ingeniería de 
 
 ### Para el docente
 
-- Gestión de grupos y estudiantes, incluida la importación desde Excel.
-- Configuración de la práctica por grupo: operaciones, niveles, rangos numéricos, decimales y pistas habilitadas.
-- Estadísticas del grupo: perfiles de aprendizaje, niveles por operación, actividad y precisión semanal.
+- Salones con un año lectivo por año: el docente crea su salón, asigna y quita estudiantes (también desde Excel) y, si quiere, los organiza en grupos dentro del salón.
+- Configuración de la práctica por salón: operaciones, niveles, rangos numéricos, decimales y pistas habilitadas.
+- Estadísticas del salón y de cada grupo: perfiles de aprendizaje, niveles por operación, actividad y precisión semanal.
 - Alertas automáticas: estudiantes rezagados, inactivos, estancados, sobresalientes, con ascensos rápidos o con patrones de respuesta anómalos.
 - Un análisis pedagógico del grupo, generado por el modelo de lenguaje bajo demanda.
-- Desafíos grupales con metas colectivas y recompensas.
+- Desafíos cooperativos dentro de un salón, entre sus grupos o con el salón completo como un solo equipo, con metas colectivas y recompensas.
 
 ### Para el administrador
 
 - Panel protegido para crear escuelas y usuarios, importar y exportar datos y reentrenar los modelos de Machine Learning.
+- Salones de cada escuela, calendario de trimestres editable (por defecto, del primer lunes de marzo a mediados de diciembre) y cierre del año lectivo, que deja el año anterior en solo lectura.
 
 ---
 
@@ -85,7 +86,7 @@ Los modelos de Machine Learning se reentrenan cada día con los datos acumulados
 
 ## Resultados de la validación
 
-El sistema se validó entre mayo y julio de 2026 con estudiantes de tres secciones de sexto grado de una escuela pública panameña.
+Corresponden a la versión 1.0, que se validó entre mayo y julio de 2026 con estudiantes de tres secciones de sexto grado de una escuela pública panameña.
 
 | Indicador | Resultado |
 |---|---|
@@ -124,16 +125,17 @@ El backend sigue una arquitectura en tres capas: **Router → Service → Reposi
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2.0 (asíncrono, asyncpg), Alembic, Pydantic, APScheduler |
 | Machine Learning | scikit-learn (K-means, regresión logística), NumPy |
 | Seguridad | JWT (python-jose, HS256), Argon2 (passlib) |
-| Base de datos | PostgreSQL 15 |
+| Base de datos | PostgreSQL 14 o superior (la integración continua usa la 15) |
 | Modelo de lenguaje | API de DeepSeek |
-| Despliegue | Durante la validación: Railway (backend y base de datos) y Vercel (frontend); hoy no hay un despliegue activo |
+| Despliegue | Durante la validación de la versión 1.0: Railway (backend y base de datos) y Vercel (frontend); hoy no hay un despliegue activo |
 
 ---
 
 ## Estructura del repositorio
 
 ```
-Tesis-STI-MATEMATICAS/
+STI-matematicas/
+├── .github/workflows/      # Integración continua (pruebas en cada push y pull request)
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # Routers y dependencias de FastAPI
@@ -152,8 +154,9 @@ Tesis-STI-MATEMATICAS/
 │       ├── services/       # Cliente HTTP y servicios por dominio
 │       ├── store/          # Estado global con Zustand
 │       └── __tests__/      # Pruebas con Vitest
-├── docker-compose.yml      # PostgreSQL y pgAdmin para desarrollo
-└── deploy.sh               # Despliegue manual alternativo
+├── docs/                   # Diseño del STI modular y capturas
+├── docker-compose.yml      # PostgreSQL y pgAdmin en Docker (opcional)
+└── deploy.sh               # Despliegue manual de la versión 1.0
 ```
 
 Cada carpeta principal tiene su propio README con más detalle.
@@ -166,15 +169,28 @@ Cada carpeta principal tiene su propio README con más detalle.
 
 - Python 3.11 y [Poetry](https://python-poetry.org/)
 - Node.js 18 o superior y npm
-- Docker y Docker Compose
+- PostgreSQL 14 o superior, instalado en el sistema (por ejemplo con Homebrew) o en Docker
 - Una clave de API de [DeepSeek](https://platform.deepseek.com/) (opcional: sin ella, el sistema usa textos de respaldo)
 
 ### 1. Base de datos
+
+Hacen falta dos bases: una de desarrollo (por ejemplo `sti_db`) y otra para las pruebas, cuyo nombre debe contener "test" (por defecto `sti_test`).
+
+Con PostgreSQL instalado en el sistema:
+
+```bash
+createdb sti_db
+createdb sti_test
+```
+
+O con Docker:
 
 ```bash
 cp .env.example .env          # define POSTGRES_PASSWORD y PGADMIN_PASSWORD
 docker compose up -d
 ```
+
+Las dos opciones usan el puerto 5432, así que no se pueden tener encendidas a la vez.
 
 ### 2. Backend
 
@@ -213,18 +229,22 @@ cd backend && ./test.sh       # ruff + pytest con cobertura
 cd frontend && ./test.sh      # ESLint + Vitest + compilación
 ```
 
+Las pruebas del backend corren solo contra PostgreSQL. Usan la base de `TEST_DATABASE_URL` o, si no está definida, `postgresql+asyncpg://localhost:5432/sti_test`. Por seguridad, el nombre de la base debe contener "test", porque se vacía en cada prueba.
+
 | Componente | Pruebas | Cobertura |
 |---|---|---|
-| Backend (pytest, PostgreSQL) | 190 | 58.1% de líneas |
-| Frontend (Vitest) | 65 | 10.1% de sentencias |
+| Backend (pytest, PostgreSQL) | 223 | 61% de líneas |
+| Frontend (Vitest) | 65 | 9.7% de sentencias |
 
-Las pruebas del backend cubren la autenticación y el control de acceso, la validación de respuestas, la generación de problemas, las reglas adaptativas, los modelos de ML, la detección de errores, las pistas, las medallas y la integración con el modelo de lenguaje. Las del frontend se concentran en la validación de respuestas, la generación de animaciones y la protección de rutas.
+Las pruebas del backend cubren la autenticación y el control de acceso, la organización escolar (salones, matrículas, años lectivos, trimestres y cierre del año), la validación de respuestas, la generación de problemas, las reglas adaptativas, los modelos de ML, la detección de errores, las pistas, las medallas y la integración con el modelo de lenguaje. Las del frontend se concentran en la validación de respuestas, la generación de animaciones y la protección de rutas.
+
+El workflow [`.github/workflows/pruebas.yml`](.github/workflows/pruebas.yml) corre las pruebas del backend (con un servicio de PostgreSQL 15) y las del frontend en cada push y pull request a `master`.
 
 ---
 
 ## Despliegue
 
-Durante la validación el backend y la base de datos estuvieron en Railway y el frontend en Vercel. Esa infraestructura se dio de baja al concluir el proyecto y la integración de Vercel con GitHub está suspendida, así que **un push a `master` no despliega nada**. Los archivos de configuración se conservan como referencia para volver a publicar el sistema, en esas plataformas o en cualquier otra con PostgreSQL:
+Durante la validación de la versión 1.0 el backend y la base de datos estuvieron en Railway y el frontend en Vercel. Esa infraestructura se dio de baja al terminar la validación y la integración de Vercel con GitHub está suspendida, así que **un push a `master` no despliega nada**. Los archivos de configuración se conservan como referencia para volver a publicar el sistema, en esas plataformas o en cualquier otra con PostgreSQL:
 
 - **Backend:** `backend/railway.toml` y `backend/nixpacks.toml` (Python 3.11). El comando de arranque aplica las migraciones y levanta Uvicorn: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`. `GET /health` comprueba la conexión a la base de datos y responde 503 si falla. Variables obligatorias: `DATABASE_URL`, `SECRET_KEY` y `ADMIN_PASSWORD` (ver `backend/.env.example`).
 - **Frontend:** se compila con `tsc && vite build` (salida en `dist`) y necesita `VITE_API_BASE_URL` con la URL del backend. `frontend/vercel.json` redirige todas las rutas a `index.html` para el enrutamiento del lado del cliente.
@@ -243,7 +263,7 @@ Este sistema se usó con menores de edad, por lo que:
 - Las contraseñas se almacenan solo como hash Argon2.
 - Las funciones de administración exigen un token de administrador verificado en el servidor.
 - Los *prompts* enviados a DeepSeek no incluyen nombres de estudiantes: se usan marcadores y etiquetas anónimas que se sustituyen en el servidor.
-- Cada docente solo accede a sus grupos y a los estudiantes de su escuela.
+- Cada docente solo accede a sus salones, a sus grupos y a los estudiantes de su escuela.
 
 Si encuentras un problema de seguridad, repórtalo de forma privada al autor en lugar de abrir un issue público.
 
@@ -251,10 +271,12 @@ Si encuentras un problema de seguridad, repórtalo de forma privada al autor en 
 
 ## Trabajo futuro
 
-Ideas para extender el sistema si se retoma; hoy no hay desarrollo en curso.
+La reestructuración modular está en curso; su diseño y sus fases están en [`docs/DISENO_MODULAR.md`](docs/DISENO_MODULAR.md).
 
-- [ ] Reestructuración modular para incorporar nuevos temas además de los decimales.
-- [ ] Integrar el módulo experimental de regla de tres, que hoy existe en el repositorio pero no formó parte de la validación.
+- [x] Fase 0: pruebas en PostgreSQL e integración continua.
+- [x] Fase 1: organización escolar (salones, años lectivos, matrículas, trimestres y grupos dentro del salón).
+- [ ] Fases 2 a 8: currículo como datos, núcleo de práctica genérico, pantalla para primeros grados, lecciones de primero y segundo grado, nuevo flujo del docente, diagnóstico adaptativo y motivación.
+- [ ] Llevar los decimales y el módulo experimental de regla de tres al núcleo genérico.
 - [ ] Demo pública con datos ficticios.
 - [ ] Pruebas de extremo a extremo de los flujos completos de práctica y del panel docente.
 - [ ] Nueva validación con grupo de control y un instrumento de motivación.
