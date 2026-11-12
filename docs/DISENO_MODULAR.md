@@ -135,7 +135,17 @@ el plan.
   - Al empezar un año se crea un año lectivo nuevo y el anterior queda cerrado, de solo lectura.
     No se reinicia ni se borra nada.
 - **Quién gestiona el salón.** El profesor crea el salón y asigna o quita estudiantes.
+- **Trimestres.** Cada año lectivo tiene 3 trimestres con fechas por defecto: el primero empieza
+  en marzo, el año termina a mediados de diciembre y hay una semana de vacaciones entre
+  trimestres. Las fechas las cambia el **administrador, para toda la escuela**, no cada profesor.
+  Hoy solo existe un administrador global, así que hasta que haya administración por escuela ese
+  administrador las edita por organización.
 - **Grupos.** Pasan a ser subconjuntos opcionales dentro del salón, por ejemplo para desafíos.
+  - Se cierran junto con el año lectivo y quedan de solo lectura en el historial. No se
+    reutilizan al año siguiente, porque un profesor puede tener salones distintos cada año.
+  - Los desafíos son siempre dentro de un mismo salón; no hay desafíos entre salones.
+  - Un desafío sin terminar al cerrar el año se cierra como "no completado", conservando los
+    puntos ya otorgados.
   - Hoy `ConfiguracionPractica` cuelga de `Grupo` y el grupo activo se elige con `.limit(1)` sin
     orden.
   - `Grupo` no tiene grado.
@@ -253,7 +263,9 @@ el plan.
   memoria. Sigue en `master` para el desarrollo nuevo.
 - **Docker.** `docker-compose.yml` fija `container_name: sti-postgres` y el puerto `5432`: las dos
   copias no pueden levantar su base de datos a la vez.
-- **Base de datos de la validación.** No hay que borrarla. El Excel es el respaldo.
+- **Base de datos de la validación.** No existe en Docker: la base `sti_db` está vacía, sin
+  tablas. El Excel es el único respaldo de los datos de la validación, y una demostración en vivo
+  se hará con los datos de prueba del seed.
 
 ### Cómo se construye
 
@@ -286,6 +298,8 @@ el plan.
 - **Estado tras la fase 0:** 190 pruebas de backend corren tanto en SQLite como en
   PostgreSQL 15, y 65 pruebas de frontend. El workflow `.github/workflows/pruebas.yml` las ejecuta
   en cada push y pull request a `master`.
+- **Decisión:** las pruebas pasan a correr **solo en PostgreSQL**, el motor real. Se quita SQLite
+  de las pruebas y de la integración continua (primer paso de la fase 1).
 
 ### Riesgos
 
@@ -309,8 +323,8 @@ el plan.
      privada, así que no todas las escuelas la usan.
 2. **Estudiantes de 3.º en adelante con el banco forzado.** ¿Reciben las funciones de IA, se las
    leemos en voz alta o se omiten?
-3. **Base de datos de la validación.** ¿Sigue existiendo el volumen de Docker con los datos de la
-   tesis? Es necesario saberlo para la demostración en vivo.
+3. ~~**Base de datos de la validación.**~~ Cerrada: no existe en Docker; la demostración usa el
+   seed.
 4. **Valores de los parámetros.** Hay que validarlos con especialistas o con MEDUCA: criterio de
    dominio, tiempo para mandar a repaso, duración del diagnóstico, cuántos problemas de extensión
    y refuerzo se mezclan, y cuándo salta el aviso de refuerzo.
