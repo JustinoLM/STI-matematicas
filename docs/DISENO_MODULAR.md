@@ -280,6 +280,18 @@ el plan.
   visible. Va decorado según el tema narrativo.
 - **Medallas.** Hay tres tipos: por lección dominada, por unidad completa y por hito de camino
   (bronce, plata y oro). Reemplazan a las medallas de nivel por operación.
+- **Nivel de jugador.** Es una recompensa de gamificación, distinta del dominio: no decide qué
+  problemas recibe el estudiante.
+  - Se calcula con **experiencia acumulada**: experiencia por practicar y acertar, más un bono
+    grande al dominar una lección. Nunca baja, aunque una lección vuelva a "en progreso".
+  - La experiencia es un contador aparte del saldo de puntos. `puntos_totales` es en realidad el
+    saldo y baja al comprar en la tienda, así que no sirve para el nivel.
+  - La fórmula del nivel y la barra de experiencia se definen en la fase 7.
+- **Barras de progreso.** Nunca durante la práctica.
+  - **Avance de cada camino:** lecciones dominadas sobre el total del camino.
+  - **Avance hacia el dominio de cada lección.** Con la regla de "80 % de los últimos 10" puede
+    retroceder, así que debe mostrarse de forma que no parezca un castigo.
+  - **Experiencia hacia el siguiente nivel:** pendiente de la fase 7.
 - **Durante el problema.**
   - No hay efectos ni sonidos.
   - La narrativa aparece solo en el enunciado y en los íconos.
@@ -396,6 +408,11 @@ el plan.
 12. **Medidas de volumen** (6.º U6 L4). Quedó excluida como cálculo sobre figuras, pero si es
     conversión de unidades debería incluirse como parcial, igual que las de superficie.
 13. **Grafo de prerrequisitos de 3.º a 6.º.** Pendiente; hace falta antes de construir esos grados.
+14. **Tienda y nivel de jugador.** Hoy los artículos de la tienda exigen un `nivel_minimo_requerido`
+    que se compara con el nivel adaptativo de 1 a 5, que va a desaparecer. ¿El nivel de jugador
+    reemplaza ese requisito?
+15. **Bono por dominar una lección.** ¿Se da una sola vez por lección, o cada vez que el
+    estudiante la vuelve a dominar después de un repaso fallido?
 
 ---
 
