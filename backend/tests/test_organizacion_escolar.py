@@ -29,6 +29,8 @@ from tests.conftest import TestSessionLocal, admin_headers
 from tests.salones_helpers import salon_con_estudiantes
 from tests.test_medallas_sesiones_config import _sesion
 
+pytestmark = pytest.mark.db
+
 _n = count(1)
 ANIO = date.today().year
 

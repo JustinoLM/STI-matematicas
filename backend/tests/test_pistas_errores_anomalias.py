@@ -30,6 +30,8 @@ from app.services.teacher_service import TeacherService
 from tests.conftest import TestSessionLocal, admin_headers
 from tests.salones_helpers import salon_con_estudiantes
 
+pytestmark = pytest.mark.db
+
 
 async def _crear_estudiante(c: AsyncClient, codigo: str, org_id=None):
     r = await c.post(

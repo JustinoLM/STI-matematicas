@@ -76,9 +76,17 @@ La API estará disponible en:
 ## Testing
 
 Las pruebas corren solo contra PostgreSQL, sobre la base de `TEST_DATABASE_URL` (por defecto `postgresql+asyncpg://localhost:5432/sti_test`). El nombre de la base debe contener "test", porque se vacía en cada prueba.
+
+El esquema se crea una sola vez por corrida. Las pruebas que usan la base llevan el marcador `db` (`@pytest.mark.db` en la prueba, o `pytestmark = pytest.mark.db` en el módulo) y parten de tablas vacías: antes de cada una se borran todas las filas y se reinician las secuencias. Las demás son lógica pura y no tocan la base; si una prueba sin el marcador abre una conexión, falla y pide que se marque.
 ```bash
 # Ejecutar todos los tests
 poetry run pytest
+
+# Ciclo rápido: solo las pruebas sin base (unos segundos)
+poetry run pytest -m "not db"
+
+# Solo las que usan la base
+poetry run pytest -m db
 
 # Con coverage
 poetry run pytest --cov=app --cov-report=html

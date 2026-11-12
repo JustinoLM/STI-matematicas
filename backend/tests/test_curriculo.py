@@ -282,6 +282,7 @@ async def _prerrequisitos(leccion_id: str) -> set[str]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_carga_es_idempotente():
     primera = await _cargar(_base())
     assert primera.lecciones_creadas == 5 and primera.caminos_creados == 3
@@ -295,6 +296,7 @@ async def test_la_carga_es_idempotente():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_carga_del_archivo_real_es_idempotente():
     programa = leer_programa()
     async with TestSessionLocal() as db:
@@ -310,6 +312,7 @@ async def test_la_carga_del_archivo_real_es_idempotente():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_carga_actualiza_titulos_caminos_y_prerrequisitos():
     await _cargar(_base())
     datos = _base()
@@ -326,6 +329,7 @@ async def test_la_carga_actualiza_titulos_caminos_y_prerrequisitos():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_carga_admite_reordenar_lecciones():
     """Intercambiar dos lecciones choca con las restricciones únicas si no fueran diferibles."""
     await _cargar(_base())
@@ -345,6 +349,7 @@ async def test_la_carga_admite_reordenar_lecciones():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_carga_elimina_caminos_que_ya_no_estan():
     await _cargar(_base())
     datos = _base()
@@ -357,6 +362,7 @@ async def test_la_carga_elimina_caminos_que_ya_no_estan():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_una_carga_invalida_no_escribe_nada():
     datos = _base()
     _leccion(datos, "d")["prerrequisitos"] = ["e"]   # ciclo
@@ -366,6 +372,7 @@ async def test_una_carga_invalida_no_escribe_nada():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_no_borra_lecciones_que_faltan_en_el_archivo():
     await _cargar(_base())
     datos = _base()
@@ -377,6 +384,7 @@ async def test_no_borra_lecciones_que_faltan_en_el_archivo():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_la_base_rechaza_exclusion_sin_motivo():
     """La regla también está en la base (CHECK), no solo en el cargador."""
     from sqlalchemy.exc import IntegrityError
@@ -393,6 +401,7 @@ async def test_la_base_rechaza_exclusion_sin_motivo():
 # ─── Endpoint ────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_endpoint_exige_profesor_o_administrador():
     await _cargar(_base())
     async with AsyncClient(app=app, base_url="http://test") as c:
@@ -407,6 +416,7 @@ async def test_endpoint_exige_profesor_o_administrador():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_endpoint_lista_el_catalogo_por_grado():
     await _cargar(_base())
     async with AsyncClient(app=app, base_url="http://test") as c:
@@ -431,6 +441,7 @@ async def test_endpoint_lista_el_catalogo_por_grado():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_endpoint_caminos():
     await _cargar(_base())
     async with AsyncClient(app=app, base_url="http://test") as c:

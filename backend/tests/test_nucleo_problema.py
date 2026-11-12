@@ -425,6 +425,7 @@ def test_parametros_desde_config_ignora_lo_invalido():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_cargar_parametros_de_la_base():
     from app.models.config import ConfiguracionSistema
     from tests.conftest import TestSessionLocal

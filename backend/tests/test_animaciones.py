@@ -11,6 +11,8 @@ from app.repositories.animaciones_repository import AnimacionesRepository
 from tests.conftest import TestSessionLocal
 from tests.test_medallas_sesiones_config import _estudiante
 
+pytestmark = pytest.mark.db
+
 
 async def _problema(db, firma):
     p = Problema(operacion=Operacion.SUMA, numero1=Decimal("1.5"), numero2=Decimal("2"), resultado=Decimal("3.5"),

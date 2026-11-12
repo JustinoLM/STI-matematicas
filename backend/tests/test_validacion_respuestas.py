@@ -55,6 +55,7 @@ def test_no_queda_ninguna_tolerancia_de_0_01_en_el_backend():
     "respuesta,correcta",
     [(18.5175, True), (18.518, True), (18.52, False), (18.5174, False)],
 )
+@pytest.mark.db
 async def test_practica_aplica_la_regla(respuesta, correcta):
     async with AsyncClient(app=app, base_url="http://test") as c:
         est, H = await _crear_estudiante(c, "VAL001")

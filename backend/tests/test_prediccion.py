@@ -119,6 +119,7 @@ def test_no_entrena_con_pocos_datos_ni_con_una_sola_clase():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_el_modelo_se_guarda_y_se_recarga_de_la_bd():
     ml = MLService()
     ml.entrenar_prediccion(_historico_separable())
@@ -136,6 +137,7 @@ async def test_el_modelo_se_guarda_y_se_recarga_de_la_bd():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_construir_historico_desde_la_bd():
     from decimal import Decimal
 

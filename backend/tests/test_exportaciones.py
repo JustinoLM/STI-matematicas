@@ -12,6 +12,8 @@ from app.models.gamification import CategoriaMedalla, EstudianteMedalla, Medalla
 from tests.conftest import TestSessionLocal, admin_headers
 from tests.test_medallas_sesiones_config import _desafio_completado, _estudiante, _sesion
 
+pytestmark = pytest.mark.db
+
 NOMBRE = "Estudiante de prueba"   # nombre que crea _estudiante
 
 

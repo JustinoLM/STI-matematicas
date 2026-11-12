@@ -21,6 +21,7 @@ async def test_root_endpoint():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_health_check():
     """Test del health check."""
     async with AsyncClient(app=app, base_url="http://test") as client:

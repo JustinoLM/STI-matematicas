@@ -95,6 +95,7 @@ async def _problema(db, n1, n2, firma):
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_lote_guarda_solo_variaciones_con_los_numeros_correctos_y_usa_la_cache():
     async with TestSessionLocal() as db:
         p = await _problema(db, "2.5", "4", "llm_lote_1")
@@ -120,6 +121,7 @@ async def test_lote_guarda_solo_variaciones_con_los_numeros_correctos_y_usa_la_c
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_si_el_modelo_cambia_los_numeros_no_se_guarda_nada():
     async with TestSessionLocal() as db:
         p = await _problema(db, "3", "5", "llm_lote_2")
@@ -133,6 +135,7 @@ async def test_si_el_modelo_cambia_los_numeros_no_se_guarda_nada():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_un_fallo_del_llm_no_cancela_los_demas_problemas_del_lote():
     async with TestSessionLocal() as db:
         a = await _problema(db, "1", "2", "llm_lote_3a")
@@ -156,6 +159,7 @@ async def test_tema_no_narrativo_y_lote_vacio_no_llaman_al_llm():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_el_endpoint_solo_atiende_problemas_de_las_sesiones_del_estudiante(monkeypatch):
     async with AsyncClient(app=app, base_url="http://test") as c:
         est, headers = await _estudiante(c, "LLM001")

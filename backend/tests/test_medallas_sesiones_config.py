@@ -33,6 +33,8 @@ from app.services.teacher_service import TeacherService
 from tests.conftest import TestSessionLocal, admin_headers
 from tests.salones_helpers import salon_con_estudiantes
 
+pytestmark = pytest.mark.db
+
 
 async def _estudiante(c: AsyncClient, codigo: str):
     r = await c.post("/api/auth/admin/students", headers=admin_headers(),

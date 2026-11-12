@@ -37,6 +37,7 @@ async def test_admin_sin_token_devuelve_401(metodo, ruta):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("metodo,ruta", ENDPOINTS_ADMIN)
+@pytest.mark.db
 async def test_admin_con_token_de_profesor_devuelve_403(metodo, ruta):
     async with AsyncClient(app=app, base_url="http://test") as client:
         await client.post(
@@ -59,6 +60,7 @@ async def test_admin_con_token_de_profesor_devuelve_403(metodo, ruta):
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_admin_con_token_de_admin_accede():
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.get("/api/admin/organizations", headers=admin_headers())
@@ -73,6 +75,7 @@ async def test_token_de_admin_no_sirve_como_usuario():
 
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_admin_login_correcto_y_token_funciona(monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_PASSWORD", "clave-de-prueba-admin")
     async with AsyncClient(app=app, base_url="http://test") as client:

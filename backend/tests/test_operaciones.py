@@ -39,6 +39,7 @@ def test_cors_toma_los_origenes_de_la_configuracion():
 # ─── Health check ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+@pytest.mark.db
 async def test_health_consulta_la_base_de_datos(monkeypatch):
     monkeypatch.setattr(main_mod, "AsyncSessionLocal", TestSessionLocal)
     async with AsyncClient(app=app, base_url="http://test") as c:

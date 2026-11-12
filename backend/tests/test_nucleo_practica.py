@@ -49,6 +49,8 @@ from tests.conftest import TestSessionLocal
 from tests.salones_helpers import crear_organizacion, salon_con_estudiantes
 from tests.test_organizacion_escolar import _estudiante, _org, _profesor, _salon
 
+pytestmark = pytest.mark.db
+
 L01 = "g1-u03-l01"   # Sumemos de forma horizontal (generador real)
 L02 = "g1-u03-l02"   # Restemos de forma horizontal: depende de L01 (generador de prueba)
 LUNES = datetime(2026, 11, 9, 15, 0)

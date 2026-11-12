@@ -11,6 +11,8 @@ from app.repositories.problem_repository import ProblemRepository
 from app.services.problem_service import ProblemService
 from tests.conftest import TestSessionLocal, admin_headers
 
+pytestmark = pytest.mark.db
+
 
 async def _generar(db, op, nivel, n=40, decimales=None, rango=None):
     svc = ProblemService(ProblemRepository(db))

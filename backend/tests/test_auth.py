@@ -10,6 +10,8 @@ from httpx import AsyncClient
 from app.main import app
 from tests.conftest import admin_headers
 
+pytestmark = pytest.mark.db
+
 
 @pytest.mark.asyncio
 async def test_create_student_success():
