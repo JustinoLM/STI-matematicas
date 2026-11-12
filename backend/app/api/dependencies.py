@@ -170,6 +170,31 @@ async def require_admin(token: str = Depends(oauth2_scheme)) -> None:
         )
 
 
+async def require_profesor_o_admin(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """
+    Acepta un token de administrador (role="admin") o el de un profesor activo.
+    Un estudiante recibe 403; sin token o con token inválido, 401.
+    """
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if payload.get("role") == "admin":
+        return
+    usuario = await AuthService(UserRepository(db)).get_current_user(token)
+    if not isinstance(usuario, Profesor) or not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol de profesor o de administrador",
+        )
+
+
 # ============================================
 # Type Aliases para anotaciones limpias
 # ============================================
@@ -180,6 +205,7 @@ CurrentStudent = Annotated[Estudiante, Depends(get_current_student)]
 CurrentStudentConSalon = Annotated[Estudiante, Depends(get_current_student_con_salon)]
 CurrentTeacher = Annotated[Profesor, Depends(get_current_teacher)]
 DBSession = Annotated[AsyncSession, Depends(get_db)]
+ProfesorOAdmin = Annotated[None, Depends(require_profesor_o_admin)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 

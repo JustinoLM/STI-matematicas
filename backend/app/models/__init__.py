@@ -24,6 +24,14 @@ from app.models.challenge import (
     GrupoDesafio,
 )
 
+# Currículo como datos: caminos, lecciones y prerrequisitos por defecto
+from app.models.curriculo import (
+    CaminoCurricular,
+    LeccionCamino,
+    LeccionCurricular,
+    PrerrequisitoDefecto,
+)
+
 # Error / Buggy Model
 from app.models.error import (
     ErrorComun,
@@ -142,6 +150,11 @@ __all__ = [
     "AnioLectivo",
     "Matricula",
     "Trimestre",
+    # Currículo
+    "CaminoCurricular",
+    "LeccionCurricular",
+    "LeccionCamino",
+    "PrerrequisitoDefecto",
     # Group
     "Grupo",
     "EstudianteGrupo",

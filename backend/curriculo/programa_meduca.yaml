@@ -1,0 +1,597 @@
+# Catálogo de lecciones y grafo de prerrequisitos por defecto del STI.
+#
+# Fuente: programa de Matemática de MEDUCA para 1.º a 6.º de primaria (unidades y lecciones).
+# Diseño: docs/DISENO_MODULAR.md, sección 1 → Contenido.
+#
+# Este archivo es la fuente de verdad. Se carga en la base con:
+#     cd backend && poetry run python scripts/cargar_curriculo.py
+# El comando valida todo antes de escribir y es idempotente.
+#
+# Reglas del archivo:
+# - El id de una lección es permanente: no se cambia aunque cambie la numeración del programa.
+#   Nunca se borra una lección (más adelante tendrá progreso de estudiantes); el cargador se
+#   detiene si una lección de la base falta aquí.
+# - El orden dentro del programa es la posición de la lección en este archivo.
+# - Lección incluida: tiene al menos un camino. Lección no incluida: tiene motivo.
+# - parcial: true → el STI solo cubre una parte de la lección; nota_parcial dice cuál.
+# - presentacion: presentación especial que necesita la lección (semirrecta, cinta).
+# - cubierta_por: la lección ya la atiende un sistema existente (sistema_decimales,
+#   modulo_regla_de_tres), que no se toca.
+# - prerrequisitos: los mínimos, solo lo necesario para resolver la lección (el orden del
+#   programa ya cuenta en el reparto de la sesión). Solo lecciones incluidas, de grado igual
+#   o menor, sin ciclos. Grafo completo para 1.º y 2.º; de 3.º a 6.º queda pendiente.
+
+version: 1
+
+caminos:
+  # Naturales
+  - {id: naturales.numeracion, conjunto: naturales, habilidad: numeracion, nombre: "Numeración de naturales"}
+  - {id: naturales.suma, conjunto: naturales, habilidad: suma, nombre: "Suma de naturales"}
+  - {id: naturales.resta, conjunto: naturales, habilidad: resta, nombre: "Resta de naturales"}
+  - {id: naturales.multiplicacion, conjunto: naturales, habilidad: multiplicacion, nombre: "Multiplicación de naturales"}
+  - {id: naturales.division, conjunto: naturales, habilidad: division, nombre: "División de naturales"}
+  - {id: naturales.operaciones_combinadas, conjunto: naturales, habilidad: operaciones_combinadas, nombre: "Operaciones combinadas con naturales"}
+  - {id: naturales.secuencias, conjunto: naturales, habilidad: secuencias, nombre: "Secuencias y patrones numéricos"}
+  - {id: naturales.divisibilidad, conjunto: naturales, habilidad: divisibilidad, nombre: "Divisibilidad, múltiplos y divisores"}
+  - {id: naturales.potenciacion, conjunto: naturales, habilidad: potenciacion, nombre: "Potenciación y radicación de naturales"}
+  # Decimales (hoy los atiende el sistema actual de decimales)
+  - {id: decimales.numeracion, conjunto: decimales, habilidad: numeracion, nombre: "Numeración de decimales"}
+  - {id: decimales.suma, conjunto: decimales, habilidad: suma, nombre: "Suma de decimales"}
+  - {id: decimales.resta, conjunto: decimales, habilidad: resta, nombre: "Resta de decimales"}
+  - {id: decimales.multiplicacion, conjunto: decimales, habilidad: multiplicacion, nombre: "Multiplicación de decimales"}
+  - {id: decimales.division, conjunto: decimales, habilidad: division, nombre: "División de decimales"}
+  # Fracciones
+  - {id: fracciones.numeracion, conjunto: fracciones, habilidad: numeracion, nombre: "Numeración de fracciones"}
+  - {id: fracciones.suma, conjunto: fracciones, habilidad: suma, nombre: "Suma de fracciones"}
+  - {id: fracciones.resta, conjunto: fracciones, habilidad: resta, nombre: "Resta de fracciones"}
+  - {id: fracciones.multiplicacion, conjunto: fracciones, habilidad: multiplicacion, nombre: "Multiplicación de fracciones"}
+  - {id: fracciones.division, conjunto: fracciones, habilidad: division, nombre: "División de fracciones"}
+  - {id: fracciones.operaciones_combinadas, conjunto: fracciones, habilidad: operaciones_combinadas, nombre: "Operaciones combinadas con fracciones"}
+  - {id: fracciones.potenciacion, conjunto: fracciones, habilidad: potenciacion, nombre: "Potenciación y radicación de fracciones"}
+  # Enteros
+  - {id: enteros.numeracion, conjunto: enteros, habilidad: numeracion, nombre: "Numeración de enteros"}
+  - {id: enteros.suma, conjunto: enteros, habilidad: suma, nombre: "Suma de enteros"}
+  - {id: enteros.resta, conjunto: enteros, habilidad: resta, nombre: "Resta de enteros"}
+  - {id: enteros.multiplicacion, conjunto: enteros, habilidad: multiplicacion, nombre: "Multiplicación de enteros"}
+  - {id: enteros.division, conjunto: enteros, habilidad: division, nombre: "División de enteros"}
+  # Medida: conversiones entre unidades
+  - {id: medida.longitud, conjunto: medida, habilidad: longitud, nombre: "Conversiones de longitud"}
+  - {id: medida.masa, conjunto: medida, habilidad: masa, nombre: "Conversiones de masa"}
+  - {id: medida.capacidad, conjunto: medida, habilidad: capacidad, nombre: "Conversiones de capacidad"}
+  - {id: medida.superficie, conjunto: medida, habilidad: superficie, nombre: "Conversiones de superficie"}
+  - {id: medida.tiempo, conjunto: medida, habilidad: tiempo, nombre: "Conversiones y cálculo con tiempo"}
+  # Proporcionalidad
+  - {id: proporcionalidad.razones, conjunto: proporcionalidad, habilidad: razones, nombre: "Razones"}
+  - {id: proporcionalidad.porcentajes, conjunto: proporcionalidad, habilidad: porcentajes, nombre: "Porcentajes"}
+  - {id: proporcionalidad.proporciones, conjunto: proporcionalidad, habilidad: proporciones, nombre: "Proporciones y proporcionalidad"}
+  - {id: proporcionalidad.regla_de_tres, conjunto: proporcionalidad, habilidad: regla_de_tres, nombre: "Regla de tres"}
+
+grados:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  - grado: 1
+    unidades:
+      - numero: 1
+        titulo: "Observo mi entorno"
+        lecciones:
+          - {id: g1-u01-l01, numero: 1, titulo: "Clasifiquemos objetos", incluida: false,
+             motivo: "Prenumérica: clasificar objetos es percepción, no contenido numérico."}
+          - {id: g1-u01-l02, numero: 2, titulo: "Comparemos objetos", incluida: false,
+             motivo: "Prenumérica: comparar objetos es percepción, no contenido numérico."}
+          - {id: g1-u01-l03, numero: 3, titulo: "Identifiquemos patrones", incluida: false,
+             motivo: "Prenumérica: patrones de objetos y figuras, no numéricos."}
+
+      - numero: 2
+        titulo: "Los números hasta el 10"
+        lecciones:
+          - {id: g1-u02-l01, numero: 1, titulo: "Conozcamos los números del 0 al 10",
+             caminos: [naturales.numeracion], prerrequisitos: []}
+          - {id: g1-u02-l02, numero: 2, titulo: "Formemos los números del 2 al 10",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u02-l01]}
+
+      - numero: 3
+        titulo: "Suma y resta con números hasta 10"
+        lecciones:
+          - {id: g1-u03-l01, numero: 1, titulo: "Sumemos de forma horizontal",
+             caminos: [naturales.suma], prerrequisitos: [g1-u02-l01]}
+          - {id: g1-u03-l02, numero: 2, titulo: "Restemos de forma horizontal",
+             caminos: [naturales.resta], prerrequisitos: [g1-u03-l01]}
+          - {id: g1-u03-l03, numero: 3, titulo: "Sumemos y restemos 3 números",
+             caminos: [naturales.suma, naturales.resta], prerrequisitos: [g1-u03-l02]}
+
+      - numero: 4
+        titulo: "Los números hasta el 20"
+        lecciones:
+          - {id: g1-u04-l01, numero: 1, titulo: "Conozcamos los números del 11 al 20",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u02-l01]}
+          - {id: g1-u04-l02, numero: 2, titulo: "Ordenemos y ubiquemos números en la semirrecta",
+             caminos: [naturales.numeracion], presentacion: semirrecta, prerrequisitos: [g1-u04-l01]}
+          - {id: g1-u04-l03, numero: 3, titulo: "Contemos de forma progresiva y regresiva",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u04-l01]}
+
+      - numero: 5
+        titulo: "Sumemos y restemos hasta 20"
+        lecciones:
+          - {id: g1-u05-l01, numero: 1, titulo: "Sumemos 10",
+             caminos: [naturales.suma], prerrequisitos: [g1-u03-l01, g1-u04-l01]}
+          - {id: g1-u05-l02, numero: 2, titulo: "Sumemos completando a 10",
+             caminos: [naturales.suma], prerrequisitos: [g1-u05-l01, g1-u02-l02],
+             notas: "Enseña una estrategia: el generador usa huecos para ella (8 + 5 = 8 + _ + _ = _)."}
+          - {id: g1-u05-l03, numero: 3, titulo: "Restemos con números hasta 19",
+             caminos: [naturales.resta], prerrequisitos: [g1-u03-l02, g1-u05-l01]}
+          - {id: g1-u05-l04, numero: 4, titulo: "Sumemos y restemos 3 números hasta 20",
+             caminos: [naturales.suma, naturales.resta],
+             prerrequisitos: [g1-u03-l03, g1-u05-l02, g1-u05-l03]}
+          - {id: g1-u05-l05, numero: 5, titulo: "Sumemos y restemos en la semirrecta numérica",
+             caminos: [naturales.suma, naturales.resta], presentacion: semirrecta,
+             prerrequisitos: [g1-u04-l02, g1-u05-l03]}
+
+      - numero: 6
+        titulo: "Los números hasta 99"
+        lecciones:
+          - {id: g1-u06-l01, numero: 1, titulo: "Agrupemos y contemos de 10 en 10",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u04-l01]}
+          - {id: g1-u06-l02, numero: 2, titulo: "Conozcamos los números hasta 99",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l01]}
+          - {id: g1-u06-l03, numero: 3, titulo: "Formemos números con unidades y decenas",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l02]}
+          - {id: g1-u06-l04, numero: 4, titulo: "Ubiquemos números en la semirrecta numérica",
+             caminos: [naturales.numeracion], presentacion: semirrecta,
+             prerrequisitos: [g1-u06-l02, g1-u04-l02]}
+          - {id: g1-u06-l05, numero: 5, titulo: "Comparemos números",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l03]}
+          - {id: g1-u06-l06, numero: 6, titulo: "Números ordinales del 1° al 12°", incluida: false,
+             motivo: "Ordinales: el diseño los deja para más adelante."}
+
+      - numero: 7
+        titulo: "Sumemos y restemos hasta 99"
+        lecciones:
+          - {id: g1-u07-l01, numero: 1, titulo: "Sumemos con totales hasta 99",
+             caminos: [naturales.suma], prerrequisitos: [g1-u06-l03, g1-u05-l01],
+             notas: "Sin llevar: llevar empieza en 2.º (g2-u02-l01)."}
+          - {id: g1-u07-l02, numero: 2, titulo: "Restemos números hasta 99",
+             caminos: [naturales.resta], prerrequisitos: [g1-u07-l01, g1-u05-l03],
+             notas: "Sin pedir prestado: pedir prestado empieza en 2.º (g2-u04-l01)."}
+          - {id: g1-u07-l03, numero: 3, titulo: "Sumemos y restemos en la semirrecta numérica",
+             caminos: [naturales.suma, naturales.resta], presentacion: semirrecta,
+             prerrequisitos: [g1-u06-l04, g1-u07-l02]}
+
+      - numero: 8
+        titulo: "Líneas y formas en mi entorno"
+        lecciones:
+          - {id: g1-u08-l01, numero: 1, titulo: "Conozcamos las líneas por su forma y posición", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g1-u08-l02, numero: 2, titulo: "Identifiquemos formas geométricas", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 9
+        titulo: "Sistemas de medidas"
+        lecciones:
+          - {id: g1-u09-l01, numero: 1, titulo: "Comparemos longitudes", incluida: false,
+             motivo: "Comparar longitudes requiere percibir; el diseño la deja para más adelante."}
+          - {id: g1-u09-l02, numero: 2, titulo: "Utilicemos las monedas", incluida: false,
+             motivo: "Monedas: el diseño las deja para más adelante."}
+          - {id: g1-u09-l03, numero: 3, titulo: "Midamos el tiempo", incluida: false,
+             motivo: "Lectura del reloj analógico: el diseño la deja para más adelante."}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  - grado: 2
+    unidades:
+      - numero: 1
+        titulo: "Conozcamos los números menores de 1000"
+        lecciones:
+          - {id: g2-u01-l01, numero: 1, titulo: "Analicemos el número 100",
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l03]}
+          - {id: g2-u01-l02, numero: 2, titulo: "Aprendamos sobre números de 3 cifras",
+             caminos: [naturales.numeracion], prerrequisitos: [g2-u01-l01]}
+          - {id: g2-u01-l03, numero: 3, titulo: "Preparémonos para la suma y la resta", incluida: false,
+             motivo: "Emparejar objetos con colores: no es contenido numérico."}
+          - {id: g2-u01-l04, numero: 4, titulo: "Usemos la semirrecta numérica con números de 3 cifras",
+             caminos: [naturales.numeracion], presentacion: semirrecta,
+             prerrequisitos: [g2-u01-l02, g1-u06-l04]}
+          - {id: g2-u01-l05, numero: 5, titulo: "Comparemos números menores de 1000",
+             caminos: [naturales.numeracion], prerrequisitos: [g2-u01-l02, g1-u06-l05]}
+          - {id: g2-u01-l06, numero: 6, titulo: "Aprendamos sobre números ordinales y números romanos", incluida: false,
+             motivo: "Ordinales y números romanos: quedan fuera por ahora."}
+
+      - numero: 2
+        titulo: "Aprendamos más sobre la suma"
+        lecciones:
+          - {id: g2-u02-l01, numero: 1, titulo: "Sumemos números hasta de 2 cifras llevando",
+             caminos: [naturales.suma], prerrequisitos: [g1-u07-l01, g1-u05-l02]}
+          - {id: g2-u02-l02, numero: 2, titulo: "Reconozcamos características de la suma",
+             caminos: [naturales.suma], prerrequisitos: [g1-u07-l01]}
+          - {id: g2-u02-l03, numero: 3, titulo: "Sumemos números de 3 cifras sin llevar y llevando",
+             caminos: [naturales.suma], prerrequisitos: [g2-u02-l01, g2-u01-l02]}
+
+      - numero: 3
+        titulo: "Conozcamos segmentos, rectas y figuras geométricas"
+        lecciones:
+          - {id: g2-u03-l01, numero: 1, titulo: "Conozcamos puntos, rectas y segmentos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g2-u03-l02, numero: 2, titulo: "Aprendamos sobre figuras planas", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 4
+        titulo: "Aprendamos más sobre la resta"
+        lecciones:
+          - {id: g2-u04-l01, numero: 1, titulo: "Restemos números hasta de 2 cifras pidiendo prestado",
+             caminos: [naturales.resta], prerrequisitos: [g1-u07-l02, g2-u02-l01]}
+          - {id: g2-u04-l02, numero: 2, titulo: "Restemos números hasta de 3 cifras sin pedir prestado y pidiendo una vez",
+             caminos: [naturales.resta], prerrequisitos: [g2-u04-l01, g2-u02-l03]}
+          - {id: g2-u04-l03, numero: 3, titulo: "Restemos números hasta de 3 cifras pidiendo prestado 2 veces",
+             caminos: [naturales.resta], prerrequisitos: [g2-u04-l02]}
+          - {id: g2-u04-l04, numero: 4, titulo: "Sumemos y restemos con la gráfica de cinta",
+             caminos: [naturales.suma, naturales.resta], presentacion: cinta,
+             prerrequisitos: [g2-u02-l01, g2-u04-l01]}
+
+      - numero: 5
+        titulo: "Comencemos a multiplicar"
+        lecciones:
+          - {id: g2-u05-l01, numero: 1, titulo: "Conozcamos la multiplicación",
+             caminos: [naturales.multiplicacion], prerrequisitos: [g1-u07-l01]}
+          - {id: g2-u05-l02, numero: 2, titulo: "Conozcamos las tablas de multiplicar del 2 al 5",
+             caminos: [naturales.multiplicacion], prerrequisitos: [g2-u05-l01]}
+
+      - numero: 6
+        titulo: "Conozcamos medidas de longitud"
+        lecciones:
+          - {id: g2-u06-l01, numero: 1, titulo: "Conozcamos unidades de medidas de longitud", incluida: false,
+             motivo: "Medir con regla e instrumentos requiere percibir; queda fuera por ahora."}
+          - {id: g2-u06-l02, numero: 2, titulo: "Sumemos y restemos longitudes",
+             caminos: [naturales.suma, naturales.resta], prerrequisitos: [g1-u07-l02],
+             notas: "Hueco de cantidad con unidad (25 cm + 13 cm = _ cm). No requiere llevar."}
+
+      - numero: 7
+        titulo: "Sigamos multiplicando"
+        lecciones:
+          - {id: g2-u07-l01, numero: 1, titulo: "Conozcamos las tablas de multiplicar del 6, 7, 8, 9 y 10",
+             caminos: [naturales.multiplicacion], prerrequisitos: [g2-u05-l02]}
+          - {id: g2-u07-l02, numero: 2, titulo: "Utilicemos la multiplicación",
+             caminos: [naturales.multiplicacion], prerrequisitos: [g2-u07-l01]}
+
+      - numero: 8
+        titulo: "Conozcamos formas de medir el tiempo y el dinero"
+        lecciones:
+          - {id: g2-u08-l01, numero: 1, titulo: "Conozcamos formas de medir el tiempo", incluida: false,
+             motivo: "Reloj y calendario: quedan fuera por ahora, como el reloj de 1.º."}
+          - {id: g2-u08-l02, numero: 2, titulo: "Conozcamos los billetes", incluida: false,
+             motivo: "Dinero: queda fuera por ahora, como las monedas de 1.º."}
+
+      - numero: 9
+        titulo: "Organicemos datos y reconozcamos secuencias numéricas"
+        lecciones:
+          - {id: g2-u09-l01, numero: 1, titulo: "Organicemos datos en tablas de frecuencias y gráficas", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g2-u09-l02, numero: 2, titulo: "Reconozcamos patrones y secuencias numéricas",
+             caminos: [naturales.secuencias], prerrequisitos: [g1-u04-l03]}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # De 3.º a 6.º: lecciones con su camino; el grafo de prerrequisitos queda pendiente.
+  - grado: 3
+    unidades:
+      - numero: 1
+        titulo: "Los números menores de 1 000 000"
+        lecciones:
+          - {id: g3-u01-l01, numero: 1, titulo: "Escritura y lectura de números menores de 1 000 000", caminos: [naturales.numeracion]}
+          - {id: g3-u01-l02, numero: 2, titulo: "Descomposición y composición de números menores de 1 000 000", caminos: [naturales.numeracion]}
+          - {id: g3-u01-l03, numero: 3, titulo: "Comparación de números de hasta 6 cifras", caminos: [naturales.numeracion]}
+          - {id: g3-u01-l04, numero: 4, titulo: "Aproximación de números menores de 1 000 000", caminos: [naturales.numeracion]}
+
+      - numero: 2
+        titulo: "Suma y resta de números de hasta 6 cifras"
+        lecciones:
+          - {id: g3-u02-l01, numero: 1, titulo: "Suma de números de hasta 6 cifras", caminos: [naturales.suma]}
+          - {id: g3-u02-l02, numero: 2, titulo: "Resta de números de hasta 6 cifras", caminos: [naturales.resta]}
+
+      - numero: 3
+        titulo: "Ángulos y polígonos"
+        lecciones:
+          - {id: g3-u03-l01, numero: 1, titulo: "Tipos de ángulos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g3-u03-l02, numero: 2, titulo: "Los polígonos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 4
+        titulo: "La multiplicación"
+        lecciones:
+          - {id: g3-u04-l01, numero: 1, titulo: "Fijación de las tablas de multiplicar", caminos: [naturales.multiplicacion]}
+          - {id: g3-u04-l02, numero: 2, titulo: "Multiplicación de decenas, centenas y unidades de millar por una cifra", caminos: [naturales.multiplicacion]}
+          - {id: g3-u04-l03, numero: 3, titulo: "Multiplicación de números de 2 cifras por una cifra", caminos: [naturales.multiplicacion]}
+          - {id: g3-u04-l04, numero: 4, titulo: "Multiplicación de números de 3 cifras por una cifra", caminos: [naturales.multiplicacion]}
+          - {id: g3-u04-l05, numero: 5, titulo: "Multiplicación por decenas y centenas completas", caminos: [naturales.multiplicacion]}
+          - {id: g3-u04-l06, numero: 6, titulo: "Multiplicación por números de 2 o 3 cifras", caminos: [naturales.multiplicacion]}
+
+      - numero: 5
+        titulo: "Figuras planas y cuerpos geométricos"
+        lecciones:
+          - {id: g3-u05-l01, numero: 1, titulo: "El triángulo", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g3-u05-l02, numero: 2, titulo: "Cuadriláteros: el rectángulo y el cuadrado", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g3-u05-l03, numero: 3, titulo: "Cálculo del perímetro y el área de un triángulo, un cuadrado y un rectángulo", incluida: false,
+             motivo: "Cálculo sobre figuras geométricas: fuera por ahora (revisar en la fase 9)."}
+          - {id: g3-u05-l04, numero: 4, titulo: "Cuerpos geométricos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 6
+        titulo: "La división"
+        lecciones:
+          - {id: g3-u06-l01, numero: 1, titulo: "División sin residuo", caminos: [naturales.division]}
+          - {id: g3-u06-l02, numero: 2, titulo: "División con residuo", caminos: [naturales.division]}
+          - {id: g3-u06-l03, numero: 3, titulo: "Procedimiento de la división", caminos: [naturales.division]}
+
+      - numero: 7
+        titulo: "Unidades de medida"
+        lecciones:
+          - {id: g3-u07-l01, numero: 1, titulo: "La longitud", caminos: [medida.longitud],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g3-u07-l02, numero: 2, titulo: "La masa", caminos: [medida.masa],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g3-u07-l03, numero: 3, titulo: "El tiempo", caminos: [medida.tiempo],
+             parcial: true, nota_parcial: "Solo conversiones de tiempo (70 min = 1 h 10 min); sin lectura de reloj analógico."}
+
+      - numero: 8
+        titulo: "Fracciones"
+        lecciones:
+          - {id: g3-u08-l01, numero: 1, titulo: "Representación de cantidades en fracción", caminos: [fracciones.numeracion]}
+          - {id: g3-u08-l02, numero: 2, titulo: "Representación de una fracción en la recta numérica",
+             caminos: [fracciones.numeracion], presentacion: semirrecta}
+          - {id: g3-u08-l03, numero: 3, titulo: "Suma y resta de fracciones", caminos: [fracciones.suma, fracciones.resta]}
+
+      - numero: 9
+        titulo: "Registro de datos y secuencias numéricas"
+        lecciones:
+          - {id: g3-u09-l01, numero: 1, titulo: "Recolección y organización de datos", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g3-u09-l02, numero: 2, titulo: "Lectura y elaboración de gráficas", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g3-u09-l03, numero: 3, titulo: "Secuencias y patrones", caminos: [naturales.secuencias]}
+
+      - numero: 10
+        titulo: "Números ordinales y números romanos"
+        lecciones:
+          - {id: g3-u10-l01, numero: 1, titulo: "Números ordinales hasta 50°", incluida: false,
+             motivo: "Ordinales: el diseño los deja para más adelante."}
+          - {id: g3-u10-l02, numero: 2, titulo: "Números romanos", incluida: false,
+             motivo: "Números romanos: quedan fuera por ahora."}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  - grado: 4
+    unidades:
+      - numero: 1
+        titulo: "Números y operaciones de suma y resta"
+        lecciones:
+          - {id: g4-u01-l01, numero: 1, titulo: "Los números menores de 1 000 000 000", caminos: [naturales.numeracion]}
+          - {id: g4-u01-l02, numero: 2, titulo: "La semirrecta numérica", caminos: [naturales.numeracion], presentacion: semirrecta}
+          - {id: g4-u01-l03, numero: 3, titulo: "Suma y resta de números naturales", caminos: [naturales.suma, naturales.resta]}
+
+      - numero: 2
+        titulo: "La multiplicación"
+        lecciones:
+          - {id: g4-u02-l01, numero: 1, titulo: "Multiplicación por números de hasta 5 cifras", caminos: [naturales.multiplicacion]}
+
+      - numero: 3
+        titulo: "La división"
+        lecciones:
+          - {id: g4-u03-l01, numero: 1, titulo: "División entre números de una cifra", caminos: [naturales.division]}
+          - {id: g4-u03-l02, numero: 2, titulo: "División entre números de dos cifras", caminos: [naturales.division]}
+          - {id: g4-u03-l03, numero: 3, titulo: "Aplicaciones de la multiplicación y la división",
+             caminos: [naturales.multiplicacion, naturales.division]}
+          - {id: g4-u03-l04, numero: 4, titulo: "Operaciones combinadas", caminos: [naturales.operaciones_combinadas]}
+
+      - numero: 4
+        titulo: "Operaciones con fracciones"
+        lecciones:
+          - {id: g4-u04-l01, numero: 1, titulo: "Las fracciones", caminos: [fracciones.numeracion]}
+          - {id: g4-u04-l02, numero: 2, titulo: "Fracciones equivalentes", caminos: [fracciones.numeracion]}
+          - {id: g4-u04-l03, numero: 3, titulo: "Suma de fracciones", caminos: [fracciones.suma]}
+          - {id: g4-u04-l04, numero: 4, titulo: "Resta de fracciones", caminos: [fracciones.resta]}
+          - {id: g4-u04-l05, numero: 5, titulo: "Operaciones combinadas con fracciones", caminos: [fracciones.operaciones_combinadas]}
+          - {id: g4-u04-l06, numero: 6, titulo: "Multiplicación y división de fracciones",
+             caminos: [fracciones.multiplicacion, fracciones.division]}
+
+      - numero: 5
+        titulo: "Números decimales"
+        lecciones:
+          - {id: g4-u05-l01, numero: 1, titulo: "Los números decimales", caminos: [decimales.numeracion]}
+          - {id: g4-u05-l02, numero: 2, titulo: "Expresión de fracciones como números decimales",
+             caminos: [fracciones.numeracion, decimales.numeracion]}
+
+      - numero: 6
+        titulo: "Números romanos y secuencias numéricas"
+        lecciones:
+          - {id: g4-u06-l01, numero: 1, titulo: "Los números romanos", incluida: false,
+             motivo: "Números romanos: quedan fuera por ahora."}
+          - {id: g4-u06-l02, numero: 2, titulo: "Las secuencias y los patrones numéricos", caminos: [naturales.secuencias]}
+
+      - numero: 7
+        titulo: "Unidades de medida"
+        lecciones:
+          - {id: g4-u07-l01, numero: 1, titulo: "Unidades de medida de longitud", caminos: [medida.longitud],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g4-u07-l02, numero: 2, titulo: "Unidades de medida de superficie", caminos: [medida.superficie],
+             parcial: true, nota_parcial: "Solo conversiones entre unidades; sin medir sobre figuras."}
+          - {id: g4-u07-l03, numero: 3, titulo: "Unidades de medida de masa", caminos: [medida.masa],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g4-u07-l04, numero: 4, titulo: "Unidades de medida de capacidad", caminos: [medida.capacidad],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+
+      - numero: 8
+        titulo: "Geometría"
+        lecciones:
+          - {id: g4-u08-l01, numero: 1, titulo: "Medición y construcción de ángulos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g4-u08-l02, numero: 2, titulo: "Los polígonos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g4-u08-l03, numero: 3, titulo: "Perímetro y área de paralelogramos", incluida: false,
+             motivo: "Cálculo sobre figuras geométricas: fuera por ahora (revisar en la fase 9)."}
+          - {id: g4-u08-l04, numero: 4, titulo: "Círculo y circunferencia", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 9
+        titulo: "Estadística"
+        lecciones:
+          - {id: g4-u09-l01, numero: 1, titulo: "Procesamiento de datos", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g4-u09-l02, numero: 2, titulo: "Azar y probabilidad", incluida: false,
+             motivo: "Probabilidad: queda fuera por ahora (revisar en la fase 9)."}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  - grado: 5
+    unidades:
+      - numero: 1
+        titulo: "Divisibilidad, múltiplos y divisores"
+        lecciones:
+          - {id: g5-u01-l01, numero: 1, titulo: "Divisibilidad", caminos: [naturales.divisibilidad]}
+          - {id: g5-u01-l02, numero: 2, titulo: "Múltiplos", caminos: [naturales.divisibilidad]}
+          - {id: g5-u01-l03, numero: 3, titulo: "Divisores", caminos: [naturales.divisibilidad]}
+
+      - numero: 2
+        titulo: "Adición y sustracción con decimales"
+        lecciones:
+          - {id: g5-u02-l01, numero: 1, titulo: "Los números decimales", caminos: [decimales.numeracion]}
+          - {id: g5-u02-l02, numero: 2, titulo: "Suma de números decimales", caminos: [decimales.suma],
+             cubierta_por: sistema_decimales}
+          - {id: g5-u02-l03, numero: 3, titulo: "Resta de números decimales", caminos: [decimales.resta],
+             cubierta_por: sistema_decimales}
+
+      - numero: 3
+        titulo: "Multiplicación y división con números decimales"
+        lecciones:
+          - {id: g5-u03-l01, numero: 1, titulo: "Multiplicación de números decimales por números naturales",
+             caminos: [decimales.multiplicacion], cubierta_por: sistema_decimales}
+          - {id: g5-u03-l02, numero: 2, titulo: "Multiplicación por números decimales",
+             caminos: [decimales.multiplicacion], cubierta_por: sistema_decimales}
+          - {id: g5-u03-l03, numero: 3, titulo: "División de números decimales entre números naturales",
+             caminos: [decimales.division], cubierta_por: sistema_decimales}
+          - {id: g5-u03-l04, numero: 4, titulo: "División entre números decimales",
+             caminos: [decimales.division], cubierta_por: sistema_decimales}
+
+      - numero: 4
+        titulo: "Las fracciones y los decimales"
+        lecciones:
+          - {id: g5-u04-l01, numero: 1, titulo: "Suma de fracciones heterogéneas y números mixtos", caminos: [fracciones.suma]}
+          - {id: g5-u04-l02, numero: 2, titulo: "Resta de fracciones heterogéneas y números mixtos", caminos: [fracciones.resta]}
+          - {id: g5-u04-l03, numero: 3, titulo: "Multiplicación y división de fracciones y números naturales",
+             caminos: [fracciones.multiplicacion, fracciones.division]}
+          - {id: g5-u04-l04, numero: 4, titulo: "Multiplicación con fracciones", caminos: [fracciones.multiplicacion]}
+          - {id: g5-u04-l05, numero: 5, titulo: "División entre fracciones", caminos: [fracciones.division]}
+          - {id: g5-u04-l06, numero: 6, titulo: "Operaciones combinadas", caminos: [fracciones.operaciones_combinadas]}
+
+      - numero: 5
+        titulo: "Razones, porcentajes y proporciones"
+        lecciones:
+          - {id: g5-u05-l01, numero: 1, titulo: "Razones", caminos: [proporcionalidad.razones]}
+          - {id: g5-u05-l02, numero: 2, titulo: "Porcentajes", caminos: [proporcionalidad.porcentajes]}
+          - {id: g5-u05-l03, numero: 3, titulo: "Proporciones", caminos: [proporcionalidad.proporciones]}
+          - {id: g5-u05-l04, numero: 4, titulo: "Proporcionalidad directa", caminos: [proporcionalidad.proporciones]}
+          - {id: g5-u05-l05, numero: 5, titulo: "Proporcionalidad inversa", caminos: [proporcionalidad.proporciones]}
+
+      - numero: 6
+        titulo: "Secuencias y patrones numéricos"
+        lecciones:
+          - {id: g5-u06-l01, numero: 1, titulo: "Formación de secuencias numéricas", caminos: [naturales.secuencias]}
+
+      - numero: 7
+        titulo: "Unidades de área, longitud, masa y capacidad"
+        lecciones:
+          - {id: g5-u07-l01, numero: 1, titulo: "Unidades de medida de área", caminos: [medida.superficie],
+             parcial: true, nota_parcial: "Solo conversiones entre unidades; sin medir sobre figuras."}
+          - {id: g5-u07-l02, numero: 2, titulo: "Unidades de medida de longitud", caminos: [medida.longitud],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g5-u07-l03, numero: 3, titulo: "Unidades de medida de masa", caminos: [medida.masa],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+          - {id: g5-u07-l04, numero: 4, titulo: "Unidades de medida de capacidad", caminos: [medida.capacidad],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades; sin medir con instrumentos."}
+
+      - numero: 8
+        titulo: "Geometría"
+        lecciones:
+          - {id: g5-u08-l01, numero: 1, titulo: "Tipos de ángulos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g5-u08-l02, numero: 2, titulo: "Figuras planas", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+          - {id: g5-u08-l03, numero: 3, titulo: "Paralelepípedos", incluida: false,
+             motivo: "Geometría: el diseño la deja para más adelante."}
+
+      - numero: 9
+        titulo: "Estadística y probabilidad"
+        lecciones:
+          - {id: g5-u09-l01, numero: 1, titulo: "Elementos de estadística", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g5-u09-l02, numero: 2, titulo: "Las medidas de tendencia central", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g5-u09-l03, numero: 3, titulo: "La probabilidad", incluida: false,
+             motivo: "Probabilidad: queda fuera por ahora (revisar en la fase 9)."}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  - grado: 6
+    unidades:
+      - numero: 1
+        titulo: "Números enteros"
+        lecciones:
+          - {id: g6-u01-l01, numero: 1, titulo: "Los números enteros", caminos: [enteros.numeracion]}
+          - {id: g6-u01-l02, numero: 2, titulo: "Adición y sustracción con números enteros",
+             caminos: [enteros.suma, enteros.resta]}
+          - {id: g6-u01-l03, numero: 3, titulo: "Multiplicación y división con números enteros",
+             caminos: [enteros.multiplicacion, enteros.division]}
+
+      - numero: 2
+        titulo: "Potenciación y radicación"
+        lecciones:
+          - {id: g6-u02-l01, numero: 1, titulo: "Potenciación y radicación con números naturales", caminos: [naturales.potenciacion]}
+          - {id: g6-u02-l02, numero: 2, titulo: "Potenciación y radicación con fracciones", caminos: [fracciones.potenciacion]}
+
+      - numero: 3
+        titulo: "Razones, proporciones y porcentajes"
+        lecciones:
+          - {id: g6-u03-l01, numero: 1, titulo: "Regla de tres", caminos: [proporcionalidad.regla_de_tres],
+             cubierta_por: modulo_regla_de_tres}
+          - {id: g6-u03-l02, numero: 2, titulo: "Porcentajes", caminos: [proporcionalidad.porcentajes]}
+
+      - numero: 4
+        titulo: "Secuencias y patrones"
+        lecciones:
+          - {id: g6-u04-l01, numero: 1, titulo: "Secuencias y patrones", caminos: [naturales.secuencias]}
+
+      - numero: 5
+        titulo: "Introducción al álgebra"
+        lecciones:
+          - {id: g6-u05-l01, numero: 1, titulo: "Conceptos iniciales del álgebra", incluida: false,
+             motivo: "Álgebra: queda fuera por ahora."}
+          - {id: g6-u05-l02, numero: 2, titulo: "Relaciones entre cantidades", incluida: false,
+             motivo: "Álgebra: queda fuera por ahora."}
+          - {id: g6-u05-l03, numero: 3, titulo: "Signos de agrupación", caminos: [naturales.operaciones_combinadas]}
+          - {id: g6-u05-l04, numero: 4, titulo: "Expresiones algebraicas simples", incluida: false,
+             motivo: "Álgebra: queda fuera por ahora."}
+
+      - numero: 6
+        titulo: "Unidades de medida"
+        lecciones:
+          - {id: g6-u06-l01, numero: 1, titulo: "Medición del tiempo", caminos: [medida.tiempo],
+             parcial: true, nota_parcial: "Solo conversiones y cálculo con unidades de tiempo (3 h 40 min + 2 h 35 min); sin lectura de reloj analógico."}
+          - {id: g6-u06-l02, numero: 2, titulo: "Medidas de superficie", caminos: [medida.superficie],
+             parcial: true, nota_parcial: "Solo conversiones entre unidades; sin medir sobre figuras."}
+          - {id: g6-u06-l03, numero: 3, titulo: "Cálculo del área", incluida: false,
+             motivo: "Cálculo sobre figuras geométricas: fuera por ahora (revisar en la fase 9)."}
+          - {id: g6-u06-l04, numero: 4, titulo: "Medidas de volumen", incluida: false,
+             motivo: "Volumen: fuera por ahora (revisar en la fase 9)."}
+
+      - numero: 7
+        titulo: "Geometría"
+        lecciones:
+          - {id: g6-u07-l01, numero: 1, titulo: "Longitud de la circunferencia y área del círculo", incluida: false,
+             motivo: "Cálculo sobre figuras geométricas: fuera por ahora (revisar en la fase 9)."}
+          - {id: g6-u07-l02, numero: 2, titulo: "Teorema de Pitágoras", incluida: false,
+             motivo: "Cálculo sobre figuras geométricas: fuera por ahora (revisar en la fase 9)."}
+
+      - numero: 8
+        titulo: "Estadística y probabilidad"
+        lecciones:
+          - {id: g6-u08-l01, numero: 1, titulo: "Investigación estadística", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g6-u08-l02, numero: 2, titulo: "Técnicas de recolección y representación de datos", incluida: false,
+             motivo: "Estadística: queda fuera por ahora (revisar en la fase 9)."}
+          - {id: g6-u08-l03, numero: 3, titulo: "Probabilidad", incluida: false,
+             motivo: "Probabilidad: queda fuera por ahora (revisar en la fase 9)."}

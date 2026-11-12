@@ -22,6 +22,7 @@ from app.api.routers import (
     animaciones,
     auth,
     challenges,
+    curriculo,
     enunciados,
     gamification,
     hints,
@@ -127,6 +128,7 @@ app.include_router(stats.router, prefix="/api/stats", tags=["Estadísticas de Gr
 app.include_router(admin_exports.router, prefix="/api", tags=["Admin - Exportaciones"])
 app.include_router(regla_de_tres.router, prefix="/api/regla-de-tres", tags=["Regla de Tres"])
 app.include_router(admin_import.router, prefix="/api", tags=["Admin - Importación"])
+app.include_router(curriculo.router, prefix="/api/curriculo", tags=["Currículo"])
 
 
 # ── Errores de reglas de la organización escolar (salones, años lectivos) ──

@@ -24,6 +24,7 @@ scikit-learn = "^1.8.0"
 numpy = "^2.4.0"
 apscheduler = "^3.11.2"
 openpyxl = "^3.1.5"
+pyyaml = "^6.0.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
