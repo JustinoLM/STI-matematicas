@@ -140,6 +140,15 @@ el plan.
     combinación da el resultado.
   - Un generador puede cambiar de versión (g1-u03-l01 pasó a la 2); los problemas guardados con
     la versión anterior se siguen corrigiendo.
+- **Decisiones de las lecciones de numeración de 1.º (fase 5b).**
+  - Formas, con su base común en `naturales/numeracion.py`: contar íconos, número desde su
+    nombre, formar (`3 y 4 forman _`), secuencia (`12, 13, _, 15`), grupos de 10, decenas y
+    unidades, componer y descomponer, comparar (<, >, =), semirrecta para leer y ubicar, y
+    ordenar. Cada lección mezcla varias con proporciones fijas en su generador.
+  - **Ubicar** en la semirrecta se responde eligiendo una de tres flechas (A, B y C). Tocar la
+    recta en el punto exacto se descartó porque en tablet sería cuestión de puntería.
+  - Libro y currículo: U4 L2 incluye comparar, U6 L4 incluye ordenar, U6 L1 llega hasta 90 y
+    U4 L3 queda parcial (cuenta de 2 en 2 y de 5 en 5; pares e impares quedan fuera por ahora).
 - **Validación (implementada en la fase 3).**
   - Los números se comparan por su valor exacto, sin redondear.
   - Las fracciones aceptan las equivalentes, salvo que el hueco lo desactive.
@@ -155,6 +164,14 @@ el plan.
     semirrecta (contar mal los saltos, leerla al revés). Al cambiar un signo en tres números, el
     código usa el camino del signo cambiado. Si las reglas no llenan el banco, se completa con
     números cercanos: pasa en un 3 % a 12 % de los huecos de pasos y de anotar.
+  - El camino `naturales.numeracion` (fase 5b) tiene sus familias en `reglas_numeracion.py`:
+    contar, leer y escribir (invertir cifras, escribir las cifras separadas), decenas,
+    secuencias, semirrecta (contar desde la otra decena, una decena de más), comparar (comparar
+    solo las unidades) y ordenar (cambiar dos vecinos). Formar reutiliza las reglas de suma con el
+    camino de numeración. Ordenar también clasifica el error. En ubicar, cada flecha incorrecta
+    sale de una regla, así que elegirla queda clasificado.
+  - Donde hay pocas reglas, los números cercanos pesan más: un 35 % de los bancos de U2 L1 y un
+    30 % de leer en U4 L2. Conviene revisar si hace falta otra regla o si basta.
   - El problema llega a la pantalla sin las respuestas correctas, sin los datos internos del
     generador y sin la regla de error de cada opción.
 
@@ -175,7 +192,14 @@ el plan.
     no borra la respuesta colocada.
   - Pendiente: probar con toque en una tablet real, en ambas orientaciones.
 - **Expresión.** Tiene tres tamaños de letra para no partirse en dos líneas en la tablet (por
-  ejemplo, la forma de pasos `5 + 9 = _ + 10 = _`).
+  ejemplo, la forma de pasos `5 + 9 = _ + 10 = _`). Si se parte, lo hace antes de un hueco y no en
+  mitad de una frase, y los textos (como las comas de una secuencia) quedan pegados al número que
+  los precede.
+- **Contar (fase 5b).** Con `presentacion: {"tipo": "conteo"}` los íconos son el problema y se
+  dibujan siempre, sin importar el modo de íconos de la lección; el 0 se ve como un recuadro
+  vacío. Cada tema tiene un recipiente para las decenas (bolsas, corrales, cofres…).
+- **Ordenar.** Con 6 o más tarjetas van más angostas, para que quepan en una fila en la tablet
+  vertical; también se puede arrastrar entre filas.
 - **Enunciados (fase 5a).** La referencia de estilo son los libros Panamáticas de cada grado, sin
   copiar sus textos.
   - El backend manda en el campo `enunciado` la situación, la variante y las cantidades; la
@@ -184,11 +208,17 @@ el plan.
   - Con el signo oculto, la pregunta final se cambia por el resultado: "Ana tiene 7 manzanas y
     Tomás tiene 1. En total hay 8."
   - La voz lee el enunciado, la instrucción y la expresión.
-- **Semirrecta (fase 5a).** Va en el campo `presentacion` del problema, con dos ejercicios
-  (resolver y anotar la operación), el tramo visible y saltos de 1, 5 o 10. Se dibuja en SVG con
-  el conteo acumulado encima de cada salto. En horizontal ocupa todo el ancho, debajo de las dos
-  columnas; en vertical va entre la expresión y el banco. En la pantalla de solución se marca la
-  llegada.
+- **Semirrecta (fases 5a y 5b).** Va en el campo `presentacion` del problema, con el tramo
+  visible y saltos de 1, 5 o 10. Se dibuja en SVG. En horizontal ocupa todo el ancho, debajo de
+  las dos columnas, con el ancho limitado por el alto de la pantalla; en vertical va entre la
+  expresión y el banco.
+  - Sin `ejercicio` es la de saltos de la 5a, para resolver y anotar la operación, con el conteo
+    acumulado encima de cada salto. En la solución se marca la llegada.
+  - Con `ejercicio: leer` una flecha (con el personaje del tema) señala un punto y hay recuadros
+    `ocultas`; con `ejercicio: ubicar` hay `flechas` A, B y C, y la expresión es `47 → _`. En la
+    solución se marca el número señalado.
+  - `ProblemaOrdenar` lleva `enunciado`. `ESQUEMA_VERSION` sigue en 1, porque los campos nuevos
+    son opcionales.
 - **Cinta** (`presentacion_especial`): se hará con la lección de 2.º que la usa.
 
 ### Qué es genérico y qué es propio de cada tema
@@ -341,9 +371,9 @@ el plan.
   - El dashboard muestra "Tienes una práctica a medias" con "Continuar" y "Descartar".
   - Al descartarla, la sesión queda `abandonada`: el problema pendiente no cuenta para el dominio
     ni da experiencia, y los intentos ya hechos quedan registrados.
-  - Al recargar la página durante la práctica aparece el aviso de sesión a medias. La fase 4 lo
-    reportó como "retoma sin preguntar", pero la fase 5a vio el aviso; falta decidir cuál se
-    quiere.
+  - Recargar la página durante la práctica retoma la sesión sin preguntar (fase 5b: la página
+    marca su entrada del historial). El aviso queda para cuando se entra desde el dashboard con
+    una sesión abierta.
 - **Entrada mientras conviven los dos sistemas.** `GET /api/nucleo/estado` dice si el estudiante
   practica en el núcleo (su salón tiene lecciones habilitadas). En ese caso "Practicar" lleva a
   `/student/nucleo` y se ocultan los avisos de diagnóstico y post-test de decimales; si no, sigue
@@ -448,7 +478,7 @@ el plan.
 | 3. Núcleo de práctica ✅ | Paquete `backend/app/nucleo/`, tablas `nucleo_*` y API `/api/nucleo`. Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
 | 4. Pantalla genérica ✅ | Página `/student/nucleo`: huecos, banco arrastrable, teclado, ordenar, íconos agrupados en decenas, voz, sesión a medias y dos columnas en horizontal. Verificada en el navegador; falta probarla en una tablet real |
 | 5a. Suma y resta de 1.º ✅ | 11 generadores (U3, U5, U7), reglas de error por familias, plantillas de enunciado con tema y semirrecta. Falta la forma vertical de U7 L1 y L2 |
-| 5b. Números de 1.º | U2, U4 y U6: numeración, ordenar, comparar, decenas y unidades, semirrecta para ubicar |
+| 5b. Números de 1.º ✅ | 10 generadores (U2, U4, U6), reglas de numeración, semirrecta para leer y ubicar, errores al ordenar y recarga que retoma la práctica. Capturas de toda la fase 5 con tema para el docente |
 | 6. Flujo del profesor | Catálogo, configuración por lección, plan por trimestre, tabla de dominio, alertas, ficha, asignación individual |
 | 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
@@ -461,10 +491,10 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 5a:** 504 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 127 de frontend. Una prueba parametrizada recorre los 11 generadores de 1.º con muchos
-  problemas aleatorios en cerca de 1 s. Ordenar, fracción, cantidad y teclado solo tienen pruebas
-  de Vitest hasta que un generador los produzca. El
+- **Estado tras la fase 5b:** 593 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 161 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
+  problemas aleatorios en cerca de 1,4 s. Fracción, cantidad y teclado solo tienen pruebas de
+  Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
 ### Riesgos

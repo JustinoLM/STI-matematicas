@@ -57,13 +57,18 @@ export interface EnunciadoPlantilla {
   acciones?: string[];
 }
 
-/** Semirrecta numérica con el punto de partida y los saltos (fase 5a) */
-export interface PresentacionSemirrecta {
+interface SemirrectaBase {
   tipo: 'semirrecta';
   desde: number;
   hasta: number;
   marcas_cada: number;
   etiquetas_cada: number;
+}
+
+/** Semirrecta numérica con el punto de partida y los saltos (fase 5a: resolver y anotar) */
+export interface PresentacionSemirrecta extends SemirrectaBase {
+  /** Los problemas de la fase 5a no lo traen: vale 'saltos' */
+  ejercicio?: 'saltos';
   inicio: number;
   salto: number;
   saltos: number;
@@ -72,7 +77,27 @@ export interface PresentacionSemirrecta {
   llegada?: number;
 }
 
-export type Presentacion = PresentacionSemirrecta;
+/** Flecha que señala un número de la semirrecta; con etiqueta (A, B, C) en "ubicar" */
+export interface FlechaSemirrecta {
+  valor: number;
+  etiqueta: string | null;
+}
+
+/** Semirrecta con flechas (fase 5b): leer el número que señala una flecha, o ubicar un número */
+export interface PresentacionSemirrectaPuntos extends SemirrectaBase {
+  ejercicio: 'leer' | 'ubicar';
+  flechas: FlechaSemirrecta[];
+  /** Números que no se escriben (U4 L2: los que hay que leer) */
+  ocultas: number[];
+}
+
+/** Íconos que se cuentan: son el problema mismo, se dibujan siempre (fase 5b) */
+export interface PresentacionConteo {
+  tipo: 'conteo';
+  cantidades: number[];
+}
+
+export type Presentacion = PresentacionSemirrecta | PresentacionSemirrectaPuntos | PresentacionConteo;
 
 export interface ProblemaExpresion extends ProblemaBase {
   forma: 'expresion';
@@ -86,6 +111,7 @@ export interface ProblemaOrdenar extends ProblemaBase {
   forma: 'ordenar';
   numeros: string[];
   ascendente: boolean;
+  enunciado?: EnunciadoPlantilla | null;
 }
 
 export type Problema = ProblemaExpresion | ProblemaOrdenar;

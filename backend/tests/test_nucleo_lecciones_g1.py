@@ -1,5 +1,6 @@
 """
-Generadores de suma y resta de 1.º grado (fase 5a): U3 L1–L3, U5 L1–L5 y U7 L1–L3.
+Generadores de 1.º grado: suma y resta (fase 5a: U3 L1–L3, U5 L1–L5 y U7 L1–L3) y numeración
+(fase 5b: U2 L1–L2, U4 L1–L3 y U6 L1–L5).
 
 Pruebas con muchos problemas aleatorios por generador (docs/DISENO_MODULAR.md, sección 4 →
 Pruebas): la respuesta correcta es correcta, el banco tiene entre 3 y 4 opciones distintas con
@@ -45,6 +46,7 @@ from app.nucleo.problema import (
     HuecoNumero,
     HuecoOpcion,
     Numero,
+    ProblemaOrdenar,
     problema_a_dict,
     problema_desde_dict,
     solucion,
@@ -54,6 +56,8 @@ from app.nucleo.registro import GENERADORES, obtener_generador
 D = Decimal
 N = 1200
 LECCIONES = sorted(GENERADORES)
+NUMERACION = [k for k in LECCIONES if GENERADORES[k].caminos == ("naturales.numeracion",)]
+OPERACIONES = [k for k in LECCIONES if k not in NUMERACION]
 
 COMBINACIONES = [
     ModosProblema(mostrar_signo=s, mostrar_iconos=i, respuesta=r, opciones_banco=o)
@@ -98,12 +102,20 @@ def test_muchos_problemas_aleatorios(leccion_id):
     gen = obtener_generador(leccion_id)
     for p in muestra(leccion_id):
         assert gen.en_rango(p), p.datos
-        nums, ops = p.datos["numeros"], p.datos["operaciones"]
-        assert all(x >= 0 for x in [*nums, *parciales(nums, ops)])
+        if leccion_id in OPERACIONES:
+            nums, ops = p.datos["numeros"], p.datos["operaciones"]
+            assert all(x >= 0 for x in [*nums, *parciales(nums, ops)])
 
         # La solución es correcta y cada hueco tiene su respuesta
         sol = solucion(p)
         assert gen.corregir(p, sol).correcto
+        if isinstance(p, ProblemaOrdenar):
+            # Cada orden incorrecto que produce una regla se clasifica con ella (o una anterior)
+            for regla in gen.reglas_error():
+                for orden in regla.respuestas(p, "orden"):
+                    assert orden != p.correcta and sorted(orden) == sorted(p.numeros)
+                    assert gen.clasificar_error(p, "orden", orden) != "no_clasificado"
+            continue
 
         for h in p.huecos.values():
             if isinstance(h, HuecoNumero) and p.modos.respuesta == ModoRespuesta.BANCO:
@@ -120,7 +132,7 @@ def test_muchos_problemas_aleatorios(leccion_id):
                 assert h.banco is None
 
 
-@pytest.mark.parametrize("leccion_id", LECCIONES)
+@pytest.mark.parametrize("leccion_id", OPERACIONES)
 def test_signo_oculto_sin_ambiguedad(leccion_id):
     """Con el signo oculto, solo la combinación correcta de signos es correcta."""
     gen = obtener_generador(leccion_id)
@@ -138,7 +150,7 @@ def test_signo_oculto_sin_ambiguedad(leccion_id):
     assert vistos > 0
 
 
-@pytest.mark.parametrize("leccion_id", LECCIONES)
+@pytest.mark.parametrize("leccion_id", OPERACIONES)
 def test_enunciado_e_iconos_salen_del_mismo_dato(leccion_id):
     for p in muestra(leccion_id)[:300]:
         e = p.enunciado
@@ -160,9 +172,12 @@ def test_json_y_vista_publica(leccion_id):
         assert copia == p
         publica = problema_a_dict(p, incluir_respuestas=False)
         assert "datos" not in publica
+        assert publica["enunciado"] == p.enunciado
+        if isinstance(p, ProblemaOrdenar):
+            continue
         assert all("correcta" not in h for h in publica["huecos"])
         assert all("regla" not in o for h in publica["huecos"] for o in h.get("banco", []))
-        assert publica["enunciado"] == p.enunciado and publica["presentacion"] == p.presentacion
+        assert publica["presentacion"] == p.presentacion
 
 
 @pytest.mark.parametrize("leccion_id", LECCIONES)
@@ -386,3 +401,181 @@ def test_signos_unicos():
     assert not comun.signos_unicos([5, 0], [SUMA])
     assert comun.signos_unicos([5, 2, 3], [SUMA, RESTA])
     assert not comun.signos_unicos([4, 2, 2], [SUMA, RESTA])    # 4 − 2 + 2 también da 4
+
+
+# ─── Numeración (fase 5b) ────────────────────────────────────────────────────
+
+from app.nucleo.lecciones.naturales import numeracion as num  # noqa: E402
+from app.nucleo.lecciones.naturales import reglas_numeracion as rn  # noqa: E402
+
+
+def armar_num(leccion_id, planteo, modos=BANCO):
+    return obtener_generador(leccion_id)._armar(planteo, modos, random.Random(0))
+
+
+def _respuestas_correctas(p):
+    return {D(h.correcta) for h in p.huecos.values() if isinstance(h, HuecoNumero)}
+
+
+@pytest.mark.parametrize("leccion_id", NUMERACION)
+def test_numeracion_formas_enunciado_e_iconos(leccion_id):
+    gen = obtener_generador(leccion_id)
+    for p in muestra(leccion_id)[:400]:
+        e = p.enunciado
+        if e is not None:
+            assert e["situacion"] and 0 <= e["variante"] < 1000
+        if isinstance(p, ProblemaOrdenar):
+            assert p.iconos is None
+            continue
+        # El enunciado nunca dice la respuesta (en las secuencias solo dice el salto: "de 2 en 2")
+        if e is not None and p.datos["forma"] != num.SECUENCIA:
+            visibles = {s.valor for s in p.segmentos if isinstance(s, Numero)}
+            assert not ({D(c) for c in e["cantidades"]} & (_respuestas_correctas(p) - visibles))
+        # Los íconos de apoyo, solo si la configuración los muestra y salen del enunciado
+        if p.iconos is not None:
+            assert p.modos.mostrar_iconos and gen.admite_iconos
+            assert p.iconos == e["cantidades"][:len(p.iconos)]
+        # Contar: los íconos son el problema y van siempre, en la presentación
+        if p.datos["forma"] == num.CONTAR:
+            assert p.presentacion == {"tipo": "conteo", "cantidades": [p.datos["n"]]}
+
+
+@pytest.mark.parametrize("leccion_id, formas", [
+    ("g1-u02-l01", {num.CONTAR, num.NOMBRE}),
+    ("g1-u02-l02", {num.FORMAR, num.FORMAR_FALTANTE}),
+    ("g1-u04-l01", {num.CONTAR, num.FORMAR, num.FORMAR_FALTANTE, num.NOMBRE}),
+    ("g1-u04-l02", {num.ORDENAR, num.LEER, num.COMPARAR}),
+    ("g1-u04-l03", {num.SECUENCIA}),
+    ("g1-u06-l01", {num.CONTAR, num.GRUPOS, num.SECUENCIA}),
+    ("g1-u06-l02", {num.CONTAR, num.SECUENCIA, num.NOMBRE}),
+    ("g1-u06-l03", {num.DECENAS, num.COMPONER, num.FORMAR, num.DESCOMPONER}),
+    ("g1-u06-l04", {num.LEER, num.UBICAR, num.ORDENAR}),
+    ("g1-u06-l05", {num.COMPARAR}),
+])
+def test_numeracion_formas_de_cada_leccion(leccion_id, formas):
+    assert {p.datos["forma"] for p in muestra(leccion_id)} == formas
+
+
+def test_numeracion_rangos_del_libro():
+    assert {p.datos["n"] for p in muestra("g1-u02-l01")} == set(range(0, 11))
+    assert {p.datos["n"] for p in muestra("g1-u04-l01") if "n" in p.datos} == set(range(11, 21))
+    saltos = {p.datos["salto"] for p in muestra("g1-u04-l03")}
+    assert saltos == {2, -2, 5, -5}
+    # U6 L2: la secuencia de 1 en 1 cruza siempre una decena
+    for p in muestra("g1-u06-l02"):
+        if p.datos["forma"] == num.SECUENCIA:
+            assert len({t // 10 for t in num.terminos(p.datos)}) == 2
+    # U4 L2: la flecha señala un número sin escribir
+    for p in muestra("g1-u04-l02"):
+        if p.datos["forma"] == num.LEER:
+            assert p.datos["n"] in p.presentacion["ocultas"]
+
+
+def test_numeracion_ubicar_flechas():
+    ps = [p for p in muestra("g1-u06-l04") if p.datos["forma"] == num.UBICAR]
+    gen = obtener_generador("g1-u06-l04")
+    clasificadas = 0
+    for p in ps:
+        pres = p.presentacion
+        assert pres["ejercicio"] == "ubicar" and [f["etiqueta"] for f in pres["flechas"]] == ["A", "B", "C"]
+        valores = [f["valor"] for f in pres["flechas"]]
+        assert valores == sorted(valores) and pres["desde"] <= valores[0] and valores[-1] <= pres["hasta"]
+        for letra in "ABC":
+            if letra != p.huecos[num.HUECO_FLECHA].correcta:
+                clasificadas += gen.clasificar_error(p, num.HUECO_FLECHA, letra) != "no_clasificado"
+    assert clasificadas / (2 * len(ps)) > 0.9
+
+
+def test_numeracion_semirrecta_leer():
+    p = armar_num("g1-u06-l04", num.leer(57, desde=40, hasta=70, etiquetas_cada=10))
+    assert p.presentacion == {"tipo": "semirrecta", "ejercicio": "leer", "desde": 40, "hasta": 70, "marcas_cada": 1,
+                              "etiquetas_cada": 10, "flechas": [{"valor": 57, "etiqueta": None}], "ocultas": []}
+    with pytest.raises(ValueError):
+        num.leer(75, desde=40, hasta=70, etiquetas_cada=10)
+    assert num.ventana_decenas([57]) == (40, 70)
+    assert num.ventana_decenas([3]) == (0, 30)
+    assert num.ventana_decenas([93, 39]) == (30, 100)
+
+
+def test_nombres_de_los_numeros():
+    assert [num.nombre_numero(n) for n in (0, 6, 15, 16, 20, 22, 30, 48, 99)] == [
+        "cero", "seis", "quince", "dieciséis", "veinte", "veintidós", "treinta", "cuarenta y ocho",
+        "noventa y nueve"]
+
+
+C = "naturales.numeracion."
+
+
+@pytest.mark.parametrize("leccion_id, planteo, hueco, respuesta, regla", [
+    # Contar
+    ("g1-u02-l01", num.contar(8), "resultado", 5, "conto_solo_una_fila"),
+    ("g1-u02-l01", num.contar(8), "resultado", 9, "conto_uno_mas"),
+    ("g1-u02-l01", num.nombre(6), "resultado", 9, "confundio_6_y_9"),
+    ("g1-u04-l01", num.contar(16), "resultado", 6, "solo_las_unidades"),
+    ("g1-u04-l01", num.contar(16), "resultado", 61, "invirtio_cifras"),
+    ("g1-u06-l02", num.contar(48), "resultado", 12, "conto_las_barras_como_unidades"),
+    ("g1-u06-l02", num.nombre(48), "resultado", 408, "escribio_cifras_separadas"),
+    ("g1-u06-l02", num.nombre(32), "resultado", 23, "invirtio_cifras"),
+    ("g1-u06-l01", num.contar(70), "resultado", 7, "escribio_los_grupos"),
+    # Formar (reglas de suma con el camino de numeración)
+    ("g1-u02-l02", num.formar(2, 5, falta=1), "faltante", 7, "faltante"),
+    ("g1-u02-l02", num.formar(3, 4), "resultado", 1, "resto"),
+    ("g1-u04-l01", num.formar(10, 5), "resultado", 105, "junto_cifras"),
+    # Grupos de 10
+    ("g1-u06-l01", num.grupos(7, faltante=False), "resultado", 7, "escribio_los_grupos"),
+    ("g1-u06-l01", num.grupos(7, faltante=False), "resultado", 700, "cero_de_mas"),
+    ("g1-u06-l01", num.grupos(7, faltante=True), "faltante", 70, "escribio_el_total"),
+    # Decenas y unidades
+    ("g1-u06-l03", num.decenas_y_unidades(53), "decenas", 3, "confundio_decenas_unidades"),
+    ("g1-u06-l03", num.decenas_y_unidades(53), "decenas", 50, "escribio_la_decena_completa"),
+    ("g1-u06-l03", num.componer(43), "resultado", 34, "confundio_decenas_unidades"),
+    ("g1-u06-l03", num.componer(43), "resultado", 7, "conto_las_barras_como_unidades"),
+    ("g1-u06-l03", num.descomponer(64), "decena", 6, "descompuso_por_cifras"),
+    ("g1-u06-l03", num.formar(40, 3), "resultado", 70, "valor_posicional"),
+    # Secuencias
+    ("g1-u04-l03", num.secuencia(6, 2, 5, [2]), "termino2", 9, "siguio_de_uno_en_uno"),
+    ("g1-u04-l03", num.secuencia(6, 2, 5, [2]), "termino2", 12, "se_salto_un_numero"),
+    ("g1-u04-l03", num.secuencia(20, -5, 5, [1]), "termino1", 25, "sentido_contrario"),
+    ("g1-u06-l02", num.secuencia(37, 1, 5, [3]), "termino3", 30, "no_cambio_la_decena"),
+    ("g1-u06-l02", num.secuencia(42, -1, 5, [3]), "termino3", 49, "no_cambio_la_decena"),
+    # Semirrecta
+    ("g1-u06-l04", num.leer(57, desde=40, hasta=70, etiquetas_cada=10), "resultado", 53, "conto_desde_la_otra_decena"),
+    ("g1-u06-l04", num.leer(57, desde=40, hasta=70, etiquetas_cada=10), "resultado", 47, "decena_de_menos"),
+])
+def test_numeracion_clasificacion(leccion_id, planteo, hueco, respuesta, regla):
+    p = armar_num(leccion_id, planteo)
+    assert obtener_generador(leccion_id).en_rango(p)
+    r = obtener_generador(leccion_id).corregir(p, {**solucion(p), hueco: str(respuesta)})
+    assert not r.correcto and r.huecos[hueco].error == C + regla
+
+
+@pytest.mark.parametrize("a, b, respuesta, regla", [
+    (45, 54, "mayor", "comparo_las_unidades"),
+    (45, 48, "mayor", "simbolo_al_reves"),
+    (45, 48, "igual", "marco_igual"),
+    (8, 12, "mayor", "comparo_las_unidades"),
+    (35, 35, "menor", "no_vio_que_son_iguales"),
+])
+def test_numeracion_comparar(a, b, respuesta, regla):
+    leccion = "g1-u06-l05" if min(a, b) >= 10 else "g1-u04-l02"
+    p = armar_num(leccion, num.comparar(a, b, con_enunciado=False))
+    assert p.huecos["relacion"].correcta == num.relacion(a, b)
+    assert obtener_generador(leccion).corregir(p, {"relacion": respuesta}).huecos["relacion"].error == C + regla
+
+
+def test_numeracion_ordenar():
+    gen = obtener_generador("g1-u04-l02")
+    p = armar_num("g1-u04-l02", num.ordenar([12, 3, 18, 9], True))
+    assert isinstance(p, ProblemaOrdenar) and p.correcta == [3, 9, 12, 18]
+    casos = {(18, 12, 9, 3): "ordeno_al_reves", (12, 3, 18, 9): "ordeno_por_las_unidades",
+             (3, 12, 9, 18): "cambio_dos_vecinos", (18, 3, 9, 12): "no_clasificado"}
+    for orden, regla in casos.items():
+        r = gen.corregir(p, {"orden": [str(x) for x in orden]})
+        assert not r.correcto
+        assert r.huecos["orden"].error == (regla if regla == "no_clasificado" else C + regla)
+    assert gen.corregir(p, {"orden": ["3", "9", "12", "18"]}).correcto
+
+
+def test_numeracion_posiciones_erroneas():
+    assert rn.posiciones_erroneas(57) == [75, 53, 47, 67]
+    assert rn.posiciones_erroneas(15) == [51, 25]

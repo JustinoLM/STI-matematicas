@@ -33,7 +33,7 @@ interface GrupoProps {
 function GrupoCantidad({ cantidad, icono, umbral, compacto }: GrupoProps) {
   const g = agruparIconos(cantidad, umbral);
   return (
-    <div className={`flex min-h-[5.5rem] items-center rounded-2xl border-2 border-slate-200 bg-white ${
+    <div className={`flex min-h-[5.5rem] min-w-[7rem] items-center justify-center rounded-2xl border-2 border-slate-200 bg-white ${
       compacto ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3'}`}
       role="img" aria-label={`${cantidad}`} data-testid="grupo-iconos">
       {g.decenas > 0 && (

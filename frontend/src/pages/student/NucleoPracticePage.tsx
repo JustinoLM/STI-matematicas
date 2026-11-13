@@ -5,7 +5,9 @@
  * Flujo:
  * 1. Al entrar consulta /nucleo/estado. Si hay una sesión a medias, pregunta si continuar o
  *    empezar de nuevo (descarta la anterior). Si llega desde "Continuar" del dashboard
- *    (state.retomar), continúa directamente.
+ *    (state.retomar), continúa directamente. Al empezar o retomar, la página marca su entrada del
+ *    historial con state.retomar: así, recargar en plena práctica la retoma sin preguntar
+ *    (fase 5b); el aviso queda para cuando se entra con una sesión abierta.
  * 2. Problema → (intentos) → pantalla entre problemas → siguiente problema.
  * 3. Al final, el resumen. Salir a mitad deja la sesión activa para retomarla.
  */
@@ -63,6 +65,7 @@ export function NucleoPracticePage() {
     }
   }, []);
 
+  const ruta = location.pathname;
   const empezar = useCallback(async () => {
     setFase({ tipo: 'cargando' });
     try {
@@ -70,11 +73,13 @@ export function NucleoPracticePage() {
       setSesion({ id: s.sesion_id, cantidad: s.cantidad_problemas, progreso: s.progreso });
       setResultados([]);
       queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
+      // Si se recarga la página, se retoma esta sesión sin preguntar
+      navigate(ruta, { replace: true, state: { retomar: true } });
       await cargarSiguiente(s.sesion_id);
     } catch (e) {
       fallar(e);
     }
-  }, [cargarSiguiente, queryClient]);
+  }, [cargarSiguiente, queryClient, navigate, ruta]);
 
   useEffect(() => {
     if (iniciado.current) return; // StrictMode monta dos veces

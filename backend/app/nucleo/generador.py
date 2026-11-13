@@ -26,7 +26,7 @@ from decimal import Decimal
 from typing import Any, ClassVar, Sequence
 
 from app.nucleo.banco import armar_banco
-from app.nucleo.errores import NO_CLASIFICADO, ReglaError, clasificar, distractores
+from app.nucleo.errores import ReglaError, clasificar, distractores
 from app.nucleo.modos import ModoRespuesta, ModosProblema
 from app.nucleo.problema import HuecoNumero, OpcionBanco, Problema, ProblemaExpresion
 from app.nucleo.validacion import ResultadoValidacion, validar
@@ -99,9 +99,8 @@ class GeneradorLeccion(ABC):
         )
 
     def clasificar_error(self, problema: Problema, hueco_id: str, valor: Any) -> str:
-        """Código de la regla de error que explica la respuesta, o NO_CLASIFICADO."""
-        if not isinstance(problema, ProblemaExpresion):
-            return NO_CLASIFICADO
+        """Código de la regla de error que explica la respuesta, o NO_CLASIFICADO. En la forma de
+        ordenar, el hueco es "orden" y el valor la lista que dejó el estudiante (fase 5b)."""
         return clasificar(self.reglas_error(), problema, hueco_id, valor)
 
     def corregir(self, problema: Problema, respuestas: Any) -> ResultadoValidacion:

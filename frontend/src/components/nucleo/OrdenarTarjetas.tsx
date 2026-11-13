@@ -16,7 +16,7 @@ import {
 import {
   SortableContext,
   arrayMove,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable';
@@ -26,7 +26,12 @@ import type { Tarjeta } from '@/utils/nucleo/ordenar';
 import { CLASES_FICHA } from './BancoRespuestas';
 
 
-function TarjetaOrdenable({ tarjeta, marcado, deshabilitada }: { tarjeta: Tarjeta; marcado: boolean; deshabilitada?: boolean }) {
+/** Con 6 tarjetas o más van algo más angostas, para que quepan en una fila en la tablet vertical */
+export const MUCHAS_TARJETAS = 6;
+
+function TarjetaOrdenable({ tarjeta, marcado, deshabilitada, angosta }: {
+  tarjeta: Tarjeta; marcado: boolean; deshabilitada?: boolean; angosta?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: tarjeta.id,
     transition: null,
@@ -44,6 +49,7 @@ function TarjetaOrdenable({ tarjeta, marcado, deshabilitada }: { tarjeta: Tarjet
       className={cn(
         CLASES_FICHA,
         'cursor-grab bg-white',
+        angosta && 'min-w-[5rem] px-2',
         isDragging && 'z-10 shadow-xl',
         marcado && 'border-orange-500 bg-orange-50',
       )}
@@ -62,6 +68,7 @@ interface OrdenarTarjetasProps {
 }
 
 export function OrdenarTarjetas({ tarjetas, ascendente, onCambio, marcado = false, deshabilitado }: OrdenarTarjetasProps) {
+  const angostas = tarjetas.length >= MUCHAS_TARJETAS;
   const sensores = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -82,10 +89,12 @@ export function OrdenarTarjetas({ tarjetas, ascendente, onCambio, marcado = fals
         <span>{ascendente ? 'Mayor' : 'Menor'}</span>
       </div>
       <DndContext sensors={sensores} collisionDetection={closestCenter} onDragEnd={alSoltar} autoScroll={false}>
-        <SortableContext items={tarjetas.map(t => t.id)} strategy={horizontalListSortingStrategy}>
-          <div className="flex flex-wrap items-center justify-center gap-4" data-testid="tarjetas">
+        {/* rectSortingStrategy: si las tarjetas no caben en una fila, se ordenan también entre filas */}
+        <SortableContext items={tarjetas.map(t => t.id)} strategy={rectSortingStrategy}>
+          <div className={cn('flex flex-wrap items-center justify-center', angostas ? 'gap-2.5' : 'gap-4')}
+            data-testid="tarjetas">
             {tarjetas.map(t => (
-              <TarjetaOrdenable key={t.id} tarjeta={t} marcado={marcado} deshabilitada={deshabilitado} />
+              <TarjetaOrdenable key={t.id} tarjeta={t} marcado={marcado} deshabilitada={deshabilitado} angosta={angostas} />
             ))}
           </div>
         </SortableContext>

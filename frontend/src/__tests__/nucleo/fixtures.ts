@@ -112,3 +112,65 @@ export const semirrectaAnotar: ProblemaExpresion = {
     inicio: 90, salto: 5, saltos: 7, sentido: 'izquierda', llegada: 55,
   },
 };
+
+// ─── Fase 5b: numeración ───────────────────────────────────────────────────────
+
+/** Contar: 8 monedas (los íconos son el problema) · `Hay _` */
+export const contarOcho: ProblemaExpresion = {
+  ...sumaBanco, leccion_id: 'g1-u02-l01', iconos: null, modos: { ...sumaBanco.modos, mostrar_iconos: false },
+  segmentos: [{ tipo: 'texto', texto: 'Hay' }, { tipo: 'hueco', hueco_id: 'resultado' }],
+  huecos: [{ id: 'resultado', tipo: 'numero', banco: [{ valor: '8' }, { valor: '5' }, { valor: '9' }] }],
+  enunciado: { situacion: 'contar', variante: 0, cantidades: [] },
+  presentacion: { tipo: 'conteo', cantidades: [8] },
+};
+
+/** 6, 8, _, 12, 14 */
+export const secuenciaDe2: ProblemaExpresion = {
+  ...sumaBanco, leccion_id: 'g1-u04-l03', iconos: null,
+  segmentos: [
+    { tipo: 'numero', valor: '6' }, { tipo: 'texto', texto: ',' }, { tipo: 'numero', valor: '8' },
+    { tipo: 'texto', texto: ',' }, { tipo: 'hueco', hueco_id: 'termino2' }, { tipo: 'texto', texto: ',' },
+    { tipo: 'numero', valor: '12' }, { tipo: 'texto', texto: ',' }, { tipo: 'numero', valor: '14' },
+  ],
+  huecos: [{ id: 'termino2', tipo: 'numero', banco: [{ valor: '10' }, { valor: '9' }, { valor: '12' }] }],
+  enunciado: { situacion: 'secuencia_progresiva', variante: 0, cantidades: [2] },
+};
+
+/** Semirrecta del 40 al 70: ¿qué número señala la flecha? (57) */
+export const semirrectaLeer: ProblemaExpresion = {
+  ...sumaBanco, leccion_id: 'g1-u06-l04', iconos: null,
+  segmentos: [{ tipo: 'hueco', hueco_id: 'resultado' }],
+  huecos: [{ id: 'resultado', tipo: 'numero', banco: [{ valor: '57' }, { valor: '53' }, { valor: '47' }] }],
+  enunciado: { situacion: 'semirrecta_leer', variante: 0, cantidades: [] },
+  presentacion: {
+    tipo: 'semirrecta', ejercicio: 'leer', desde: 40, hasta: 70, marcas_cada: 1, etiquetas_cada: 10,
+    flechas: [{ valor: 57, etiqueta: null }], ocultas: [],
+  },
+};
+
+/** Semirrecta del 0 al 20 con el 12 y el 13 sin escribir; la flecha señala el 12 */
+export const semirrectaLeerOcultas: ProblemaExpresion = {
+  ...semirrectaLeer, leccion_id: 'g1-u04-l02',
+  presentacion: {
+    tipo: 'semirrecta', ejercicio: 'leer', desde: 0, hasta: 20, marcas_cada: 1, etiquetas_cada: 1,
+    flechas: [{ valor: 12, etiqueta: null }], ocultas: [12, 13],
+  },
+};
+
+/** El 66 está en la flecha _ (A, B o C) */
+export const semirrectaUbicar: ProblemaExpresion = {
+  ...sumaBanco, leccion_id: 'g1-u06-l04', iconos: null,
+  segmentos: [{ tipo: 'numero', valor: '66' }, { tipo: 'simbolo', simbolo: '→' }, { tipo: 'hueco', hueco_id: 'flecha' }],
+  huecos: [{ id: 'flecha', tipo: 'opcion', opciones: [{ id: 'A', texto: 'A' }, { id: 'B', texto: 'B' }, { id: 'C', texto: 'C' }] }],
+  enunciado: { situacion: 'semirrecta_ubicar', variante: 0, cantidades: [66] },
+  presentacion: {
+    tipo: 'semirrecta', ejercicio: 'ubicar', desde: 50, hasta: 80, marcas_cada: 1, etiquetas_cada: 10,
+    flechas: [{ valor: 56, etiqueta: 'A' }, { valor: 64, etiqueta: 'B' }, { valor: 66, etiqueta: 'C' }], ocultas: [],
+  },
+};
+
+/** Ordenar de 2 cifras, de mayor a menor, con enunciado */
+export const ordenarConEnunciado: ProblemaOrdenar = {
+  ...ordenar, leccion_id: 'g1-u06-l04', numeros: ['37', '73', '45', '48'], ascendente: false,
+  enunciado: { situacion: 'ordenar', variante: 0, cantidades: [] },
+};

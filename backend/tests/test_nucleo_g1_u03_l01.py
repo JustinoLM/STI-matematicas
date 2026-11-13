@@ -126,6 +126,6 @@ def test_registro_contra_el_catalogo():
         assert leccion.incluida
         assert set(gen.caminos) == set(leccion.caminos)
     assert tiene_generador("g1-u03-l01")
-    assert not tiene_generador("g1-u04-l01")   # numeración: fase 5b
+    assert not tiene_generador("g1-u06-l06")   # ordinales: excluida
     with pytest.raises(KeyError):
         obtener_generador("no-existe")

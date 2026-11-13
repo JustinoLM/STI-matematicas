@@ -105,9 +105,11 @@ grados:
           - {id: g1-u04-l01, numero: 1, titulo: "Conozcamos los números del 11 al 20",
              caminos: [naturales.numeracion], prerrequisitos: [g1-u02-l01]}
           - {id: g1-u04-l02, numero: 2, titulo: "Ordenemos y ubiquemos números en la semirrecta",
-             caminos: [naturales.numeracion], presentacion: semirrecta, prerrequisitos: [g1-u04-l01]}
+             caminos: [naturales.numeracion], presentacion: semirrecta, prerrequisitos: [g1-u04-l01],
+             notas: "Incluye comparar números menores que 20 con <, > e = (clase 2.4 de Panamáticas)."}
           - {id: g1-u04-l03, numero: 3, titulo: "Contemos de forma progresiva y regresiva",
-             caminos: [naturales.numeracion], prerrequisitos: [g1-u04-l01]}
+             caminos: [naturales.numeracion], prerrequisitos: [g1-u04-l01], parcial: true,
+             nota_parcial: "Cuenta de 2 en 2 y de 5 en 5 hasta 20; números pares e impares quedan fuera por ahora."}
 
       - numero: 5
         titulo: "Sumemos y restemos hasta 20"
@@ -138,7 +140,8 @@ grados:
              caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l02]}
           - {id: g1-u06-l04, numero: 4, titulo: "Ubiquemos números en la semirrecta numérica",
              caminos: [naturales.numeracion], presentacion: semirrecta,
-             prerrequisitos: [g1-u06-l02, g1-u04-l02]}
+             prerrequisitos: [g1-u06-l02, g1-u04-l02],
+             notas: "Incluye ordenar números de dos cifras (clase 4.3 de Panamáticas)."}
           - {id: g1-u06-l05, numero: 5, titulo: "Comparemos números",
              caminos: [naturales.numeracion], prerrequisitos: [g1-u06-l03]}
           - {id: g1-u06-l06, numero: 6, titulo: "Números ordinales del 1° al 12°", incluida: false,

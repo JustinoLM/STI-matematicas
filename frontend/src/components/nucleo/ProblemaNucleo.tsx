@@ -190,11 +190,12 @@ export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, envi
         <Enunciado texto={instruccion(problema)} historia={textoEnunciado(problema, tema)}
           vozDisponible={voz.disponible} onEscuchar={escuchar} />
 
-        {problema.modos.mostrar_iconos && problema.iconos && problema.iconos.length > 0 && (
+        {/* Contar: los íconos son el problema y se dibujan siempre; si no, son apoyo opcional */}
+        {problema.forma === 'expresion' && problema.presentacion?.tipo === 'conteo' ? (
+          <Iconos cantidades={problema.presentacion.cantidades} icono={icono} />
+        ) : problema.modos.mostrar_iconos && problema.iconos && problema.iconos.length > 0 && (
           <Iconos cantidades={problema.iconos} icono={icono} />
         )}
-
-
 
         {problema.forma === 'expresion' ? (
           <Expresion

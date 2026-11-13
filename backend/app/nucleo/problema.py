@@ -206,6 +206,7 @@ class ProblemaOrdenar:
     modos: ModosProblema
     datos: dict[str, Any] = field(default_factory=dict)
     iconos: Optional[list[int]] = None
+    enunciado: Optional[dict[str, Any]] = None   # como en ProblemaExpresion (fase 5b)
     forma: ClassVar[str] = "ordenar"
 
     def __post_init__(self):
@@ -333,6 +334,7 @@ def problema_a_dict(p: Problema, incluir_respuestas: bool = True) -> dict:
     else:
         d["numeros"] = [texto_numero(n) for n in p.numeros]
         d["ascendente"] = p.ascendente
+        d["enunciado"] = p.enunciado
     if incluir_respuestas:
         d["datos"] = p.datos
     return d
@@ -362,6 +364,7 @@ def problema_desde_dict(d: dict) -> Problema:
         return ProblemaOrdenar(
             numeros=[_dec(n) for n in d["numeros"]],
             ascendente=bool(d["ascendente"]),
+            enunciado=d.get("enunciado"),
             **comunes,
         )
     raise ValueError(f"Forma de problema desconocida: {d['forma']}")

@@ -198,7 +198,13 @@ export function Expresion({
   const renderSegmento = (s: Segmento, i: number) => {
     switch (s.tipo) {
       case 'texto':
-        return <span key={i} className="text-4xl font-semibold">{s.texto}</span>;
+        return (
+          <span key={i} className={cn(medida === 'normal' ? 'text-4xl' : 'text-3xl', 'font-semibold',
+            // La coma de una secuencia va pegada al número: 6, 8, _, 12
+            /^[,.;]$/.test(s.texto) && { normal: '-ml-5', larga: '-ml-3', muy_larga: '-ml-2' }[medida])}>
+            {s.texto}
+          </span>
+        );
       case 'numero':
         return <span key={i} className={`${tamano} font-bold tabular-nums`}>{s.valor}</span>;
       case 'fraccion':
@@ -212,11 +218,24 @@ export function Expresion({
     }
   };
 
+  // Un texto ("decenas y", ",") va pegado al número o hueco que lo precede: si la expresión no cabe
+  // en una línea, se parte entre grupos ("4 decenas y | 1 unidad | = _"), nunca dentro de uno.
+  const grupos: number[][] = [];
+  problema.segmentos.forEach((s, i) => {
+    const anterior = problema.segmentos[i - 1];
+    if (s.tipo === 'texto' && anterior && anterior.tipo !== 'simbolo') grupos[grupos.length - 1].push(i);
+    else grupos.push([i]);
+  });
+  const separacion = { normal: 'gap-x-5', larga: 'gap-x-3', muy_larga: 'gap-x-2' }[medida];
+
   return (
-    <div className={cn('flex flex-wrap items-center justify-center gap-y-4',
-      { normal: 'gap-x-5', larga: 'gap-x-3', muy_larga: 'gap-x-2' }[medida])}
+    <div className={cn('flex flex-wrap items-center justify-center gap-y-4', separacion)}
       data-testid="expresion" data-medida={medida}>
-      {problema.segmentos.map(renderSegmento)}
+      {grupos.map(g => (
+        <span key={g[0]} className={cn('inline-flex items-center whitespace-nowrap', separacion)}>
+          {g.map(i => renderSegmento(problema.segmentos[i], i))}
+        </span>
+      ))}
     </div>
   );
 }

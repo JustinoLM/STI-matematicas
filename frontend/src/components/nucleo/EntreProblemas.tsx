@@ -15,6 +15,14 @@ import { respuestasDesdeSolucion } from '@/utils/nucleo/respuestas';
 import { Expresion } from './Expresion';
 import { Semirrecta } from './Semirrecta';
 
+/** Solución de la semirrecta de leer (el número) o de ubicar (la letra de la flecha) */
+function respuestaSemirrecta(solucion: Record<string, unknown> | null): { valor?: number; etiqueta?: string } {
+  if (!solucion) return {};
+  if (typeof solucion.flecha === 'string') return { etiqueta: solucion.flecha };
+  if (typeof solucion.resultado === 'string') return { valor: Number(solucion.resultado) };
+  return {};
+}
+
 interface EntreProblemasProps {
   resultado: ResultadoRespuesta;
   problema: Problema;
@@ -46,6 +54,7 @@ export function EntreProblemas({ resultado, problema, onSiguiente }: EntreProble
           <h2 className="text-4xl font-bold text-slate-800">Así se resuelve:</h2>
           {problema.forma === 'expresion' && problema.presentacion?.tipo === 'semirrecta' && (
             <Semirrecta presentacion={problema.presentacion} mostrarLlegada
+              respuesta={respuestaSemirrecta(resultado.solucion)}
               saltarin={vocabularioDelTema(temaActivoId).saltarin} />
           )}
           {problema.forma === 'expresion' && resultado.solucion ? (
