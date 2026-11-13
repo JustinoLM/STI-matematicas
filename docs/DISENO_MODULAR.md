@@ -116,7 +116,8 @@ el plan.
   - **Por grado:** siempre en 1.º y 2.º, en 3.º según la lección, y teclado desde 4.º. Cuenta el
     grado del **estudiante**, no el de la lección: un estudiante de 4.º que repasa una lección de
     1.º usa teclado, salvo que tenga el banco forzado.
-  - **Por estudiante:** el profesor puede forzar el banco como adaptación de accesibilidad.
+  - **Por estudiante:** el profesor puede forzar el banco como adaptación de accesibilidad. El
+    ajuste es del estudiante, no del año lectivo, así que lo acompaña si cambia de salón.
   - **Cantidad de opciones:** entre 3 y 4, siempre completas (por ejemplo `{72, 62, 612}`) y no
     fichas de dígitos.
   - **Opciones incorrectas:** salen de los **errores típicos** de cada camino. Para `3 + 2`, por
@@ -297,7 +298,18 @@ el plan.
 
 - **Catálogo.** Muestra por defecto las lecciones del grado del salón. El profesor puede habilitar
   lecciones de otros grados, porque los salones no suelen estar parejos.
-- **Habilitación.** Una lección queda habilitada hasta que el profesor la desactiva.
+- **Habilitación.** Una lección queda habilitada hasta que el profesor la desactiva. Se pueden
+  habilitar lecciones que todavía no tienen ejercicios, con un aviso.
+- **Pantalla (fase 6a).** "Lecciones del salón" (`/teacher/salones/:id/lecciones`), separada de
+  "Práctica de decimales" en el menú; con un solo salón activo, "Lecciones" va directo a él.
+  - **Catálogo:** por defecto el grado del salón, agrupado por unidad, con botones para otros
+    grados y "Ver solo las habilitadas". Cada lección muestra sus caminos y avisos ("Parcial",
+    "Sin ejercicios todavía", "Se practica en decimales", "Prerrequisitos cambiados"); las
+    excluidas aparecen sin interruptor y con el motivo.
+  - **Panel de cada lección:** signo, dibujos para contar, pistas por nivel, prioridad y
+    prerrequisitos de este año, explicados en lenguaje de docente.
+  - **Por estudiante:** asignar una lección (solo las que tienen ejercicios), cerrarla a mano, ver
+    las cerradas recientemente y "Siempre con opciones" (el banco forzado).
 - **Plan por trimestre (opcional).**
   - Habilita y deshabilita lecciones según la fecha.
   - El profesor siempre puede ajustar a mano.
@@ -314,13 +326,22 @@ el plan.
 | Prioridad | de 1 a 3 lecciones a la vez |
 
 - **Prioridad.** Las lecciones prioritarias se reparten la mitad de la sesión. Para un estudiante
-  que ya domina una de ellas, la prioridad cede su espacio.
+  que ya domina una de ellas, la prioridad cede su espacio. Con 3 ya marcadas, la casilla se
+  desactiva y el panel dice cuáles son; la API responde `MAX_PRIORITARIAS`.
 - **Zona de extensión.** No se configura: siempre está activa.
 
 ### Prerrequisitos, refuerzo y asignación individual
 
 - **Prerrequisitos.** El sistema los trae por defecto según el orden del programa, y el profesor
-  puede editarlos.
+  puede editarlos (fase 6a).
+  - Las ediciones son **por lección y por año lectivo** (`nucleo_prerrequisito_editado` marca la
+    lección como editada, aunque quede sin prerrequisitos, y `nucleo_prerrequisito_anio` guarda
+    los suyos). Recargar el currículo actualiza las lecciones que el profesor no tocó y nunca pisa
+    las que editó. "Volver a los del programa" deshace la edición.
+  - El reparto, la extensión y el refuerzo leen el grafo del año lectivo.
+  - Un prerrequisito solo tiene que existir, estar incluido y no formar un ciclo; no se exige que
+    sea de un grado igual o menor. Los ciclos se rechazan al guardar (`PRERREQUISITO_CICLO`) con
+    un mensaje que nombra las lecciones; la pantalla todavía no los impide de antemano.
 - **Zona de refuerzo automática** (inspirada en los Boosts de Zearn). Si el estudiante falla en
   un prerrequisito de una lección habilitada, se mezclan 1 o 2 problemas del prerrequisito por
   sesión. No habilita nada para el salón.
@@ -479,7 +500,8 @@ el plan.
 | 4. Pantalla genérica ✅ | Página `/student/nucleo`: huecos, banco arrastrable, teclado, ordenar, íconos agrupados en decenas, voz, sesión a medias y dos columnas en horizontal. Verificada en el navegador; falta probarla en una tablet real |
 | 5a. Suma y resta de 1.º ✅ | 11 generadores (U3, U5, U7), reglas de error por familias, plantillas de enunciado con tema y semirrecta. Falta la forma vertical de U7 L1 y L2 |
 | 5b. Números de 1.º ✅ | 10 generadores (U2, U4, U6), reglas de numeración, semirrecta para leer y ubicar, errores al ordenar y recarga que retoma la práctica. Capturas de toda la fase 5 con tema para el docente |
-| 6. Flujo del profesor | Catálogo, configuración por lección, plan por trimestre, tabla de dominio, alertas, ficha, asignación individual |
+| 6a. Preparar el salón ✅ | Catálogo, habilitación, configuración por lección, prioridad, asignación individual, banco forzado y prerrequisitos editables por año lectivo |
+| 6b. Seguimiento | Tabla de dominio del salón, alertas por lección (incluida la de excelencia de la extensión), ficha del estudiante con historial y plan por trimestre |
 | 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
 | 9. Lo que sigue | Plan para 3.º a 6.º y para pasar los decimales al núcleo (solo plan) |
@@ -491,8 +513,8 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 5b:** 593 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 161 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
+- **Estado tras la fase 6a:** 602 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 180 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
   problemas aleatorios en cerca de 1,4 s. Fracción, cantidad y teclado solo tienen pruebas de
   Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.

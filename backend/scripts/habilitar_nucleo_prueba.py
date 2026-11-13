@@ -1,6 +1,9 @@
 """
 Habilita lecciones del núcleo en un salón para probar la pantalla de práctica (fase 4).
 
+Desde la fase 6a el profesor lo hace en la pantalla "Lecciones del salón"
+(/teacher/salones/<id>/lecciones). Este script queda solo como atajo de desarrollo.
+
 Solo crea o actualiza la habilitación de las lecciones indicadas en el año lectivo activo del
 salón, con el profesor de ese año. No toca estudiantes, sesiones ni dominio. Es idempotente.
 

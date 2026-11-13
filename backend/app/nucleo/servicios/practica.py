@@ -21,7 +21,7 @@ from typing import Any, Callable, Optional
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculo import LeccionCurricular, PrerrequisitoDefecto
+from app.models.curriculo import LeccionCurricular
 from app.models.nucleo import (
     ASIGNACION_ACTIVA,
     ASIGNACION_CERRADA,
@@ -61,6 +61,7 @@ from app.nucleo.reparto import (
     repartir,
 )
 from app.nucleo.servicios import Prohibido, RespuestaInvalida, SaldoInsuficiente
+from app.nucleo.servicios.grafo import cargar_grafo
 from app.nucleo.servicios.habilitacion import PISTAS_POR_DEFECTO
 from app.nucleo.validacion import RespuestaMalFormada
 from app.services.school_service import Conflicto, NoEncontrado, SchoolService
@@ -120,18 +121,9 @@ class ServicioPractica:
         m = await self.school.exigir_salon(estudiante_id)
         return Contexto(estudiante_id, m.anio_lectivo_id, m.anio_lectivo.salon.grado)
 
-    async def grafo(self) -> Grafo:
-        orden = {
-            lec: n for lec, n in (await self.db.execute(
-                select(LeccionCurricular.id, LeccionCurricular.orden_programa)
-            )).tuples()
-        }
-        prerrequisitos: dict[str, list[str]] = {}
-        for lec, pre in (await self.db.execute(
-            select(PrerrequisitoDefecto.leccion_id, PrerrequisitoDefecto.prerrequisito_id)
-        )).tuples():
-            prerrequisitos.setdefault(lec, []).append(pre)
-        return Grafo({k: tuple(v) for k, v in prerrequisitos.items()}, orden)
+    async def grafo(self, anio_lectivo_id: Optional[int] = None) -> Grafo:
+        """El del año lectivo (con las ediciones del profesor) o, sin año, el del currículo."""
+        return await cargar_grafo(self.db, anio_lectivo_id)
 
     async def resultados(self, estudiante_id: int, leccion_id: Optional[str] = None) -> dict[str, list[Resultado]]:
         """Resultados que cuentan para el dominio (sin extensión), en orden cronológico."""
@@ -175,7 +167,7 @@ class ServicioPractica:
             )).scalars()
         }
         resultados = await self.resultados(estudiante_id)
-        grafo = await self.grafo()
+        grafo = await self.grafo(anio_lectivo_id)
 
         candidatas = []
         for leccion_id in sorted(set(habilitaciones) | asignadas):

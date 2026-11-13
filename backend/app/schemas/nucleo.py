@@ -43,8 +43,47 @@ class AsignacionOut(BaseModel):
     estado: str
     fecha_asignacion: datetime
     fecha_cierre: Optional[datetime] = None
+    leccion_titulo: str = ""
+    estudiante_nombre: str = ""
 
     model_config = {"from_attributes": True}
+
+
+class LeccionSalonOut(BaseModel):
+    """Lección del catálogo con su estado en el año lectivo del salón."""
+    id: str
+    grado: int
+    unidad_numero: int
+    unidad_titulo: str
+    leccion_numero: int
+    leccion_titulo: str
+    orden_programa: int
+    incluida: bool
+    motivo_exclusion: Optional[str] = None
+    parcial: bool
+    nota_parcial: Optional[str] = None
+    presentacion_especial: Optional[str] = None
+    cubierta_por: Optional[str] = None
+    caminos: list[str]
+    prerrequisitos: list[str]              # los que se aplican en este año
+    prerrequisitos_programa: list[str]     # los del currículo
+    prerrequisitos_editados: bool
+    tiene_generador: bool
+    habilitada: bool
+    signo: Modo
+    iconos: Modo
+    pistas: dict[str, bool]
+    prioritaria: bool
+
+
+class PrerrequisitosIn(BaseModel):
+    prerrequisitos: list[str] = Field(default_factory=list, max_length=20)
+
+
+class PrerrequisitosOut(BaseModel):
+    leccion_id: str
+    prerrequisitos: list[str]
+    editados: bool
 
 
 class AjustesIn(BaseModel):

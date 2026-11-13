@@ -10,13 +10,17 @@ Estudiante (con salón activo):
 - POST /sesiones/{sesion_id}/problemas/{id}/pista        Pedir una pista (nivel 1 a 3)
 - GET  /dominio                                          Mi dominio por lección y experiencia
 
-Profesor (sin interfaz hasta la fase 6):
+Profesor (pantalla "Lecciones del salón", fase 6a; solo sus propios salones):
+- GET    /anios/{anio_id}/catalogo                       Todas las lecciones con habilitación y prerrequisitos del año
 - GET    /anios/{anio_id}/lecciones                      Lecciones habilitadas o deshabilitadas
-- PUT    /anios/{anio_id}/lecciones/{leccion_id}         Habilitar o configurar
+- PUT    /anios/{anio_id}/lecciones/{leccion_id}         Habilitar o configurar (MAX_PRIORITARIAS)
 - DELETE /anios/{anio_id}/lecciones/{leccion_id}         Deshabilitar (conserva configuración y dominio)
+- PUT    /anios/{anio_id}/lecciones/{leccion_id}/prerrequisitos  Editar en este año (PRERREQUISITO_CICLO)
+- DELETE /anios/{anio_id}/lecciones/{leccion_id}/prerrequisitos  Volver a los del currículo
 - GET    /anios/{anio_id}/asignaciones                   Asignaciones individuales del salón
 - POST   /anios/{anio_id}/asignaciones                   Asignar una lección a un estudiante
 - DELETE /asignaciones/{asignacion_id}                   Cancelar una asignación
+- GET    /anios/{anio_id}/ajustes                        Banco forzado de cada estudiante del salón
 - PUT    /anios/{anio_id}/estudiantes/{estudiante_id}/ajustes   Forzar el banco
 - GET    /anios/{anio_id}/estudiantes/{estudiante_id}/dominio   Dominio de un estudiante
 
@@ -28,6 +32,7 @@ from fastapi import APIRouter, status
 from app.api.dependencies import CurrentStudent, CurrentStudentConSalon, CurrentTeacher, DBSession
 from app.nucleo.problema import problema_a_dict, problema_desde_dict
 from app.nucleo.registro import tiene_generador
+from app.nucleo.servicios.grafo import prerrequisitos_efectivos
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
 from app.nucleo.servicios.practica import ServicioPractica
 from app.schemas.nucleo import (
@@ -39,8 +44,11 @@ from app.schemas.nucleo import (
     EstadoNucleoOut,
     HabilitacionIn,
     HabilitacionOut,
+    LeccionSalonOut,
     PistaIn,
     PistaOut,
+    PrerrequisitosIn,
+    PrerrequisitosOut,
     ProblemaOut,
     RespuestaIn,
     RespuestaOut,
@@ -113,6 +121,26 @@ async def mi_dominio(db: DBSession, estudiante: CurrentStudentConSalon):
 
 # ─── Profesor ────────────────────────────────────────────────────────────────
 
+@router.get("/anios/{anio_id}/catalogo", response_model=list[LeccionSalonOut])
+async def catalogo(anio_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioHabilitacion(db).catalogo(anio_id, profesor.id)
+
+
+@router.put("/anios/{anio_id}/lecciones/{leccion_id}/prerrequisitos", response_model=PrerrequisitosOut)
+async def editar_prerrequisitos(anio_id: int, leccion_id: str, datos: PrerrequisitosIn,
+                                db: DBSession, profesor: CurrentTeacher):
+    pres = await ServicioHabilitacion(db).editar_prerrequisitos(anio_id, profesor.id, leccion_id, datos.prerrequisitos)
+    return PrerrequisitosOut(leccion_id=leccion_id, prerrequisitos=pres, editados=True)
+
+
+@router.delete("/anios/{anio_id}/lecciones/{leccion_id}/prerrequisitos", response_model=PrerrequisitosOut)
+async def restaurar_prerrequisitos(anio_id: int, leccion_id: str, db: DBSession, profesor: CurrentTeacher):
+    servicio = ServicioHabilitacion(db)
+    await servicio.restaurar_prerrequisitos(anio_id, profesor.id, leccion_id)
+    pres = (await prerrequisitos_efectivos(db, None)).get(leccion_id, ())
+    return PrerrequisitosOut(leccion_id=leccion_id, prerrequisitos=list(pres), editados=False)
+
+
 @router.get("/anios/{anio_id}/lecciones", response_model=list[HabilitacionOut])
 async def lecciones_del_salon(anio_id: int, db: DBSession, profesor: CurrentTeacher):
     return [
@@ -153,17 +181,26 @@ async def deshabilitar(anio_id: int, leccion_id: str, db: DBSession, profesor: C
 
 @router.get("/anios/{anio_id}/asignaciones", response_model=list[AsignacionOut])
 async def asignaciones(anio_id: int, db: DBSession, profesor: CurrentTeacher):
-    return await ServicioHabilitacion(db).asignaciones(anio_id, profesor.id)
+    servicio = ServicioHabilitacion(db)
+    return await servicio.describir(await servicio.asignaciones(anio_id, profesor.id))
 
 
 @router.post("/anios/{anio_id}/asignaciones", response_model=AsignacionOut, status_code=status.HTTP_201_CREATED)
 async def asignar(anio_id: int, datos: AsignacionIn, db: DBSession, profesor: CurrentTeacher):
-    return await ServicioHabilitacion(db).asignar(anio_id, profesor.id, datos.estudiante_id, datos.leccion_id)
+    servicio = ServicioHabilitacion(db)
+    asig = await servicio.asignar(anio_id, profesor.id, datos.estudiante_id, datos.leccion_id)
+    return (await servicio.describir([asig]))[0]
 
 
 @router.delete("/asignaciones/{asignacion_id}", response_model=AsignacionOut)
 async def cancelar_asignacion(asignacion_id: int, db: DBSession, profesor: CurrentTeacher):
-    return await ServicioHabilitacion(db).cancelar_asignacion(asignacion_id, profesor.id)
+    servicio = ServicioHabilitacion(db)
+    return (await servicio.describir([await servicio.cancelar_asignacion(asignacion_id, profesor.id)]))[0]
+
+
+@router.get("/anios/{anio_id}/ajustes", response_model=list[AjustesOut])
+async def ajustes_del_salon(anio_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioHabilitacion(db).ajustes(anio_id, profesor.id)
 
 
 @router.put("/anios/{anio_id}/estudiantes/{estudiante_id}/ajustes", response_model=AjustesOut)

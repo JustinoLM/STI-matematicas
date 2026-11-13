@@ -312,9 +312,11 @@ async def test_registro_de_eventos_por_intento():
         s = await serv.iniciar_sesion(est.id)
         ps = await serv.siguiente(est.id, s.id)
         mal = respuesta_mal(ps)
+        # Un solo hueco: el resultado, o el del medio en `a + _ = c` (forma faltante, 15 %)
+        (hueco,) = mal
         eventos = [
-            {"tipo": "opcion_elegida", "valor": mal["resultado"], "ms": 1500},
-            {"tipo": "cambio_opcion", "valor": {"de": mal["resultado"], "a": "x"}, "ms": 2100},
+            {"tipo": "opcion_elegida", "valor": mal[hueco], "ms": 1500},
+            {"tipo": "cambio_opcion", "valor": {"de": mal[hueco], "a": "x"}, "ms": 2100},
             {"tipo": "voz", "valor": None, "ms": 300},
         ]
         await serv.pista(est.id, s.id, ps.id, 1)
@@ -324,7 +326,7 @@ async def test_registro_de_eventos_por_intento():
         assert (intento.tiempo_ms, intento.uso_voz, intento.correcto) == (4200, True, False)
         assert intento.modo_respuesta == ModoRespuesta.BANCO.value
         assert intento.respuestas == mal
-        assert intento.errores["resultado"].startswith("naturales.suma.")
+        assert intento.errores[hueco].startswith("naturales.suma.")
         filas = (await db.execute(select(NucleoEvento).order_by(NucleoEvento.id))).scalars().all()
         assert [e.tipo for e in filas] == ["pista", "opcion_elegida", "cambio_opcion", "voz"]
         assert filas[0].intento_id is None and filas[0].valor == {"nivel": 1}

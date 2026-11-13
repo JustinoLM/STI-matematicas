@@ -25,6 +25,8 @@ import {
   CalendarDays,
   Plus,
   Settings,
+  BookOpen,
+  Star,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { teacherService, BulkAddResult } from '@/services/teacherService';
@@ -33,6 +35,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { clavesProfesor, nucleoProfesorService } from '@/services/nucleoService';
+import { MAX_PRIORITARIAS, prioritarias } from '@/lib/leccionesSalon';
 
 const fechaCorta = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('es-PA', { day: 'numeric', month: 'short' });
@@ -64,6 +68,12 @@ export default function SalonDetailPage() {
   const { data: salon, isLoading } = useQuery({
     queryKey: claveSalon,
     queryFn: () => teacherService.getSalonDetalle(anioLectivoId),
+    enabled: !!anioLectivoId,
+  });
+
+  const { data: catalogo } = useQuery({
+    queryKey: clavesProfesor.catalogo(anioLectivoId),
+    queryFn: () => nucleoProfesorService.catalogo(anioLectivoId),
     enabled: !!anioLectivoId,
   });
 
@@ -199,14 +209,22 @@ export default function SalonDetailPage() {
             <span className="text-sm text-muted-foreground">Profesor: {salon.profesor_nombre}</span>
           </div>
         </div>
-        {!soloLectura && (
-          <Link to={`/teacher/configuration?salon=${salon.anio_lectivo_id}`}>
-            <Button variant="outline">
-              <Settings className="mr-2 h-4 w-4" />
-              Configurar práctica
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/teacher/salones/${salon.anio_lectivo_id}/lecciones`}>
+            <Button>
+              <BookOpen className="mr-2 h-4 w-4" />
+              Lecciones del salón
             </Button>
           </Link>
-        )}
+          {!soloLectura && (
+            <Link to={`/teacher/configuration?salon=${salon.anio_lectivo_id}`}>
+              <Button variant="outline">
+                <Settings className="mr-2 h-4 w-4" />
+                Práctica de decimales
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {soloLectura && (
@@ -221,7 +239,7 @@ export default function SalonDetailPage() {
       )}
 
       {/* ── Resumen ─────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Estudiantes</CardTitle>
@@ -241,6 +259,21 @@ export default function SalonDetailPage() {
             <p className="text-xs text-muted-foreground">Opcionales, por ejemplo para desafíos</p>
           </CardContent>
         </Card>
+        <Link to={`/teacher/salones/${salon.anio_lectivo_id}/lecciones`} className="block">
+          <Card className="h-full transition-colors hover:border-primary">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Lecciones</CardTitle>
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{catalogo ? catalogo.filter((l) => l.habilitada).length : '–'}</div>
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                habilitadas · <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                {catalogo ? prioritarias(catalogo).length : 0} de {MAX_PRIORITARIAS} prioritarias
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Práctica de decimales</CardTitle>

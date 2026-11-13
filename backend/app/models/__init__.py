@@ -77,6 +77,8 @@ from app.models.nucleo import (
     NucleoExtension,
     NucleoHabilitacion,
     NucleoIntento,
+    NucleoPrerrequisitoAnio,
+    NucleoPrerrequisitoEditado,
     NucleoProblemaSesion,
     NucleoSesion,
 )
@@ -178,6 +180,8 @@ __all__ = [
     "NucleoExtension",
     "NucleoHabilitacion",
     "NucleoIntento",
+    "NucleoPrerrequisitoAnio",
+    "NucleoPrerrequisitoEditado",
     "NucleoProblemaSesion",
     "NucleoSesion",
     # Group

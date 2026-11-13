@@ -9,6 +9,9 @@ intento. Los estados son texto con CHECK (como en school.py), no tipos ENUM de P
   (signo, íconos, pistas por nivel y prioridad). Deshabilitar conserva la fila.
 - NucleoAsignacion: lección asignada solo a un estudiante; se cierra sola al dominarla.
 - NucleoAjusteEstudiante: adaptaciones por estudiante (banco forzado).
+- NucleoPrerrequisitoEditado / NucleoPrerrequisitoAnio: prerrequisitos que el profesor edita en
+  el año lectivo de su salón (fase 6a). Una lección marcada como editada usa los del año, aunque
+  queden vacíos; las demás, los del currículo. Recargar el currículo nunca pisa estas tablas.
 - NucleoDominio: estado del estudiante en una lección. Sin fila = no iniciada.
 - NucleoExtension: pausa de la zona de extensión por estudiante y lección.
 - NucleoSesion / NucleoProblemaSesion / NucleoIntento / NucleoEvento: la práctica.
@@ -24,6 +27,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -125,6 +129,34 @@ class NucleoAjusteEstudiante(Base):
     estudiante_id = Column(Integer, ForeignKey("estudiante.id"), primary_key=True)
     banco_forzado = Column(Boolean, nullable=False, default=False, server_default="false")
     fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class NucleoPrerrequisitoEditado(Base):
+    """La lección tiene prerrequisitos propios en este año lectivo (la lista puede estar vacía)."""
+    __tablename__ = "nucleo_prerrequisito_editado"
+
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), primary_key=True)
+    leccion_id = Column(String(30), ForeignKey("curriculo_leccion.id"), primary_key=True)
+    profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=False)
+    fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class NucleoPrerrequisitoAnio(Base):
+    """Arista del grafo del año lectivo: `leccion_id` depende de `prerrequisito_id`."""
+    __tablename__ = "nucleo_prerrequisito_anio"
+
+    anio_lectivo_id = Column(Integer, primary_key=True)
+    leccion_id = Column(String(30), primary_key=True)
+    prerrequisito_id = Column(String(30), ForeignKey("curriculo_leccion.id"), primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["anio_lectivo_id", "leccion_id"],
+            ["nucleo_prerrequisito_editado.anio_lectivo_id", "nucleo_prerrequisito_editado.leccion_id"],
+            ondelete="CASCADE", name="fk_nucleo_prerrequisito_anio_editado",
+        ),
+        CheckConstraint("leccion_id <> prerrequisito_id", name="ck_nucleo_prerrequisito_anio_distinto"),
+    )
 
 
 # ─── Dominio y extensión ─────────────────────────────────────────────────────

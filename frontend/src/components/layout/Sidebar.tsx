@@ -27,7 +27,11 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Para rutas anidadas en otra sección (las lecciones viven bajo /teacher/salones/:id) */
+  activo?: (ruta: string) => boolean;
 }
+
+const RUTA_LECCIONES_SALON = /^\/teacher\/salones\/\d+\/lecciones/;
 
 const studentNav: NavItem[] = [
   { title: 'Inicio', href: '/student/dashboard', icon: Home },
@@ -44,13 +48,20 @@ const studentNav: NavItem[] = [
 
 const teacherNav: NavItem[] = [
   { title: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
-  { title: 'Salones', href: '/teacher/salones', icon: Users },
+  {
+    title: 'Salones', href: '/teacher/salones', icon: Users,
+    activo: (r) => !RUTA_LECCIONES_SALON.test(r) && (r === '/teacher/salones' || r.startsWith('/teacher/salones/')),
+  },
+  {
+    title: 'Lecciones', href: '/teacher/lecciones', icon: BookOpen,
+    activo: (r) => r === '/teacher/lecciones' || RUTA_LECCIONES_SALON.test(r),
+  },
   { title: 'Estudiantes', href: '/teacher/students', icon: GraduationCap },
   { title: 'Estadísticas', href: '/teacher/stats', icon: BarChart2 },
   { title: 'Regla de Tres', href: '/teacher/regla-de-tres', icon: Scale },
   { title: 'Desafíos', href: '/teacher/challenges', icon: Target },
   { title: 'Alertas', href: '/teacher/alerts', icon: AlertTriangle },
-  { title: 'Configuración', href: '/teacher/configuration', icon: Settings },
+  { title: 'Práctica de decimales', href: '/teacher/configuration', icon: Settings },
 ];
 
 interface SidebarProps {
@@ -88,9 +99,9 @@ export function Sidebar({ userRole, isOpen = true, onClose }: SidebarProps) {
         <nav className="space-y-2 p-4">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              location.pathname === item.href ||
-              location.pathname.startsWith(item.href + '/');
+            const isActive = item.activo
+              ? item.activo(location.pathname)
+              : location.pathname === item.href || location.pathname.startsWith(item.href + '/');
 
             return (
               <Link

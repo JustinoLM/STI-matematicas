@@ -180,3 +180,60 @@ export interface ResultadoRespuesta {
   evento_dominio: string | null;
   sesion_completada: boolean;
 }
+
+// ─── Profesor: lecciones del salón (fase 6a) ─────────────────────────────────
+
+export type ModoLeccion = 'siempre' | 'nunca' | 'azar';
+export type PistasLeccion = Record<'1' | '2' | '3', boolean>;
+
+/** Lección del catálogo con su estado en el año lectivo del salón */
+export interface LeccionSalon {
+  id: string;
+  grado: number;
+  unidad_numero: number;
+  unidad_titulo: string;
+  leccion_numero: number;
+  leccion_titulo: string;
+  orden_programa: number;
+  incluida: boolean;
+  motivo_exclusion: string | null;
+  parcial: boolean;
+  nota_parcial: string | null;
+  presentacion_especial: string | null;
+  cubierta_por: string | null;
+  caminos: string[];
+  /** Los que se aplican en este año (los del programa si no se editaron) */
+  prerrequisitos: string[];
+  prerrequisitos_programa: string[];
+  prerrequisitos_editados: boolean;
+  tiene_generador: boolean;
+  habilitada: boolean;
+  signo: ModoLeccion;
+  iconos: ModoLeccion;
+  pistas: PistasLeccion;
+  prioritaria: boolean;
+}
+
+export interface ConfigLeccion {
+  signo: ModoLeccion;
+  iconos: ModoLeccion;
+  pistas: PistasLeccion;
+  prioritaria: boolean;
+}
+
+export interface AsignacionNucleo {
+  id: number;
+  anio_lectivo_id: number;
+  estudiante_id: number;
+  leccion_id: string;
+  estado: 'activa' | 'cerrada_por_dominio' | 'cancelada';
+  fecha_asignacion: string;
+  fecha_cierre: string | null;
+  leccion_titulo: string;
+  estudiante_nombre: string;
+}
+
+export interface AjusteEstudiante {
+  estudiante_id: number;
+  banco_forzado: boolean;
+}
