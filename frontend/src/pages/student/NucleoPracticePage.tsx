@@ -169,6 +169,7 @@ export function NucleoPracticePage() {
             sesionId={sesion.id}
             turno={fase.turno}
             icono={iconoDelTema(temaActivoId)}
+            tema={temaActivoId}
             onTerminado={alTerminarProblema}
           />
         )}

@@ -8,11 +8,32 @@ está incluida y que los caminos del generador son los de la lección.
 
 from app.nucleo.generador import GeneradorLeccion
 from app.nucleo.lecciones.naturales.g1_u03_l01 import SumemosHorizontal
+from app.nucleo.lecciones.naturales.g1_u03_l02 import RestemosHorizontal
+from app.nucleo.lecciones.naturales.g1_u03_l03 import SumemosRestemos3Numeros
+from app.nucleo.lecciones.naturales.g1_u05_l01 import Sumemos10
+from app.nucleo.lecciones.naturales.g1_u05_l02 import SumemosCompletando10
+from app.nucleo.lecciones.naturales.g1_u05_l03 import RestemosHasta19
+from app.nucleo.lecciones.naturales.g1_u05_l04 import SumemosRestemos3NumerosHasta20
+from app.nucleo.lecciones.naturales.g1_u05_l05 import SemirrectaHasta20
+from app.nucleo.lecciones.naturales.g1_u07_l01 import SumemosHasta99
+from app.nucleo.lecciones.naturales.g1_u07_l02 import RestemosHasta99
+from app.nucleo.lecciones.naturales.g1_u07_l03 import SemirrectaHasta99
 
 GENERADORES: dict[str, GeneradorLeccion] = {
     g.leccion_id: g
     for g in (
+        # 1.º grado: suma y resta (U3, U5, U7)
         SumemosHorizontal(),
+        RestemosHorizontal(),
+        SumemosRestemos3Numeros(),
+        Sumemos10(),
+        SumemosCompletando10(),
+        RestemosHasta19(),
+        SumemosRestemos3NumerosHasta20(),
+        SemirrectaHasta20(),
+        SumemosHasta99(),
+        RestemosHasta99(),
+        SemirrectaHasta99(),
     )
 }
 

@@ -93,4 +93,11 @@ describe('íconos', () => {
     expect(screen.getAllByTestId('barra-diez')).toHaveLength(2);
     expect(screen.getAllByTestId('icono-suelto')).toHaveLength(3);
   });
+
+  it('hasta 99: 10 + 30 son 4 barras compactas', () => {
+    render(<Iconos cantidades={[10, 30]} icono="⭐" />);
+    expect(screen.getAllByTestId('barra-diez')).toHaveLength(4);
+    expect(screen.queryByTestId('icono-suelto')).toBeNull();
+    expect(screen.getByTestId('iconos')).toHaveAttribute('data-compacto', 'true');
+  });
 });

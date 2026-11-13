@@ -10,8 +10,10 @@ import { VictoryEffect, type AnimationType } from '@/components/practice/Victory
 import { useThemeStore } from '@/store/themeStore';
 import { EFECTOS } from '@/types/shop';
 import type { Problema, ResultadoRespuesta } from '@/types/nucleo';
+import { vocabularioDelTema } from '@/utils/nucleo/plantillas';
 import { respuestasDesdeSolucion } from '@/utils/nucleo/respuestas';
 import { Expresion } from './Expresion';
+import { Semirrecta } from './Semirrecta';
 
 interface EntreProblemasProps {
   resultado: ResultadoRespuesta;
@@ -20,7 +22,7 @@ interface EntreProblemasProps {
 }
 
 export function EntreProblemas({ resultado, problema, onSiguiente }: EntreProblemasProps) {
-  const { efectoActivoId, efectosSonidoActivados, volumen } = useThemeStore.getState();
+  const { efectoActivoId, efectosSonidoActivados, volumen, temaActivoId } = useThemeStore.getState();
   const efecto = resultado.correcto && efectoActivoId ? EFECTOS.find(e => e.id === efectoActivoId) : undefined;
   const [mostrarEfecto, setMostrarEfecto] = useState(!!efecto?.config?.animacion);
 
@@ -42,6 +44,10 @@ export function EntreProblemas({ resultado, problema, onSiguiente }: EntreProble
       ) : (
         <>
           <h2 className="text-4xl font-bold text-slate-800">Así se resuelve:</h2>
+          {problema.forma === 'expresion' && problema.presentacion?.tipo === 'semirrecta' && (
+            <Semirrecta presentacion={problema.presentacion} mostrarLlegada
+              saltarin={vocabularioDelTema(temaActivoId).saltarin} />
+          )}
           {problema.forma === 'expresion' && resultado.solucion ? (
             <Expresion problema={problema} respuestas={respuestasDesdeSolucion(problema, resultado.solucion)} soloLectura />
           ) : problema.forma === 'ordenar' && Array.isArray(resultado.solucion?.orden) ? (

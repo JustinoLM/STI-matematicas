@@ -11,6 +11,8 @@ Uso:
     cd backend
     poetry run python scripts/habilitar_nucleo_prueba.py                     # g1-u03-l01 en 1A
     poetry run python scripts/habilitar_nucleo_prueba.py --signo azar        # también el signo oculto
+    poetry run python scripts/habilitar_nucleo_prueba.py --todas --signo azar  # todas las que tienen generador
+    poetry run python scripts/habilitar_nucleo_prueba.py --leccion g1-u05-l05 --prioritaria  # entra ya en la sesión
     poetry run python scripts/habilitar_nucleo_prueba.py --salon 1A --leccion g1-u03-l01
     poetry run python scripts/habilitar_nucleo_prueba.py --deshabilitar      # la deshabilita
 """
@@ -28,7 +30,7 @@ from app.core.database import AsyncSessionLocal  # noqa: E402
 from app.models.curriculo import LeccionCurricular  # noqa: E402
 from app.models.school import AnioLectivo, Salon  # noqa: E402
 from app.nucleo.modos import Modo  # noqa: E402
-from app.nucleo.registro import tiene_generador  # noqa: E402
+from app.nucleo.registro import GENERADORES, tiene_generador  # noqa: E402
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion  # noqa: E402
 from app.services.school_service import ErrorSalon  # noqa: E402
 
@@ -39,9 +41,12 @@ async def main() -> int:
     parser.add_argument("--leccion", action="append", help="Id de lección (repetible; por defecto g1-u03-l01)")
     parser.add_argument("--signo", choices=[m.value for m in Modo], default=Modo.SIEMPRE.value)
     parser.add_argument("--iconos", choices=[m.value for m in Modo], default=Modo.SIEMPRE.value)
+    parser.add_argument("--todas", action="store_true", help="Todas las lecciones que tienen generador")
+    parser.add_argument("--prioritaria", action="store_true",
+                        help="Las marca como prioritarias (entran en la sesión sin dominar los prerrequisitos)")
     parser.add_argument("--deshabilitar", action="store_true")
     args = parser.parse_args()
-    lecciones = args.leccion or ["g1-u03-l01"]
+    lecciones = sorted(GENERADORES) if args.todas else (args.leccion or ["g1-u03-l01"])
 
     async with AsyncSessionLocal() as db:
         if await db.scalar(select(LeccionCurricular.id).limit(1)) is None:
@@ -65,9 +70,11 @@ async def main() -> int:
                 if not tiene_generador(leccion_id):
                     print(f"Aviso: {leccion_id} no tiene generador; el reparto la omitirá.")
                 await servicio.habilitar(anio.id, anio.profesor_id, leccion_id,
-                                         signo=Modo(args.signo), iconos=Modo(args.iconos))
+                                         signo=Modo(args.signo), iconos=Modo(args.iconos),
+                                         prioritaria=args.prioritaria)
                 print(f"{leccion_id}: habilitada en {args.salon} (año {anio.anio}), "
-                      f"signo={args.signo}, iconos={args.iconos}.")
+                      f"signo={args.signo}, iconos={args.iconos}"
+                      f"{', prioritaria' if args.prioritaria else ''}.")
         except ErrorSalon as e:
             print(f"Error: {e}", file=sys.stderr)
             await db.rollback()

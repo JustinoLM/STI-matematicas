@@ -174,6 +174,13 @@ class ProblemaExpresion:
     modos: ModosProblema
     datos: dict[str, Any] = field(default_factory=dict)   # datos internos del generador (JSON)
     iconos: Optional[list[int]] = None  # cuántos íconos lleva cada operando, si se muestran
+    # Enunciado con plantilla (1.º y 2.º, sin LLM): {"situacion", "variante", "cantidades"}. La
+    # pantalla arma el texto con el tema narrativo del estudiante. Las cantidades son los mismos
+    # números del problema (nunca la respuesta) y los íconos salen de ellas.
+    enunciado: Optional[dict[str, Any]] = None
+    # Presentación especial (por ejemplo {"tipo": "semirrecta", ...}). Es pública: no lleva la
+    # respuesta salvo que el ejercicio la muestre (la llegada en "anota la operación").
+    presentacion: Optional[dict[str, Any]] = None
     forma: ClassVar[str] = "expresion"
 
     def __post_init__(self):
@@ -321,6 +328,8 @@ def problema_a_dict(p: Problema, incluir_respuestas: bool = True) -> dict:
     if isinstance(p, ProblemaExpresion):
         d["segmentos"] = [_segmento_a_dict(s) for s in p.segmentos]
         d["huecos"] = [_hueco_a_dict(h, incluir_respuestas) for h in p.huecos.values()]
+        d["enunciado"] = p.enunciado
+        d["presentacion"] = p.presentacion
     else:
         d["numeros"] = [texto_numero(n) for n in p.numeros]
         d["ascendente"] = p.ascendente
@@ -345,6 +354,8 @@ def problema_desde_dict(d: dict) -> Problema:
         return ProblemaExpresion(
             segmentos=[_segmento_desde_dict(s) for s in d["segmentos"]],
             huecos={h.id: h for h in huecos},
+            enunciado=d.get("enunciado"),
+            presentacion=d.get("presentacion"),
             **comunes,
         )
     if d["forma"] == "ordenar":

@@ -116,9 +116,10 @@ grados:
              caminos: [naturales.suma], prerrequisitos: [g1-u03-l01, g1-u04-l01]}
           - {id: g1-u05-l02, numero: 2, titulo: "Sumemos completando a 10",
              caminos: [naturales.suma], prerrequisitos: [g1-u05-l01, g1-u02-l02],
-             notas: "Enseña una estrategia: el generador usa huecos para ella (8 + 5 = 8 + _ + _ = _)."}
+             notas: "Enseña una estrategia: el generador la pide como pasos (9 + 4 = 10 + _ = _), como en Panamáticas."}
           - {id: g1-u05-l03, numero: 3, titulo: "Restemos con números hasta 19",
-             caminos: [naturales.resta], prerrequisitos: [g1-u03-l02, g1-u05-l01]}
+             caminos: [naturales.resta], prerrequisitos: [g1-u03-l02, g1-u05-l01],
+             notas: "Con y sin cruzar la decena, de forma mental (13 − 9 = _ + 3 = _); pedir prestado en columnas es de 2.º."}
           - {id: g1-u05-l04, numero: 4, titulo: "Sumemos y restemos 3 números hasta 20",
              caminos: [naturales.suma, naturales.resta],
              prerrequisitos: [g1-u03-l03, g1-u05-l02, g1-u05-l03]}
@@ -154,7 +155,8 @@ grados:
              notas: "Sin pedir prestado: pedir prestado empieza en 2.º (g2-u04-l01)."}
           - {id: g1-u07-l03, numero: 3, titulo: "Sumemos y restemos en la semirrecta numérica",
              caminos: [naturales.suma, naturales.resta], presentacion: semirrecta,
-             prerrequisitos: [g1-u06-l04, g1-u07-l02]}
+             prerrequisitos: [g1-u06-l04, g1-u07-l02],
+             notas: "En la semirrecta sí se cruza la decena (35 + 15, 82 − 35): se cuenta de 1, 5 o 10 en 10."}
 
       - numero: 8
         titulo: "Líneas y formas en mi entorno"

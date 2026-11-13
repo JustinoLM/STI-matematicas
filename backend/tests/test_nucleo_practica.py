@@ -75,6 +75,14 @@ class GeneradorPruebaL02(SumemosHorizontal):
     caminos = ("naturales.resta",)
 
 
+@pytest.fixture(autouse=True)
+def solo_l01(monkeypatch):
+    """Estas pruebas del servicio suponen que solo U3 L1 tiene generador (el de L02 es de prueba):
+    se quitan los demás para que el reparto no sume extensión hacia lecciones reales."""
+    for leccion_id in [k for k in GENERADORES if k != L01]:
+        monkeypatch.delitem(GENERADORES, leccion_id)
+
+
 @pytest.fixture
 def con_l02(monkeypatch):
     monkeypatch.setitem(GENERADORES, L02, GeneradorPruebaL02())

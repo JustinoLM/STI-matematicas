@@ -1,11 +1,13 @@
 /**
  * Instrucción del problema y texto para la lectura en voz alta.
  *
- * En la fase 4 la instrucción es genérica según la forma del problema; los enunciados con
- * plantilla y tema narrativo llegan con los generadores de la fase 5.
+ * La instrucción es genérica según la forma del problema ("Arrastra el número que falta."). Desde
+ * la fase 5a, si el problema trae enunciado con plantilla, la pantalla muestra primero ese texto
+ * con el tema del estudiante, y la voz lee el enunciado, la instrucción y la expresión.
  */
 
 import type { Hueco, Problema, Segmento } from '@/types/nucleo';
+import { textoEnunciado } from './plantillas';
 
 const SIMBOLOS_LEIDOS: Record<string, string> = {
   '+': 'más',
@@ -38,9 +40,11 @@ export function instruccion(p: Problema): string {
       ? 'Arrastra el signo que va en el espacio: mayor, menor o igual.'
       : 'Arrastra el signo que va en el espacio.';
   }
+  const verbo = arrastra ? 'Arrastra' : 'Escribe';
+  if (p.huecos.some(h => h.id === 'paso')) return `Primero forma 10. ${verbo} los números que faltan.`;
+  if (p.huecos.some(esHuecoDeSigno)) return `${verbo} los números y el signo que faltan.`;
   const varios = p.huecos.length > 1;
-  if (arrastra) return varios ? 'Arrastra los números que faltan.' : 'Arrastra el número que falta.';
-  return varios ? 'Escribe los números que faltan.' : 'Escribe el número que falta.';
+  return varios ? `${verbo} los números que faltan.` : `${verbo} el número que falta.`;
 }
 
 function leerSegmento(s: Segmento, huecos: Map<string, Hueco>): string {
@@ -62,12 +66,14 @@ function leerSegmento(s: Segmento, huecos: Map<string, Hueco>): string {
   }
 }
 
-/** Lo que dice la voz: la instrucción y la expresión ("3 más 4 es igual a ¿cuánto?") */
-export function textoParaLeer(p: Problema): string {
+/** Lo que dice la voz: el enunciado (si hay), la instrucción y la expresión
+ * ("Ana tiene 3 manzanas… Arrastra el número que falta. 3 más 4 es igual a ¿cuánto?") */
+export function textoParaLeer(p: Problema, temaId?: string | null): string {
   if (p.forma === 'ordenar') return `${instruccion(p)} ${p.numeros.join(', ')}.`;
   const huecos = new Map(p.huecos.map(h => [h.id, h]));
   const expresion = p.segmentos.map(s => leerSegmento(s, huecos)).join(' ');
-  return `${instruccion(p)} ${expresion}`;
+  const enunciado = textoEnunciado(p, temaId);
+  return `${enunciado ? `${enunciado} ` : ''}${instruccion(p)} ${expresion}`;
 }
 
 /** Elige una voz en español; null si el navegador no tiene ninguna */

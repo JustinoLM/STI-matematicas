@@ -7,6 +7,8 @@
  */
 
 export const UMBRAL_DECENAS = 10;
+/** Por encima de esta cantidad las barras de 10 se dibujan compactas (U5 y U7) */
+export const UMBRAL_COMPACTO = UMBRAL_DECENAS;
 export const ICONOS_POR_FILA = 5;
 
 export interface GrupoIconos {
@@ -42,4 +44,17 @@ export const ICONO_POR_TEMA: Record<string, string> = {
 
 export function iconoDelTema(temaId: string | null | undefined): string {
   return (temaId && ICONO_POR_TEMA[temaId]) || ICONO_POR_TEMA['tema-default'];
+}
+
+/**
+ * Cómo se dibujan los íconos de un problema. Si alguna cantidad pasa del umbral, todas se agrupan
+ * en decenas (así 10 + 30 muestra una barra y tres barras, no 10 sueltos junto a barras), y las
+ * barras son compactas para que el problema quepa sin desplazarse en la tablet.
+ */
+export function estiloIconos(cantidades: number[]): { umbral: number; compacto: boolean } {
+  const maximo = Math.max(0, ...cantidades);
+  return {
+    umbral: maximo > UMBRAL_DECENAS ? UMBRAL_DECENAS - 1 : UMBRAL_DECENAS,
+    compacto: maximo > UMBRAL_COMPACTO,
+  };
 }

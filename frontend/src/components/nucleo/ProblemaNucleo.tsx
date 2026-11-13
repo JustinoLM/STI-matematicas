@@ -27,6 +27,7 @@ import type { Problema, ProblemaTurno, Respuestas, ResultadoRespuesta, EnvioResp
 import { useVoz } from '@/hooks/useVoz';
 import { RegistroEventos } from '@/utils/nucleo/eventos';
 import { instruccion, textoParaLeer } from '@/utils/nucleo/lectura';
+import { textoEnunciado, vocabularioDelTema } from '@/utils/nucleo/plantillas';
 import {
   armarRespuestas,
   borrarDigito,
@@ -43,6 +44,7 @@ import { BancoRespuestas, CLASES_FICHA, type DatosFicha } from './BancoRespuesta
 import { Enunciado } from './Enunciado';
 import { Expresion } from './Expresion';
 import { Iconos } from './Iconos';
+import { Semirrecta } from './Semirrecta';
 import { tarjetasDesdeNumeros, type Tarjeta } from '@/utils/nucleo/ordenar';
 import { OrdenarTarjetas } from './OrdenarTarjetas';
 import { TecladoNumerico } from './TecladoNumerico';
@@ -53,13 +55,15 @@ interface ProblemaNucleoProps {
   sesionId: number;
   turno: ProblemaTurno & { problema: Problema; problema_sesion_id: number };
   icono: string;
+  /** Tema narrativo del estudiante: personajes y objeto del enunciado */
+  tema?: string | null;
   onTerminado: (resultado: ResultadoRespuesta, problema: Problema) => void;
   /** Inyectables para las pruebas */
   enviar?: EnviarRespuesta;
   reloj?: () => number;
 }
 
-export function ProblemaNucleo({ sesionId, turno, icono, onTerminado, enviar = nucleoService.responder, reloj }: ProblemaNucleoProps) {
+export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, enviar = nucleoService.responder, reloj }: ProblemaNucleoProps) {
   const problema = turno.problema;
   const registro = useRef<RegistroEventos>();
   if (!registro.current) registro.current = new RegistroEventos(reloj);
@@ -133,7 +137,7 @@ export function ProblemaNucleo({ sesionId, turno, icono, onTerminado, enviar = n
   // ── Voz ──────────────────────────────────────────────────────────────────
   const escuchar = () => {
     registro.current!.usarVoz();
-    voz.hablar(textoParaLeer(problema));
+    voz.hablar(textoParaLeer(problema, tema));
   };
 
   // ── Comprobar ────────────────────────────────────────────────────────────
@@ -182,12 +186,15 @@ export function ProblemaNucleo({ sesionId, turno, icono, onTerminado, enviar = n
       data-testid="problema"
       className="flex flex-col items-center gap-5 md:landscape:grid md:landscape:grid-cols-2 md:landscape:items-center md:landscape:gap-8"
     >
-      <div className="flex w-full flex-col items-center gap-5" data-testid="columna-problema">
-        <Enunciado texto={instruccion(problema)} vozDisponible={voz.disponible} onEscuchar={escuchar} />
+      <div className="order-1 flex w-full flex-col items-center gap-5" data-testid="columna-problema">
+        <Enunciado texto={instruccion(problema)} historia={textoEnunciado(problema, tema)}
+          vozDisponible={voz.disponible} onEscuchar={escuchar} />
 
         {problema.modos.mostrar_iconos && problema.iconos && problema.iconos.length > 0 && (
           <Iconos cantidades={problema.iconos} icono={icono} />
         )}
+
+
 
         {problema.forma === 'expresion' ? (
           <Expresion
@@ -206,8 +213,16 @@ export function ProblemaNucleo({ sesionId, turno, icono, onTerminado, enviar = n
         )}
       </div>
 
+      {/* La semirrecta necesita ancho: en vertical va entre la expresión y el banco; en horizontal,
+          debajo de las dos columnas, de lado a lado. */}
+      {problema.forma === 'expresion' && problema.presentacion?.tipo === 'semirrecta' && (
+        <div className="order-2 flex w-full justify-center md:landscape:order-3 md:landscape:col-span-2">
+          <Semirrecta presentacion={problema.presentacion} saltarin={vocabularioDelTema(tema).saltarin} />
+        </div>
+      )}
+
       <div
-        className="flex w-full flex-col items-center gap-4 md:landscape:rounded-3xl md:landscape:bg-slate-50 md:landscape:p-4"
+        className="order-3 flex w-full flex-col items-center gap-4 md:landscape:order-2 md:landscape:rounded-3xl md:landscape:bg-slate-50 md:landscape:p-4"
         data-testid="columna-respuesta"
       >
         {huecoDelBanco && (

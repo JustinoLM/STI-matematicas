@@ -130,6 +130,16 @@ el plan.
     huecos. Soltar otra ficha sobre un hueco ocupado la cambia y registra `cambio_opcion`. Tocar
     un hueco solo elige qué banco se muestra; no coloca nada. Se usa `@dnd-kit` (ratón, toque y
     teclado).
+- **Decisiones de las lecciones de 1.º (fase 5a).**
+  - En U3 el 0 aparece en un 10 % de los problemas, nunca con el signo oculto.
+  - El hueco en medio (`1 + _ = 10`) va en un 15 % de U3 y un 10 % de U7.
+  - U5 L3 y U7 L3 cruzan la decena de forma mental o en la semirrecta. U7 L1 y L2 van sin llevar
+    ni pedir prestado y en horizontal; la forma vertical queda pendiente. Llevar y pedir prestado
+    en columnas son de 2.º.
+  - Con tres números y el signo oculto, se ocultan los dos signos, y solo si una única
+    combinación da el resultado.
+  - Un generador puede cambiar de versión (g1-u03-l01 pasó a la 2); los problemas guardados con
+    la versión anterior se siguen corrigiendo.
 - **Validación (implementada en la fase 3).**
   - Los números se comparan por su valor exacto, sin redondear.
   - Las fracciones aceptan las equivalentes, salvo que el hueco lo desactive.
@@ -138,13 +148,21 @@ el plan.
     como intento.
   - Las reglas de error usan códigos con el camino delante (por ejemplo `naturales.suma.resto`).
     Si varias reglas producen la misma respuesta, gana la primera de la lista.
+  - Desde la fase 5a las reglas van por **familias** en `reglas.py`: básicas (confundir la
+    operación, hacer la contraria, contar uno de más o de menos, copiar un número), hueco en medio
+    y pasos de estrategia, dos cifras (mezclar unidades con decenas, juntar las cifras, una decena
+    de más o de menos, restar la cifra menor de la mayor), tres números (olvidar el tercero) y
+    semirrecta (contar mal los saltos, leerla al revés). Al cambiar un signo en tres números, el
+    código usa el camino del signo cambiado. Si las reglas no llenan el banco, se completa con
+    números cercanos: pasa en un 3 % a 12 % de los huecos de pasos y de anotar.
   - El problema llega a la pantalla sin las respuestas correctas, sin los datos internos del
     generador y sin la regla de error de cada opción.
 
 ### Presentación
 
-- **Íconos más texto.** Hasta 10 van sueltos en filas de 5; desde 11 se agrupan en barras de 10
-  y unidades sueltas (el umbral es una constante del frontend). Usan el objeto del tema narrativo,
+- **Íconos más texto.** Hasta 10 van sueltos en filas de 5; si alguna cantidad del problema pasa
+  de 10, todas se dibujan en barras compactas de 10 más unidades sueltas, así `10 + 30` se ve como
+  4 barras (el umbral es una constante del frontend). Usan el objeto del tema narrativo,
   por ahora como emoji, que se ven distintos en cada sistema operativo. Entre los grupos no se
   dibuja el signo, para no revelarlo cuando está oculto.
 - **Lectura en voz alta.** Es opcional, como recurso de accesibilidad. Usa la voz en español del
@@ -156,11 +174,22 @@ el plan.
     vertical o en pantallas angostas va en una columna. Se decide solo con CSS y girar la tablet
     no borra la respuesta colocada.
   - Pendiente: probar con toque en una tablet real, en ambas orientaciones.
-- **Enunciados.** La referencia de estilo son los libros Panamáticas de cada grado. En la fase 4
-  la pantalla muestra una instrucción genérica según la forma del problema; las plantillas con el
-  tema llegan en la fase 5.
-- **Presentaciones especiales.** La semirrecta y la cinta (`presentacion_especial`) se hacen en la
-  fase 5, con las lecciones que las usan.
+- **Expresión.** Tiene tres tamaños de letra para no partirse en dos líneas en la tablet (por
+  ejemplo, la forma de pasos `5 + 9 = _ + 10 = _`).
+- **Enunciados (fase 5a).** La referencia de estilo son los libros Panamáticas de cada grado, sin
+  copiar sus textos.
+  - El backend manda en el campo `enunciado` la situación, la variante y las cantidades; la
+    pantalla arma el texto con plantillas por tema (6 temas más uno por defecto), con concordancia
+    de género y número. Así el ícono y la cantidad salen del mismo dato que el problema.
+  - Con el signo oculto, la pregunta final se cambia por el resultado: "Ana tiene 7 manzanas y
+    Tomás tiene 1. En total hay 8."
+  - La voz lee el enunciado, la instrucción y la expresión.
+- **Semirrecta (fase 5a).** Va en el campo `presentacion` del problema, con dos ejercicios
+  (resolver y anotar la operación), el tramo visible y saltos de 1, 5 o 10. Se dibuja en SVG con
+  el conteo acumulado encima de cada salto. En horizontal ocupa todo el ancho, debajo de las dos
+  columnas; en vertical va entre la expresión y el banco. En la pantalla de solución se marca la
+  llegada.
+- **Cinta** (`presentacion_especial`): se hará con la lección de 2.º que la usa.
 
 ### Qué es genérico y qué es propio de cada tema
 
@@ -312,7 +341,9 @@ el plan.
   - El dashboard muestra "Tienes una práctica a medias" con "Continuar" y "Descartar".
   - Al descartarla, la sesión queda `abandonada`: el problema pendiente no cuenta para el dominio
     ni da experiencia, y los intentos ya hechos quedan registrados.
-  - Una recarga de la página durante la práctica retoma sin preguntar.
+  - Al recargar la página durante la práctica aparece el aviso de sesión a medias. La fase 4 lo
+    reportó como "retoma sin preguntar", pero la fase 5a vio el aviso; falta decidir cuál se
+    quiere.
 - **Entrada mientras conviven los dos sistemas.** `GET /api/nucleo/estado` dice si el estudiante
   practica en el núcleo (su salón tiene lecciones habilitadas). En ese caso "Practicar" lleva a
   `/student/nucleo` y se ocultan los avisos de diagnóstico y post-test de decimales; si no, sigue
@@ -416,7 +447,8 @@ el plan.
 | 2. Currículo como datos ✅ | Catálogo de lecciones y grafo de prerrequisitos por defecto (completo para 1.º y 2.º) |
 | 3. Núcleo de práctica ✅ | Paquete `backend/app/nucleo/`, tablas `nucleo_*` y API `/api/nucleo`. Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
 | 4. Pantalla genérica ✅ | Página `/student/nucleo`: huecos, banco arrastrable, teclado, ordenar, íconos agrupados en decenas, voz, sesión a medias y dos columnas en horizontal. Verificada en el navegador; falta probarla en una tablet real |
-| 5. Lecciones de 1.º | Primero suma y resta (U3, U5, U7), después números (U2, U4, U6) |
+| 5a. Suma y resta de 1.º ✅ | 11 generadores (U3, U5, U7), reglas de error por familias, plantillas de enunciado con tema y semirrecta. Falta la forma vertical de U7 L1 y L2 |
+| 5b. Números de 1.º | U2, U4 y U6: numeración, ordenar, comparar, decenas y unidades, semirrecta para ubicar |
 | 6. Flujo del profesor | Catálogo, configuración por lección, plan por trimestre, tabla de dominio, alertas, ficha, asignación individual |
 | 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
@@ -429,9 +461,10 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 4:** 410 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 106 de frontend (41 de la pantalla del núcleo). Ordenar, fracción, cantidad y teclado
-  solo tienen pruebas de Vitest hasta que un generador los produzca (fase 5). El
+- **Estado tras la fase 5a:** 504 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 127 de frontend. Una prueba parametrizada recorre los 11 generadores de 1.º con muchos
+  problemas aleatorios en cerca de 1 s. Ordenar, fracción, cantidad y teclado solo tienen pruebas
+  de Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
 ### Riesgos
@@ -461,9 +494,9 @@ el plan.
 4. **Valores de los parámetros.** Hay que validarlos con especialistas o con MEDUCA: criterio de
    dominio, tiempo para mandar a repaso, duración del diagnóstico, cuántos problemas de extensión
    y refuerzo se mezclan, y cuándo salta el aviso de refuerzo.
-5. **Lecciones que enseñan una estrategia,** como "Sumemos completando a 10". Resuelta en parte:
-   el generador usa huecos para los pasos de la estrategia (`8 + 5 = 8 + _ + _ = _`), así que no
-   basta con dar el resultado. Falta confirmar que esto sirve para otras lecciones de estrategia.
+5. ~~**Lecciones que enseñan una estrategia.**~~ Resuelta en la fase 5a con la forma de pasos de
+   Panamáticas: `9 + 4 = 10 + _ = _` y `13 − 9 = _ + 3 = _`, en el 50 % de los problemas de U5 L1,
+   L2 y L3; el resto pide solo el resultado.
 6. **Proporción del modo "al azar"** del signo y de los íconos.
 7. **Revisar los PDF de Panamáticas,** poco a poco, como referencia para las plantillas de
    enunciados.

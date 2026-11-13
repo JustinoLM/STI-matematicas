@@ -41,14 +41,45 @@ interface ProblemaBase {
   modos: ModosProblema;
   /** Cuántos íconos lleva cada operando, si se muestran */
   iconos: number[] | null;
-  /** Presentación especial (semirrecta, cinta): se define en la fase 5 */
-  presentacion?: string | null;
 }
+
+/**
+ * Enunciado con plantilla (1.º y 2.º, sin LLM). El backend elige la situación y la variante; la
+ * pantalla arma el texto con el tema narrativo del estudiante (utils/nucleo/plantillas.ts).
+ * `cantidades` son los números del problema que se ven, nunca la respuesta; los íconos salen de
+ * las mismas cantidades.
+ */
+export interface EnunciadoPlantilla {
+  situacion: string;
+  variante: number;
+  cantidades: number[];
+  /** Con tres números: qué pasa en cada paso ("agregar" o "quitar") */
+  acciones?: string[];
+}
+
+/** Semirrecta numérica con el punto de partida y los saltos (fase 5a) */
+export interface PresentacionSemirrecta {
+  tipo: 'semirrecta';
+  desde: number;
+  hasta: number;
+  marcas_cada: number;
+  etiquetas_cada: number;
+  inicio: number;
+  salto: number;
+  saltos: number;
+  sentido: 'derecha' | 'izquierda';
+  /** Solo cuando el ejercicio es anotar la operación que muestran los saltos */
+  llegada?: number;
+}
+
+export type Presentacion = PresentacionSemirrecta;
 
 export interface ProblemaExpresion extends ProblemaBase {
   forma: 'expresion';
   segmentos: Segmento[];
   huecos: Hueco[];
+  enunciado?: EnunciadoPlantilla | null;
+  presentacion?: Presentacion | null;
 }
 
 export interface ProblemaOrdenar extends ProblemaBase {

@@ -9,6 +9,7 @@
 
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
+import { tamanoExpresion } from '@/utils/nucleo/expresion';
 import type { Hueco, ProblemaExpresion, Respuestas, Segmento, ValorFraccion } from '@/types/nucleo';
 import { claveCampo, seArrastra, type Campo } from '@/utils/nucleo/respuestas';
 
@@ -189,16 +190,21 @@ export function Expresion({
     return null;
   };
 
+  // Expresiones largas (dos cifras, pasos de la estrategia, tres números) van algo más pequeñas
+  // para que quepan en una línea en la columna izquierda de la tablet horizontal.
+  const medida = tamanoExpresion(problema.segmentos);
+  const tamano = { normal: 'text-6xl', larga: 'text-5xl', muy_larga: 'text-4xl' }[medida];
+
   const renderSegmento = (s: Segmento, i: number) => {
     switch (s.tipo) {
       case 'texto':
         return <span key={i} className="text-4xl font-semibold">{s.texto}</span>;
       case 'numero':
-        return <span key={i} className="text-6xl font-bold tabular-nums">{s.valor}</span>;
+        return <span key={i} className={`${tamano} font-bold tabular-nums`}>{s.valor}</span>;
       case 'fraccion':
         return <FraccionFija key={i} numerador={s.numerador} denominador={s.denominador} />;
       case 'simbolo':
-        return <span key={i} className="text-6xl font-bold text-slate-600" aria-label={s.simbolo}>{s.simbolo}</span>;
+        return <span key={i} className={`${tamano} font-bold text-slate-600`} aria-label={s.simbolo}>{s.simbolo}</span>;
       case 'hueco': {
         const h = huecos.get(s.hueco_id);
         return h ? <span key={i}>{renderHueco(h)}</span> : null;
@@ -207,7 +213,9 @@ export function Expresion({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-4" data-testid="expresion">
+    <div className={cn('flex flex-wrap items-center justify-center gap-y-4',
+      { normal: 'gap-x-5', larga: 'gap-x-3', muy_larga: 'gap-x-2' }[medida])}
+      data-testid="expresion" data-medida={medida}>
       {problema.segmentos.map(renderSegmento)}
     </div>
   );
