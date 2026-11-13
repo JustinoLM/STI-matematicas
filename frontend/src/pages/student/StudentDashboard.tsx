@@ -24,6 +24,9 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { SesionActivaResponse } from '@/services/studentService';
+import { AvisoSesionAMedias } from '@/components/nucleo/AvisoSesionAMedias';
+import { RUTA_PRACTICA_NUCLEO, useEstadoNucleo } from '@/hooks/useEstadoNucleo';
+import { CLAVE_ESTADO_NUCLEO, nucleoService } from '@/services/nucleoService';
 
 export function StudentDashboard() {
   const navigate = useNavigate();
@@ -94,6 +97,14 @@ export function StudentDashboard() {
     },
   });
 
+  // ── Núcleo de práctica (1.º y 2.º): "Practicar" lleva ahí si el salón tiene lecciones del núcleo ──
+  const { data: estadoNucleo } = useEstadoNucleo();
+  const practicaNucleo = estadoNucleo?.disponible ?? false;
+  const descartarNucleo = useMutation({
+    mutationFn: (sesionId: number) => nucleoService.descartar(sesionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO }),
+  });
+
   // ── Valores derivados ──────────────────────────────────────────────────────
   const nivel = perfil?.nivel_actual ?? '-';
   const puntos = saldo?.puntos_totales ?? 0;
@@ -140,7 +151,9 @@ export function StudentDashboard() {
 
   const handleNavegacion = (path: string) => {
     // Sin salón no hay práctica: el aviso de arriba le pide consultar a su profesor
-    if (path === '/student/practice' && sinSalon) {
+    if (path === '/student/practice' && practicaNucleo) {
+      navigate(RUTA_PRACTICA_NUCLEO);
+    } else if (path === '/student/practice' && sinSalon) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     // Post-test pendiente → redirigir al post-test
     } else if (path === '/student/practice' && postTestPendiente) {
@@ -161,7 +174,7 @@ export function StudentDashboard() {
   return (
     <div className="space-y-4">
       {/* Banner de post-test pendiente (tiene prioridad sobre diagnóstico) */}
-      {postTestPendiente && (
+      {postTestPendiente && !practicaNucleo && (
         <Card
           className="cursor-pointer border-2 border-orange-500 bg-orange-50 hover:bg-orange-100 transition-colors"
           onClick={() => navigate('/student/post-test')}
@@ -203,7 +216,7 @@ export function StudentDashboard() {
       )}
 
       {/* Banner de diagnóstico pendiente */}
-      {!loadingPerfil && !sinSalon && !diagnosticoCompletado && (
+      {!loadingPerfil && !sinSalon && !diagnosticoCompletado && !practicaNucleo && (
         <Card
           className="cursor-pointer border-2 border-primary bg-primary/5 hover:bg-primary/10 transition-colors"
           onClick={() => navigate('/student/diagnostic')}
@@ -225,6 +238,16 @@ export function StudentDashboard() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Práctica del núcleo a medias */}
+      {estadoNucleo?.sesion_activa && (
+        <AvisoSesionAMedias
+          sesion={estadoNucleo.sesion_activa}
+          ocupado={descartarNucleo.isPending}
+          onContinuar={() => navigate(RUTA_PRACTICA_NUCLEO, { state: { retomar: true } })}
+          onDescartar={() => descartarNucleo.mutate(estadoNucleo.sesion_activa!.sesion_id)}
+        />
       )}
 
       {/* Banner de práctica incompleta */}

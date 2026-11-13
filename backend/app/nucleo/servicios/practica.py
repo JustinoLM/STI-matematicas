@@ -27,6 +27,7 @@ from app.models.nucleo import (
     ASIGNACION_CERRADA,
     PROBLEMA_PENDIENTE,
     PROBLEMA_TERMINADO,
+    SESION_ABANDONADA,
     SESION_ACTIVA,
     SESION_COMPLETADA,
     XP_ACIERTO,
@@ -215,11 +216,7 @@ class ServicioPractica:
     async def iniciar_sesion(self, estudiante_id: int) -> NucleoSesion:
         """Sesión nueva con su plan, o la activa si ya hay una."""
         ctx = await self.contexto(estudiante_id)
-        activa = (await self.db.execute(
-            select(NucleoSesion).where(and_(
-                NucleoSesion.estudiante_id == estudiante_id, NucleoSesion.estado == SESION_ACTIVA,
-            ))
-        )).scalar_one_or_none()
+        activa = await self.sesion_activa(estudiante_id)
         if activa is not None:
             return activa
         try:
@@ -236,6 +233,54 @@ class ServicioPractica:
             fecha_inicio=self.reloj(),
         )
         self.db.add(sesion)
+        await self.db.flush()
+        return sesion
+
+    async def sesion_activa(self, estudiante_id: int) -> Optional[NucleoSesion]:
+        return (await self.db.execute(
+            select(NucleoSesion).where(and_(
+                NucleoSesion.estudiante_id == estudiante_id, NucleoSesion.estado == SESION_ACTIVA,
+            ))
+        )).scalar_one_or_none()
+
+    async def estado(self, estudiante_id: int) -> dict:
+        """¿Practica en el núcleo? Sí, si tiene salón y alguna lección habilitada o asignada con
+        generador, o una sesión a medias. Sirve para decidir a qué práctica lleva "Practicar"."""
+        activa = await self.sesion_activa(estudiante_id)
+        matricula = await self.school.matricula_activa(estudiante_id)
+        disponible = activa is not None
+        if not disponible and matricula is not None:
+            habilitadas = (await self.db.execute(
+                select(NucleoHabilitacion.leccion_id).where(and_(
+                    NucleoHabilitacion.anio_lectivo_id == matricula.anio_lectivo_id,
+                    NucleoHabilitacion.habilitada.is_(True),
+                ))
+            )).scalars()
+            asignadas = (await self.db.execute(
+                select(NucleoAsignacion.leccion_id).where(and_(
+                    NucleoAsignacion.estudiante_id == estudiante_id,
+                    NucleoAsignacion.estado == ASIGNACION_ACTIVA,
+                ))
+            )).scalars()
+            disponible = any(tiene_generador(lec) for lec in [*habilitadas, *asignadas])
+        sesion = None
+        if activa is not None:
+            minutos = max(int((self.reloj() - activa.fecha_inicio).total_seconds() // 60), 0)
+            sesion = {
+                "sesion_id": activa.id, "estado": activa.estado,
+                "cantidad_problemas": activa.cantidad_problemas, "progreso": activa.progreso,
+                "fecha_inicio": activa.fecha_inicio, "minutos_transcurridos": minutos,
+            }
+        return {"disponible": disponible, "sesion_activa": sesion}
+
+    async def descartar(self, estudiante_id: int, sesion_id: int) -> NucleoSesion:
+        """Abandona la sesión activa. El problema que quedó pendiente no se termina, así que no
+        cuenta para el dominio ni da experiencia; los intentos ya hechos quedan registrados."""
+        sesion = await self.sesion_del_estudiante(sesion_id, estudiante_id)
+        if sesion.estado != SESION_ACTIVA:
+            raise Conflicto("Esta sesión ya terminó.")
+        sesion.estado = SESION_ABANDONADA
+        sesion.fecha_fin = self.reloj()
         await self.db.flush()
         return sesion
 

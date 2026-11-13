@@ -4,6 +4,7 @@
 
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { RUTA_PRACTICA_NUCLEO, useEstadoNucleo } from '@/hooks/useEstadoNucleo';
 import {
   Home,
   BookOpen,
@@ -60,7 +61,12 @@ interface SidebarProps {
 
 export function Sidebar({ userRole, isOpen = true, onClose }: SidebarProps) {
   const location = useLocation();
-  const navItems = userRole === 'estudiante' ? studentNav : teacherNav;
+  // "Practicar" lleva a la práctica del núcleo si el salón tiene lecciones del núcleo habilitadas
+  const { data: estadoNucleo } = useEstadoNucleo(userRole === 'estudiante');
+  const navItems = userRole === 'estudiante'
+    ? studentNav.map(item =>
+        item.href === '/student/practice' && estadoNucleo?.disponible ? { ...item, href: RUTA_PRACTICA_NUCLEO } : item)
+    : teacherNav;
 
   return (
     <>

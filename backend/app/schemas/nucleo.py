@@ -66,6 +66,16 @@ class SesionOut(BaseModel):
     estado: str
     cantidad_problemas: int
     progreso: int
+    fecha_inicio: Optional[datetime] = None
+
+
+class SesionActivaOut(SesionOut):
+    minutos_transcurridos: int
+
+
+class EstadoNucleoOut(BaseModel):
+    disponible: bool = Field(description="Tiene lecciones del núcleo para practicar o una sesión a medias")
+    sesion_activa: Optional[SesionActivaOut] = None
 
 
 class ProblemaOut(BaseModel):

@@ -2,7 +2,9 @@
 Núcleo de práctica (fase 3b). Prefijo /api/nucleo.
 
 Estudiante (con salón activo):
+- GET  /estado                                           ¿Practica en el núcleo? y su sesión a medias
 - POST /sesiones                                         Iniciar sesión (o recuperar la activa)
+- POST /sesiones/{sesion_id}/descartar                   Abandonar la sesión activa
 - GET  /sesiones/{sesion_id}/siguiente                   Problema del turno (vista pública)
 - POST /sesiones/{sesion_id}/problemas/{id}/respuesta    Enviar respuestas, tiempo, voz y eventos
 - POST /sesiones/{sesion_id}/problemas/{id}/pista        Pedir una pista (nivel 1 a 3)
@@ -23,7 +25,7 @@ Los errores de reglas responden con {"detail", "codigo"} (manejador de ErrorSalo
 
 from fastapi import APIRouter, status
 
-from app.api.dependencies import CurrentStudentConSalon, CurrentTeacher, DBSession
+from app.api.dependencies import CurrentStudent, CurrentStudentConSalon, CurrentTeacher, DBSession
 from app.nucleo.problema import problema_a_dict, problema_desde_dict
 from app.nucleo.registro import tiene_generador
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
@@ -34,6 +36,7 @@ from app.schemas.nucleo import (
     AsignacionIn,
     AsignacionOut,
     DominioOut,
+    EstadoNucleoOut,
     HabilitacionIn,
     HabilitacionOut,
     PistaIn,
@@ -48,10 +51,22 @@ router = APIRouter()
 
 
 def _sesion_out(s) -> SesionOut:
-    return SesionOut(sesion_id=s.id, estado=s.estado, cantidad_problemas=s.cantidad_problemas, progreso=s.progreso)
+    return SesionOut(sesion_id=s.id, estado=s.estado, cantidad_problemas=s.cantidad_problemas,
+                     progreso=s.progreso, fecha_inicio=s.fecha_inicio)
 
 
 # ─── Estudiante ──────────────────────────────────────────────────────────────
+
+@router.get("/estado", response_model=EstadoNucleoOut)
+async def estado(db: DBSession, estudiante: CurrentStudent):
+    """No exige salón: sin salón responde disponible=false."""
+    return await ServicioPractica(db).estado(estudiante.id)
+
+
+@router.post("/sesiones/{sesion_id}/descartar", response_model=SesionOut)
+async def descartar(sesion_id: int, db: DBSession, estudiante: CurrentStudentConSalon):
+    return _sesion_out(await ServicioPractica(db).descartar(estudiante.id, sesion_id))
+
 
 @router.post("/sesiones", response_model=SesionOut)
 async def iniciar_sesion(db: DBSession, estudiante: CurrentStudentConSalon):

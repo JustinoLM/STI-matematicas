@@ -21,6 +21,7 @@ import { AdminPage } from '@/pages/admin/AdminPage';
 // Student
 import { StudentDashboard } from '@/pages/student/StudentDashboard';
 import { PracticePage } from '@/pages/student/PracticePage';
+import { NucleoPracticePage } from '@/pages/student/NucleoPracticePage';
 import { DiagnosticPage } from '@/pages/student/DiagnosticPage';
 import { PostTestPage } from '@/pages/student/PostTestPage';
 import { ShopPage } from '@/pages/student/ShopPage';
@@ -144,6 +145,28 @@ function App() {
                 hideSidebar={true}
               >
                 <PracticePage />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Práctica del núcleo (1.º y 2.º): sin sidebar y sin música ni sonidos de clic */}
+        <Route
+          path="/student/nucleo"
+          element={
+            <ProtectedRoute
+              isAuthenticated={isAuthenticated}
+              userRole={userRole || undefined}
+              requiredRole="estudiante"
+            >
+              <MainLayout
+                userName={userName}
+                userRole="estudiante"
+                onLogout={handleLogout}
+                hideSidebar={true}
+                sinAudio={true}
+              >
+                <NucleoPracticePage />
               </MainLayout>
             </ProtectedRoute>
           }

@@ -126,6 +126,10 @@ el plan.
     error de cada camino sirven para generar las opciones y para diagnosticar.
   - **Valor del acierto:** un acierto con banco cuenta igual que uno con teclado. Con 3 opciones,
     la probabilidad de alcanzar 8 de 10 solo adivinando es de aproximadamente 0,3 %.
+  - **Comportamiento en pantalla (fase 4).** Las fichas no se gastan: la misma puede ir a varios
+    huecos. Soltar otra ficha sobre un hueco ocupado la cambia y registra `cambio_opcion`. Tocar
+    un hueco solo elige qué banco se muestra; no coloca nada. Se usa `@dnd-kit` (ratón, toque y
+    teclado).
 - **Validación (implementada en la fase 3).**
   - Los números se comparan por su valor exacto, sin redondear.
   - Las fracciones aceptan las equivalentes, salvo que el hueco lo desactive.
@@ -139,12 +143,24 @@ el plan.
 
 ### Presentación
 
-- **Íconos más texto.** A partir de cierto rango, los íconos se agrupan en decenas: barras de 10
-  y unidades sueltas.
-- **Lectura en voz alta.** Es opcional, como recurso de accesibilidad.
+- **Íconos más texto.** Hasta 10 van sueltos en filas de 5; desde 11 se agrupan en barras de 10
+  y unidades sueltas (el umbral es una constante del frontend). Usan el objeto del tema narrativo,
+  por ahora como emoji, que se ven distintos en cada sistema operativo. Entre los grupos no se
+  dibuja el signo, para no revelarlo cuando está oculto.
+- **Lectura en voz alta.** Es opcional, como recurso de accesibilidad. Usa la voz en español del
+  navegador; si no la hay, el botón no aparece.
 - **Dispositivos.** Todo el flujo del estudiante debe funcionar en computadora y en tablet, con
   ratón y con toque.
-- **Enunciados.** La referencia de estilo son los libros Panamáticas de cada grado.
+  - En horizontal, desde 768 px de ancho, la pantalla va en dos columnas: a la izquierda la
+    instrucción, los íconos y la expresión; a la derecha el banco o el teclado y "Comprobar". En
+    vertical o en pantallas angostas va en una columna. Se decide solo con CSS y girar la tablet
+    no borra la respuesta colocada.
+  - Pendiente: probar con toque en una tablet real, en ambas orientaciones.
+- **Enunciados.** La referencia de estilo son los libros Panamáticas de cada grado. En la fase 4
+  la pantalla muestra una instrucción genérica según la forma del problema; las plantillas con el
+  tema llegan en la fase 5.
+- **Presentaciones especiales.** La semirrecta y la cinta (`presentacion_especial`) se hacen en la
+  fase 5, con las lecciones que las usan.
 
 ### Qué es genérico y qué es propio de cada tema
 
@@ -291,8 +307,16 @@ el plan.
   - Se activa cuando una lección en progreso tiene menos de 60 % con al menos 5 problemas.
   - Va a sus prerrequisitos directos no dominados que no están habilitados, y esos problemas
     cuentan para el dominio del prerrequisito.
-- **Sesión.** Todavía no se puede abandonar una sesión del núcleo: sigue activa hasta terminarse.
-  Hay que decidirlo antes de la fase 4.
+- **Sesión a medias (fase 4).** Igual que en el sistema de decimales: si el estudiante sale a mitad
+  de la práctica, al volver la retoma en el mismo problema, o la descarta.
+  - El dashboard muestra "Tienes una práctica a medias" con "Continuar" y "Descartar".
+  - Al descartarla, la sesión queda `abandonada`: el problema pendiente no cuenta para el dominio
+    ni da experiencia, y los intentos ya hechos quedan registrados.
+  - Una recarga de la página durante la práctica retoma sin preguntar.
+- **Entrada mientras conviven los dos sistemas.** `GET /api/nucleo/estado` dice si el estudiante
+  practica en el núcleo (su salón tiene lecciones habilitadas). En ese caso "Practicar" lleva a
+  `/student/nucleo` y se ocultan los avisos de diagnóstico y post-test de decimales; si no, sigue
+  la práctica de decimales. Sin salón, el núcleo no está disponible.
 
 ### Diagnóstico inicial
 
@@ -333,6 +357,9 @@ el plan.
   - No hay efectos ni sonidos.
   - La narrativa aparece solo en el enunciado y en los íconos.
   - Las celebraciones van entre problemas y al final de la sesión.
+  - Un intento incorrecto solo marca el hueco en naranja y dice cuántos intentos quedan. La
+    solución se muestra entre problemas, al agotar los intentos.
+  - Se muestra el contador "3 de 10", sin barra de progreso.
 
 ### Funciones de IA
 
@@ -346,6 +373,12 @@ el plan.
 
 - **Desde el principio:** qué opción eligió, si cambió de opción antes de confirmar, cuánto tardó
   y si usó la lectura en voz alta.
+  - Eventos que envía la pantalla con cada intento: `opcion_elegida`, `cambio_opcion`, `voz` y,
+    en la forma de ordenar, `orden_cambiado`. Cada uno lleva `ms` contado desde que se mostró el
+    problema.
+  - `tiempo_ms` se cuenta desde que empezó el intento: el primero, al mostrarse el problema; los
+    siguientes, al recibir la corrección del anterior.
+  - Si el envío falla, los eventos se conservan para el siguiente envío.
 - **Más adelante,** en los grados que usan cuadrículas: el estado de la cuadrícula, al estilo de
   Graspable Math. Permitiría saber en qué columna se equivocó el estudiante.
 
@@ -382,7 +415,7 @@ el plan.
 | 1. Organización ✅ | Salón fijo, año lectivo, trimestres, grado del estudiante, grupos dentro del salón. Terminada en el commit `20bb519` |
 | 2. Currículo como datos ✅ | Catálogo de lecciones y grafo de prerrequisitos por defecto (completo para 1.º y 2.º) |
 | 3. Núcleo de práctica ✅ | Paquete `backend/app/nucleo/`, tablas `nucleo_*` y API `/api/nucleo`. Expresión con huecos tipados, interfaz de generador de lección, dominio, reparto con prioridad, extensión, refuerzo y registro de eventos |
-| 4. Pantalla genérica | Huecos, banco arrastrable, íconos agrupados en decenas, voz, ordenar; probada en tablet |
+| 4. Pantalla genérica ✅ | Página `/student/nucleo`: huecos, banco arrastrable, teclado, ordenar, íconos agrupados en decenas, voz, sesión a medias y dos columnas en horizontal. Verificada en el navegador; falta probarla en una tablet real |
 | 5. Lecciones de 1.º | Primero suma y resta (U3, U5, U7), después números (U2, U4, U6) |
 | 6. Flujo del profesor | Catálogo, configuración por lección, plan por trimestre, tabla de dominio, alertas, ficha, asignación individual |
 | 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
@@ -396,8 +429,9 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 3:** 407 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 65 pruebas de frontend. El
+- **Estado tras la fase 4:** 410 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 106 de frontend (41 de la pantalla del núcleo). Ordenar, fracción, cantidad y teclado
+  solo tienen pruebas de Vitest hasta que un generador los produzca (fase 5). El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
 
 ### Riesgos

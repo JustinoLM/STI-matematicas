@@ -21,6 +21,8 @@ interface MainLayoutProps {
   userRole: 'estudiante' | 'profesor';
   onLogout: () => void;
   hideSidebar?: boolean;
+  /** Sin música de fondo ni sonido de clic (práctica del núcleo: sin sonidos durante el problema) */
+  sinAudio?: boolean;
 }
 
 /** Convierte un color hex (#RRGGBB) a la cadena "H S% L%" que usa Tailwind/shadcn */
@@ -50,16 +52,16 @@ function hexToHslString(hex: string): string | null {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-export function MainLayout({ children, userName, userRole, onLogout, hideSidebar = false }: MainLayoutProps) {
+export function MainLayout({ children, userName, userRole, onLogout, hideSidebar = false, sinAudio = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Reproductor de música de fondo — solo estudiantes.
   // Si el rol es profesor, el hook hace fade out y pausa inmediatamente.
-  useAudioPlayer(userRole === 'estudiante');
+  useAudioPlayer(userRole === 'estudiante' && !sinAudio);
 
   // Sonido de click global en botones (solo estudiantes)
   useEffect(() => {
-    if (userRole !== 'estudiante') return;
+    if (userRole !== 'estudiante' || sinAudio) return;
 
     const handleMouseDown = (e: MouseEvent) => {
       const { efectosSonidoActivados, volumen } = useThemeStore.getState();
@@ -72,7 +74,7 @@ export function MainLayout({ children, userName, userRole, onLogout, hideSidebar
 
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, [userRole]);
+  }, [userRole, sinAudio]);
 
   const temaActivoId      = useThemeStore(s => s.temaActivoId);
   const colorActivoId     = useThemeStore(s => s.colorActivoId);

@@ -21,6 +21,8 @@ from app.models.nucleo import (
     ASIGNACION_CERRADA,
     DOMINIO_DOMINADO,
     DOMINIO_EN_PROGRESO,
+    SESION_ABANDONADA,
+    SESION_ACTIVA,
     SESION_COMPLETADA,
     XP_LECCION_DOMINADA,
     ZONA_EXTENSION,
@@ -44,7 +46,7 @@ from app.nucleo.servicios import Prohibido, RespuestaInvalida
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
 from app.nucleo.servicios.practica import ServicioPractica
 from app.services.curriculo_service import cargar_programa, leer_programa
-from app.services.school_service import Conflicto
+from app.services.school_service import Conflicto, NoEncontrado
 from tests.conftest import TestSessionLocal
 from tests.salones_helpers import crear_organizacion, salon_con_estudiantes
 from tests.test_organizacion_escolar import _estudiante, _org, _profesor, _salon
@@ -174,6 +176,66 @@ async def test_iniciar_devuelve_la_sesion_activa():
         assert a.id == b.id
         ps1 = await serv.siguiente(est.id, a.id)
         assert (await serv.siguiente(est.id, a.id)).id == ps1.id   # el pendiente no se regenera
+
+
+@pytest.mark.asyncio
+async def test_estado_y_sesion_a_medias():
+    async with TestSessionLocal() as db:
+        est, _, _ = await preparar(db, habilitar=())
+        reloj = Reloj()
+        serv = ServicioPractica(db, rng=random.Random(3), reloj=reloj)
+        assert await serv.estado(est.id) == {"disponible": False, "sesion_activa": None}
+
+        est2, _, _ = await preparar(db)
+        assert (await serv.estado(est2.id))["disponible"] is True
+        sesion = await serv.iniciar_sesion(est2.id)
+        await resolver(serv, est2.id, sesion.id)
+        reloj.avanzar(minutes=7)
+        activa = (await serv.estado(est2.id))["sesion_activa"]
+        assert (activa["sesion_id"], activa["progreso"], activa["minutos_transcurridos"]) == (sesion.id, 1, 7)
+        assert activa["estado"] == SESION_ACTIVA
+
+
+@pytest.mark.asyncio
+async def test_descartar_sesion():
+    async with TestSessionLocal() as db:
+        est, _, _ = await preparar(db)
+        otro, _, _ = await preparar(db)
+        reloj = Reloj()
+        serv = ServicioPractica(db, rng=random.Random(4), reloj=reloj)
+        sesion = await serv.iniciar_sesion(est.id)
+        await resolver(serv, est.id, sesion.id)
+        pendiente = await serv.siguiente(est.id, sesion.id)
+        await serv.responder(est.id, sesion.id, pendiente.id, respuesta_mal(pendiente), 1000)
+
+        with pytest.raises(NoEncontrado):
+            await serv.descartar(otro.id, sesion.id)
+        descartada = await serv.descartar(est.id, sesion.id)
+        assert descartada.estado == SESION_ABANDONADA and descartada.fecha_fin == reloj.ahora
+        with pytest.raises(Conflicto):
+            await serv.descartar(est.id, sesion.id)
+        with pytest.raises(Conflicto):
+            await serv.responder(est.id, sesion.id, pendiente.id, respuesta_bien(pendiente), 1000)
+        assert await serv.siguiente(est.id, sesion.id) is None
+        assert (await serv.estado(est.id))["sesion_activa"] is None
+
+        # El problema pendiente no cuenta: solo el terminado está en los resultados
+        assert len((await serv.resultados(est.id)).get(L01, [])) == 1
+        # Se puede empezar otra sesión
+        nueva = await serv.iniciar_sesion(est.id)
+        assert nueva.id != sesion.id and nueva.estado == SESION_ACTIVA
+
+
+@pytest.mark.asyncio
+async def test_no_se_descarta_una_sesion_completada():
+    async with TestSessionLocal() as db:
+        est, _, _ = await preparar(db)
+        reloj = Reloj()
+        serv = ServicioPractica(db, rng=random.Random(5), reloj=reloj)
+        sesion, _ = await sesion_completa(serv, est.id, reloj)
+        assert sesion.estado == SESION_COMPLETADA
+        with pytest.raises(Conflicto):
+            await serv.descartar(est.id, sesion.id)
 
 
 @pytest.mark.asyncio
@@ -470,7 +532,10 @@ async def test_api_del_nucleo_de_punta_a_punta():
         r = await c.post(f"/api/teachers/salones/{al}/estudiantes/{est_id}", headers=HP)
         assert r.status_code == 204, r.text
 
-        # Sin lecciones habilitadas no hay sesión; sin salón, 403
+        # Sin lecciones habilitadas no hay sesión ni práctica disponible; sin salón, 403
+        r = await c.get("/api/nucleo/estado", headers=HE2)
+        assert r.status_code == 200 and r.json() == {"disponible": False, "sesion_activa": None}
+        assert (await c.get("/api/nucleo/estado", headers=HE)).json()["disponible"] is False
         assert (await c.post("/api/nucleo/sesiones", headers=HE)).status_code == 409
         assert (await c.post("/api/nucleo/sesiones", headers=HE2)).status_code == 403
 
@@ -513,6 +578,16 @@ async def test_api_del_nucleo_de_punta_a_punta():
         assert r.status_code == 200, r.text
         assert r.json()["correcto"] and r.json()["experiencia_ganada"] == 3
         assert (await c.post(f"{base}/respuesta", headers=HE2, json={"respuestas": {}, "tiempo_ms": 1})).status_code == 403
+
+        # Sesión a medias: aparece en el estado y se puede descartar una sola vez
+        r = await c.get("/api/nucleo/estado", headers=HE)
+        assert r.json()["disponible"] is True and r.json()["sesion_activa"]["sesion_id"] == sesion_id
+        assert r.json()["sesion_activa"]["progreso"] == 1
+        assert (await c.post(f"/api/nucleo/sesiones/{sesion_id}/descartar", headers=HE2)).status_code == 403
+        r = await c.post(f"/api/nucleo/sesiones/{sesion_id}/descartar", headers=HE)
+        assert r.status_code == 200 and r.json()["estado"] == "abandonada"
+        assert (await c.post(f"/api/nucleo/sesiones/{sesion_id}/descartar", headers=HE)).status_code == 409
+        assert (await c.get("/api/nucleo/estado", headers=HE)).json()["sesion_activa"] is None
 
         r = await c.get("/api/nucleo/dominio", headers=HE)
         assert r.status_code == 200
