@@ -205,12 +205,18 @@ class ServicioPractica:
 
     # ── Sesión ──────────────────────────────────────────────────────────────
 
+    async def _aplicar_plan(self, anio_lectivo_id: int) -> None:
+        """El plan por trimestre se aplica al entrar a practicar (sin tarea programada)."""
+        from app.nucleo.servicios.plan import ServicioPlan
+        await ServicioPlan(self.db, await self.parametros(), self.reloj).aplicar(anio_lectivo_id)
+
     async def iniciar_sesion(self, estudiante_id: int) -> NucleoSesion:
         """Sesión nueva con su plan, o la activa si ya hay una."""
         ctx = await self.contexto(estudiante_id)
         activa = await self.sesion_activa(estudiante_id)
         if activa is not None:
             return activa
+        await self._aplicar_plan(ctx.anio_lectivo_id)
         try:
             plan = await self.planificar(estudiante_id, ctx.anio_lectivo_id)
         except SinLecciones:
@@ -241,6 +247,8 @@ class ServicioPractica:
         activa = await self.sesion_activa(estudiante_id)
         matricula = await self.school.matricula_activa(estudiante_id)
         disponible = activa is not None
+        if matricula is not None:
+            await self._aplicar_plan(matricula.anio_lectivo_id)
         if not disponible and matricula is not None:
             habilitadas = (await self.db.execute(
                 select(NucleoHabilitacion.leccion_id).where(and_(

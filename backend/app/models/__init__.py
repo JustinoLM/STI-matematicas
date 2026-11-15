@@ -70,6 +70,7 @@ from app.models.narrative import (
 # Núcleo de práctica (fase 3b)
 from app.models.nucleo import (
     NucleoAjusteEstudiante,
+    NucleoAlertaOculta,
     NucleoAsignacion,
     NucleoDominio,
     NucleoEvento,
@@ -77,6 +78,7 @@ from app.models.nucleo import (
     NucleoExtension,
     NucleoHabilitacion,
     NucleoIntento,
+    NucleoPlanTrimestre,
     NucleoPrerrequisitoAnio,
     NucleoPrerrequisitoEditado,
     NucleoProblemaSesion,
@@ -173,6 +175,7 @@ __all__ = [
     "PrerrequisitoDefecto",
     # Núcleo de práctica
     "NucleoAjusteEstudiante",
+    "NucleoAlertaOculta",
     "NucleoAsignacion",
     "NucleoDominio",
     "NucleoEvento",
@@ -180,6 +183,7 @@ __all__ = [
     "NucleoExtension",
     "NucleoHabilitacion",
     "NucleoIntento",
+    "NucleoPlanTrimestre",
     "NucleoPrerrequisitoAnio",
     "NucleoPrerrequisitoEditado",
     "NucleoProblemaSesion",

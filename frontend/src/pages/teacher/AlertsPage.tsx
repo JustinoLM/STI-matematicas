@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Filter, Eye, CheckCircle } from 'lucide-react';
 import { teacherService } from '@/services/teacherService';
+import { AlertasNucleoSeccion } from '@/components/teacher/seguimiento/AlertasNucleoSeccion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +44,11 @@ export default function AlertsPage() {
           Sistema de alertas para estudiantes que requieren atención
         </p>
       </div>
+
+      {/* Alertas del núcleo por lección (fase 6b); las de decimales siguen debajo */}
+      <AlertasNucleoSeccion />
+
+      <h2 className="text-xl font-semibold">Práctica de decimales</h2>
 
       {/* Estadísticas de Alertas */}
       <div className="grid gap-4 md:grid-cols-4">

@@ -27,6 +27,7 @@ from app.models.nucleo import (
     NucleoAsignacion,
     NucleoDominio,
     NucleoHabilitacion,
+    NucleoPlanTrimestre,
     NucleoPrerrequisitoAnio,
     NucleoPrerrequisitoEditado,
 )
@@ -111,8 +112,10 @@ class ServicioHabilitacion:
         iconos: Modo = Modo.SIEMPRE,
         pistas: Optional[dict] = None,
         prioritaria: bool = False,
+        manual: bool = True,
     ) -> NucleoHabilitacion:
-        """Habilita la lección o actualiza su configuración (idempotente)."""
+        """Habilita la lección o actualiza su configuración (idempotente). Si la habilita el
+        profesor (no el plan por trimestre), queda como ajuste manual y el plan ya no la toca."""
         await self.school.anio_del_profesor(anio_lectivo_id, profesor_id, para_escribir=True)
         await self._leccion_incluida(leccion_id)
         hab = (await self.db.execute(
@@ -137,8 +140,10 @@ class ServicioHabilitacion:
                 )
 
         if hab is None:
-            hab = NucleoHabilitacion(anio_lectivo_id=anio_lectivo_id, leccion_id=leccion_id)
+            hab = NucleoHabilitacion(anio_lectivo_id=anio_lectivo_id, leccion_id=leccion_id, ajuste_manual=False)
             self.db.add(hab)
+        if manual and not hab.habilitada:
+            hab.ajuste_manual = True
         hab.habilitada = True
         hab.signo = Modo(signo).value
         hab.iconos = Modo(iconos).value
@@ -162,6 +167,7 @@ class ServicioHabilitacion:
             raise NoEncontrado("La lección no está habilitada en este salón.")
         hab.habilitada = False
         hab.prioritaria = False
+        hab.ajuste_manual = True
         hab.profesor_id = profesor_id
         hab.fecha_actualizacion = datetime.utcnow()
         await self.db.flush()
@@ -181,6 +187,12 @@ class ServicioHabilitacion:
             )).scalars()
         }
         editadas, _ = await ediciones_del_anio(self.db, anio_lectivo_id)
+        plan: dict[str, set[int]] = {}
+        for lec_id, t in (await self.db.execute(
+            select(NucleoPlanTrimestre.leccion_id, NucleoPlanTrimestre.trimestre)
+            .where(NucleoPlanTrimestre.anio_lectivo_id == anio_lectivo_id)
+        )).tuples():
+            plan.setdefault(lec_id, set()).add(t)
         efectivos = await prerrequisitos_efectivos(self.db, anio_lectivo_id)
         filas = []
         for lec in lecciones:
@@ -196,6 +208,8 @@ class ServicioHabilitacion:
                 "iconos": h.iconos if h else Modo.SIEMPRE.value,
                 "pistas": normalizar_pistas(h.pistas if h else None),
                 "prioritaria": bool(h and h.prioritaria),
+                "ajuste_manual": bool(h and h.ajuste_manual),
+                "plan_trimestres": sorted(plan.get(lec["id"], ())),
             })
         return filas
 

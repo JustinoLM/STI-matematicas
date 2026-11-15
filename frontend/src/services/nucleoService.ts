@@ -6,14 +6,19 @@ import axios from 'axios';
 import apiClient, { getErrorMessage } from './api';
 import type {
   AjusteEstudiante,
+  AlertaNucleo,
   AsignacionNucleo,
   ConfigLeccion,
   EnvioRespuesta,
   EstadoNucleo,
+  FichaEstudiante,
   LeccionSalon,
+  PlanTrimestres,
   ProblemaTurno,
   ResultadoRespuesta,
+  Seguimiento,
   SesionNucleo,
+  TipoAlerta,
 } from '@/types/nucleo';
 
 export const CLAVE_ESTADO_NUCLEO = ['nucleo-estado'] as const;
@@ -69,6 +74,14 @@ export const clavesProfesor = {
   catalogo: (anioId: number) => ['teacher', 'nucleo', anioId, 'catalogo'] as const,
   asignaciones: (anioId: number) => ['teacher', 'nucleo', anioId, 'asignaciones'] as const,
   ajustes: (anioId: number) => ['teacher', 'nucleo', anioId, 'ajustes'] as const,
+  seguimiento: (anioId: number, trimestre: number | null) => ['teacher', 'nucleo', anioId, 'seguimiento', trimestre] as const,
+  alertas: (anioId: number) => ['teacher', 'nucleo', anioId, 'alertas'] as const,
+  alertasProfesor: ['teacher', 'nucleo', 'alertas'] as const,
+  ficha: (anioId: number, estudianteId: number, trimestre: number | null) =>
+    ['teacher', 'nucleo', anioId, 'ficha', estudianteId, trimestre] as const,
+  plan: (anioId: number) => ['teacher', 'nucleo', anioId, 'plan'] as const,
+  /** Todo lo del salón: al cambiar algo se invalida junto */
+  salon: (anioId: number) => ['teacher', 'nucleo', anioId] as const,
 };
 
 export const nucleoProfesorService = {
@@ -113,5 +126,42 @@ export const nucleoProfesorService = {
   forzarBanco(anioId: number, estudianteId: number, bancoForzado: boolean): Promise<AjusteEstudiante> {
     return llamar(() => apiClient.put<AjusteEstudiante>(`/nucleo/anios/${anioId}/estudiantes/${estudianteId}/ajustes`,
       { banco_forzado: bancoForzado }));
+  },
+
+  // ─── Seguimiento (fase 6b) ──────────────────────────────────────────────
+
+  seguimiento(anioId: number, trimestre: number | null): Promise<Seguimiento> {
+    return llamar(() => apiClient.get<Seguimiento>(`/nucleo/anios/${anioId}/seguimiento`,
+      { params: trimestre ? { trimestre } : {} }));
+  },
+
+  alertas(anioId: number): Promise<AlertaNucleo[]> {
+    return llamar(() => apiClient.get<AlertaNucleo[]>(`/nucleo/anios/${anioId}/alertas`));
+  },
+
+  alertasProfesor(): Promise<AlertaNucleo[]> {
+    return llamar(() => apiClient.get<AlertaNucleo[]>('/nucleo/alertas'));
+  },
+
+  ocultarAlerta(anioId: number, estudianteId: number, leccionId: string, tipo: TipoAlerta): Promise<unknown> {
+    return llamar(() => apiClient.post(`/nucleo/anios/${anioId}/alertas/ocultar`,
+      { estudiante_id: estudianteId, leccion_id: leccionId, tipo }));
+  },
+
+  ficha(anioId: number, estudianteId: number, trimestre: number | null): Promise<FichaEstudiante> {
+    return llamar(() => apiClient.get<FichaEstudiante>(`/nucleo/anios/${anioId}/estudiantes/${estudianteId}/ficha`,
+      { params: trimestre ? { trimestre } : {} }));
+  },
+
+  plan(anioId: number): Promise<PlanTrimestres> {
+    return llamar(() => apiClient.get<PlanTrimestres>(`/nucleo/anios/${anioId}/plan`));
+  },
+
+  guardarPlan(anioId: number, plan: Record<string, number[]>): Promise<PlanTrimestres> {
+    return llamar(() => apiClient.put<PlanTrimestres>(`/nucleo/anios/${anioId}/plan`, { plan }));
+  },
+
+  devolverAlPlan(anioId: number, leccionId: string): Promise<PlanTrimestres> {
+    return llamar(() => apiClient.delete<PlanTrimestres>(`/nucleo/anios/${anioId}/plan/manual/${leccionId}`));
   },
 };

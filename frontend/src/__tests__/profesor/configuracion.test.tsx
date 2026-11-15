@@ -1,5 +1,5 @@
 /**
- * Panel de configuración de una lección y pestaña "Por estudiante" (fase 6a).
+ * Panel de configuración de una lección y pestaña "Asignaciones" (fase 6a).
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';

@@ -212,6 +212,9 @@ export interface LeccionSalon {
   iconos: ModoLeccion;
   pistas: PistasLeccion;
   prioritaria: boolean;
+  /** El profesor la habilitó o deshabilitó a mano: el plan por trimestre ya no la toca */
+  ajuste_manual: boolean;
+  plan_trimestres: number[];
 }
 
 export interface ConfigLeccion {
@@ -236,4 +239,131 @@ export interface AsignacionNucleo {
 export interface AjusteEstudiante {
   estudiante_id: number;
   banco_forzado: boolean;
+}
+
+// ─── Profesor: seguimiento (fase 6b) ─────────────────────────────────────────
+
+export type EstadoVisible = 'dominado' | 'repaso' | 'en_progreso' | 'no_iniciado';
+
+export interface FilaAvanceLeccion {
+  leccion_id: string;
+  titulo: string;
+  grado: number;
+  unidad_numero: number;
+  unidad_titulo: string;
+  leccion_numero: number;
+  caminos: string[];
+  habilitada: boolean;
+  prioritaria: boolean;
+  total: number;
+  dominan: number;
+  porcentaje_dominan: number | null;
+  conteos: Record<EstadoVisible, number>;
+  estudiantes: Record<EstadoVisible, number[]>;
+}
+
+export interface FilaAvanceEstudiante {
+  estudiante_id: number;
+  nombre: string;
+  codigo: string;
+  total: number;
+  conteos: Record<EstadoVisible, number>;
+  alertas_dificultad: number;
+  alertas_excelencia: number;
+}
+
+export interface FilaPeriodo {
+  leccion_id: string;
+  titulo: string;
+  grado: number;
+  unidad_numero: number;
+  unidad_titulo: string;
+  leccion_numero: number;
+  habilitada: boolean;
+  dominaron: number[];
+  practicaron: number;
+  problemas: number;
+  precision: number | null;
+}
+
+export interface Seguimiento {
+  trimestre: number | null;
+  estudiantes: { id: number; nombre: string; codigo: string }[];
+  por_leccion: FilaAvanceLeccion[];
+  por_estudiante: FilaAvanceEstudiante[];
+  alertas_dificultad: number;
+  alertas_excelencia: number;
+  periodo: { numero: number; inicio: string; fin: string; por_leccion: FilaPeriodo[] } | null;
+}
+
+export type TipoAlerta = 'dificultad' | 'excelencia';
+export type MotivoAlerta = 'refuerzo_insuficiente' | 'sin_refuerzo' | 'detras_del_salon' | 'extension';
+
+export interface AlertaNucleo {
+  tipo: TipoAlerta;
+  motivo: MotivoAlerta;
+  estudiante_id: number;
+  estudiante_nombre: string;
+  leccion_id: string;
+  leccion_titulo: string;
+  precision: number | null;
+  problemas: number;
+  prerrequisito_id: string | null;
+  prerrequisito_titulo: string | null;
+  precision_prerrequisito: number | null;
+  refuerzo_recibido: number;
+  /** El profesor ya le asignó el prerrequisito débil */
+  prerrequisito_asignado: boolean;
+  dominan_salon: number | null;
+  total_salon: number | null;
+  sugerencia: { accion: 'asignar' | 'habilitar'; leccion_id: string; titulo: string } | null;
+  oculta: boolean;
+  anio_lectivo_id: number;
+  salon_nombre: string;
+}
+
+export interface FichaLeccion {
+  leccion_id: string;
+  titulo: string;
+  grado: number;
+  unidad_numero: number;
+  leccion_numero: number;
+  caminos: string[];
+  estado: EstadoVisible;
+  habilitada: boolean;
+  prioritaria: boolean;
+  asignada: boolean;
+  aciertos_recientes: number;
+  problemas_recientes: number;
+  problemas_periodo: number;
+  aciertos_periodo: number;
+  extension_problemas: number;
+  extension_aciertos: number;
+  ultima_practica: string | null;
+}
+
+export interface FichaEstudiante {
+  estudiante: { id: number; nombre: string; codigo: string };
+  salon: { anio_lectivo_id: number; nombre: string; grado: number; anio: number; cerrado: boolean };
+  trimestre: number | null;
+  periodo: { numero: number; inicio: string; fin: string } | null;
+  banco_forzado: boolean;
+  lecciones: FichaLeccion[];
+  por_camino: { camino: string; nombre: string; total: number; dominadas: number; en_progreso: number }[];
+  errores: { codigo: string; descripcion: string; camino: string | null; camino_nombre: string | null; veces: number }[];
+  asignaciones: AsignacionNucleo[];
+  sesiones: {
+    id: number; estado: string; fecha_inicio: string; fecha_fin: string | null;
+    problemas: number; cantidad_problemas: number; aciertos: number;
+  }[];
+  anios_anteriores: {
+    anio_lectivo_id: number; anio: number; salon: string; grado: number;
+    problemas: number; aciertos: number; lecciones_dominadas: number;
+  }[];
+}
+
+export interface PlanTrimestres {
+  trimestres: { numero: number; inicio: string; fin: string }[];
+  vigente: number | null;
+  plan: Record<string, number[]>;
 }

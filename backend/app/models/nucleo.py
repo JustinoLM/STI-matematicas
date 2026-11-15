@@ -9,6 +9,9 @@ intento. Los estados son texto con CHECK (como en school.py), no tipos ENUM de P
   (signo, íconos, pistas por nivel y prioridad). Deshabilitar conserva la fila.
 - NucleoAsignacion: lección asignada solo a un estudiante; se cierra sola al dominarla.
 - NucleoAjusteEstudiante: adaptaciones por estudiante (banco forzado).
+- NucleoPlanTrimestre: plan opcional por trimestre (fase 6b): en qué trimestres se habilita cada
+  lección. Las lecciones con ajuste manual no las toca el plan.
+- NucleoAlertaOculta: alertas que el profesor ocultó (las alertas se calculan al vuelo).
 - NucleoPrerrequisitoEditado / NucleoPrerrequisitoAnio: prerrequisitos que el profesor edita en
   el año lectivo de su salón (fase 6a). Una lección marcada como editada usa los del año, aunque
   queden vacíos; las demás, los del currículo. Recargar el currículo nunca pisa estas tablas.
@@ -87,6 +90,8 @@ class NucleoHabilitacion(Base):
     iconos = Column(String(10), nullable=False, default="siempre", server_default="siempre")
     pistas = Column(JSON, nullable=False)          # {"1": true, "2": true, "3": true}
     prioritaria = Column(Boolean, nullable=False, default=False, server_default="false")
+    # El profesor la habilitó o deshabilitó a mano: el plan por trimestre ya no la toca (fase 6b)
+    ajuste_manual = Column(Boolean, nullable=False, default=False, server_default="false")
     profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
     fecha_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -157,6 +162,35 @@ class NucleoPrerrequisitoAnio(Base):
         ),
         CheckConstraint("leccion_id <> prerrequisito_id", name="ck_nucleo_prerrequisito_anio_distinto"),
     )
+
+
+class NucleoPlanTrimestre(Base):
+    """La lección se habilita en ese trimestre del año lectivo (una fila por trimestre)."""
+    __tablename__ = "nucleo_plan_trimestre"
+
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), primary_key=True)
+    leccion_id = Column(String(30), ForeignKey("curriculo_leccion.id"), primary_key=True)
+    trimestre = Column(Integer, primary_key=True)
+
+    __table_args__ = (CheckConstraint("trimestre BETWEEN 1 AND 3", name="ck_nucleo_plan_trimestre_numero"),)
+
+
+ALERTA_DIFICULTAD = "dificultad"
+ALERTA_EXCELENCIA = "excelencia"
+TIPOS_ALERTA = (ALERTA_DIFICULTAD, ALERTA_EXCELENCIA)
+
+
+class NucleoAlertaOculta(Base):
+    """Alerta que el profesor ocultó; vuelve si sigue activa pasados `alerta_dias_oculta` días."""
+    __tablename__ = "nucleo_alerta_oculta"
+
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), primary_key=True)
+    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), primary_key=True)
+    leccion_id = Column(String(30), ForeignKey("curriculo_leccion.id"), primary_key=True)
+    tipo = Column(String(15), primary_key=True)
+    fecha = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (CheckConstraint(f"tipo IN {_en(TIPOS_ALERTA)}", name="ck_nucleo_alerta_oculta_tipo"),)
 
 
 # ─── Dominio y extensión ─────────────────────────────────────────────────────

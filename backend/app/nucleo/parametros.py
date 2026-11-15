@@ -60,6 +60,17 @@ class ParametrosNucleo:
     xp_acierto: int = 2                     # por problema resuelto al primer intento
     xp_bono_dominio: int = 50               # al dominar una lección (la fórmula del nivel es de la fase 7)
 
+    # --- Alertas del profesor (fase 6b): comparar con el salón solo alerta, nunca decide la práctica ---
+    alerta_dificultad_min_problemas: int = 10   # problemas de la lección antes de alertar
+    alerta_dificultad_umbral: float = 0.6       # por debajo, la lección va mal
+    alerta_dificultad_min_refuerzo: int = 4     # problemas de refuerzo ya recibidos…
+    alerta_dificultad_dias_refuerzo: int = 14   # …en estos días, para decir que el refuerzo no basta
+    alerta_excelencia_min_problemas: int = 5    # problemas de extensión en la lección
+    alerta_excelencia_umbral: float = 0.8       # acierto en los últimos `ventana_dominio` de extensión
+    alerta_salon_proporcion: float = 0.7        # "va detrás del salón" si al menos esta parte la domina
+    alerta_salon_min_estudiantes: int = 5       # con menos estudiantes no se compara
+    alerta_dias_oculta: int = 14                # días que dura "Ocultar" una alerta
+
     def __post_init__(self):
         if self.intentos_por_problema < 1:
             raise ValueError("intentos_por_problema debe ser al menos 1")
@@ -70,12 +81,15 @@ class ParametrosNucleo:
                 raise ValueError(f"{nombre} debe estar entre 0 y 1")
         if not 1 <= self.grado_maximo_banco < self.grado_minimo_teclado <= 7:
             raise ValueError("Debe cumplirse 1 <= grado_maximo_banco < grado_minimo_teclado <= 7")
-        for nombre in ("umbral_dominio", "umbral_repaso", "umbral_refuerzo", "fraccion_prioridad"):
+        for nombre in ("umbral_dominio", "umbral_repaso", "umbral_refuerzo", "fraccion_prioridad",
+                       "alerta_dificultad_umbral", "alerta_excelencia_umbral", "alerta_salon_proporcion"):
             if not 0 <= getattr(self, nombre) <= 1:
                 raise ValueError(f"{nombre} debe estar entre 0 y 1")
         for nombre in ("ventana_dominio", "dias_distintos_dominio", "dias_para_repaso", "ventana_repaso",
                        "problemas_por_sesion", "max_prioritarias", "max_lecciones_resto",
-                       "fallos_pausa_extension", "minimo_resultados_refuerzo"):
+                       "fallos_pausa_extension", "minimo_resultados_refuerzo", "alerta_dificultad_min_problemas",
+                       "alerta_dificultad_min_refuerzo", "alerta_dificultad_dias_refuerzo",
+                       "alerta_excelencia_min_problemas", "alerta_salon_min_estudiantes", "alerta_dias_oculta"):
             if getattr(self, nombre) < 1:
                 raise ValueError(f"{nombre} debe ser al menos 1")
         for nombre in ("nuevas_por_sesion", "problemas_extension", "problemas_refuerzo",

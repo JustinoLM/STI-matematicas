@@ -10,7 +10,7 @@ export function leccion(id: string, extra: Partial<LeccionSalon> = {}): LeccionS
     presentacion_especial: null, cubierta_por: null, caminos: ['naturales.suma'],
     prerrequisitos: [], prerrequisitos_programa: [], prerrequisitos_editados: false,
     tiene_generador: true, habilitada: false, signo: 'siempre', iconos: 'siempre',
-    pistas: { 1: true, 2: true, 3: true }, prioritaria: false, ...extra,
+    pistas: { 1: true, 2: true, 3: true }, prioritaria: false, ajuste_manual: false, plan_trimestres: [], ...extra,
   };
 }
 

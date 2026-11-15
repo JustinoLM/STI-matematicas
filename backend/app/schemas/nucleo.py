@@ -74,6 +74,19 @@ class LeccionSalonOut(BaseModel):
     iconos: Modo
     pistas: dict[str, bool]
     prioritaria: bool
+    ajuste_manual: bool = False
+    plan_trimestres: list[int] = []
+
+
+class OcultarAlertaIn(BaseModel):
+    estudiante_id: int
+    leccion_id: str
+    tipo: str = Field(pattern="^(dificultad|excelencia)$")
+
+
+class PlanIn(BaseModel):
+    """Plan por trimestre: {leccion_id: [trimestres]} (reemplaza el plan completo)."""
+    plan: dict[str, list[int]] = Field(default_factory=dict)
 
 
 class PrerrequisitosIn(BaseModel):

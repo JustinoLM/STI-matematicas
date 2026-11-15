@@ -308,13 +308,23 @@ el plan.
     excluidas aparecen sin interruptor y con el motivo.
   - **Panel de cada lección:** signo, dibujos para contar, pistas por nivel, prioridad y
     prerrequisitos de este año, explicados en lenguaje de docente.
-  - **Por estudiante:** asignar una lección (solo las que tienen ejercicios), cerrarla a mano, ver
-    las cerradas recientemente y "Siempre con opciones" (el banco forzado).
+  - **Asignaciones** (pestaña que en la fase 6a se llamaba "Por estudiante"): asignar una lección
+    (solo las que tienen ejercicios), cerrarla a mano, ver las cerradas recientemente y "Siempre
+    con opciones" (el banco forzado).
 - **Plan por trimestre (opcional).**
   - Habilita y deshabilita lecciones según la fecha.
   - El profesor siempre puede ajustar a mano.
   - El trimestre también sirve como corte para los informes.
   - No hay un plan de trimestres por defecto, porque no tenemos el plan oficial.
+  - **Cómo funciona (fase 6b):** el profesor marca en qué trimestres va cada lección
+    (`nucleo_plan_trimestre`). El plan depende solo del trimestre vigente y es idempotente: se
+    aplica al abrir las pantallas del salón y cuando un estudiante entra a practicar, sin tareas
+    programadas.
+  - Un cambio a mano del profesor marca la lección con `ajuste_manual` y el plan no la toca hasta
+    que el profesor pulse "Devolver al plan".
+  - **Trimestre vigente:** el último que ya empezó; en vacaciones sigue el anterior. Hoy se
+    calcula con la fecha UTC, así que el último día de un trimestre cambia a las 7 p. m. de
+    Panamá. Hay que pasarlo a la fecha de Panamá, como el dominio.
 
 ### Configuración por lección
 
@@ -351,12 +361,32 @@ el plan.
 
 ### Seguimiento (de lo general a lo particular)
 
-1. **Panel principal.** Tabla del salón por lecciones, con el porcentaje de estudiantes que domina
-   cada una.
-2. **Alertas.** Quién está atascado y quién sobresale, siempre indicando la lección. Se reutilizan
-   las alertas `EXCELENCIA` y `DIFICULTAD_PERSISTENTE`, que hoy funcionan por operación.
-3. **Ficha del estudiante.** Es una pantalla aparte e incluye un resumen del historial de años
-   anteriores.
+1. **Panel principal (Avance).** Tabla del salón con dos vistas.
+   - **Por lección:** barras por unidad con el porcentaje de estudiantes que domina cada lección;
+     al tocar una, los estudiantes por estado (no iniciado, en progreso, dominado, en repaso).
+   - **Por estudiante:** primero los que tienen alertas.
+   - Se puede cortar por trimestre: quién practicó, el acierto y quién dominó cada lección en ese
+     trimestre. El historial de dominio sale de los eventos `leccion_dominada` de
+     `nucleo_experiencia`.
+   - Usa un número fijo de consultas, sin importar cuántos estudiantes haya.
+2. **Alertas.** Quién está atascado y quién sobresale, siempre indicando la lección y el
+   estudiante. El núcleo tiene sus propias alertas; las de decimales (`EXCELENCIA` y
+   `DIFICULTAD_PERSISTENTE` por operación) siguen igual, en otra sección de la página de alertas.
+   - **Dificultad:** la lección va por debajo de `nucleo.alerta_dificultad_umbral` (60 %) con al
+     menos 10 problemas, y el refuerzo no basta (ya recibió 4 problemas de refuerzo en los últimos
+     14 días) o no hay refuerzo posible. Desde la alerta se asigna el prerrequisito solo a ese estudiante; después
+     la alerta dice "Ya le asignaste…".
+   - **Excelencia:** al menos 80 % en los últimos problemas de extensión, con un mínimo de 5.
+     Desde la alerta se habilita la lección para el salón.
+   - **Va detrás del salón:** cuando al menos el 70 % del salón domina una lección que él no, con
+     un mínimo de 5 estudiantes. La comparación con el salón solo sirve para alertar, nunca para
+     decidir la práctica.
+   - Se calculan al vuelo; solo se guarda lo que el profesor oculta (`nucleo_alerta_oculta`), por
+     14 días. Todos los umbrales son claves `nucleo.alerta_*`.
+3. **Ficha del estudiante.** Pantalla aparte (`/teacher/salones/:id/estudiantes/:eid`) con el
+   dominio por camino y por lección, los errores más frecuentes con nombres para docentes (nunca
+   el código interno), sesiones recientes, asignaciones, ajustes y un resumen de sus años
+   lectivos anteriores. La ficha de decimales sigue aparte, con un enlace desde esta.
 
 ---
 
@@ -501,7 +531,7 @@ el plan.
 | 5a. Suma y resta de 1.º ✅ | 11 generadores (U3, U5, U7), reglas de error por familias, plantillas de enunciado con tema y semirrecta. Falta la forma vertical de U7 L1 y L2 |
 | 5b. Números de 1.º ✅ | 10 generadores (U2, U4, U6), reglas de numeración, semirrecta para leer y ubicar, errores al ordenar y recarga que retoma la práctica. Capturas de toda la fase 5 con tema para el docente |
 | 6a. Preparar el salón ✅ | Catálogo, habilitación, configuración por lección, prioridad, asignación individual, banco forzado y prerrequisitos editables por año lectivo |
-| 6b. Seguimiento | Tabla de dominio del salón, alertas por lección (incluida la de excelencia de la extensión), ficha del estudiante con historial y plan por trimestre |
+| 6b. Seguimiento ✅ | Avance del salón por lección y por estudiante con corte por trimestre, alertas por lección (dificultad, excelencia, va detrás del salón), ficha del estudiante con historial y plan por trimestre con ajuste manual |
 | 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
 | 9. Lo que sigue | Plan para 3.º a 6.º y para pasar los decimales al núcleo (solo plan) |
@@ -513,8 +543,8 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 6a:** 602 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 180 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
+- **Estado tras la fase 6b:** 629 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 197 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
   problemas aleatorios en cerca de 1,4 s. Fracción, cantidad y teclado solo tienen pruebas de
   Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
@@ -528,6 +558,9 @@ el plan.
   primaria conocido revisará capturas o un video al terminar la fase 5. El piloto en una escuela
   se hará con el sistema terminado.
 - **Cuentas y administración por escuela** siguen sin definir.
+- **Fechas en UTC.** El backend guarda las horas en UTC sin zona y varias pantallas las leen como
+  hora local, así que de noche pueden mostrar el día siguiente. La ficha del estudiante ya lo
+  corrige (`fechaDelServidor`); falta revisar las demás pantallas y el trimestre vigente.
 
 ---
 

@@ -39,6 +39,7 @@ import SalonesPage from '@/pages/teacher/SalonesPage';
 import SalonDetailPage from '@/pages/teacher/SalonDetailPage';
 import LeccionesSalonPage from '@/pages/teacher/LeccionesSalonPage';
 import LeccionesPage from '@/pages/teacher/LeccionesPage';
+import FichaEstudiantePage from '@/pages/teacher/FichaEstudiantePage';
 import GroupDetailPage from '@/pages/teacher/GroupDetailPage';
 import StudentsPage from '@/pages/teacher/StudentsPage';
 import StudentDetailPage from '@/pages/teacher/StudentDetailPage';
@@ -224,6 +225,7 @@ function App() {
                   <Route path="salones" element={<SalonesPage />} />
                   <Route path="salones/:id" element={<SalonDetailPage />} />
                   <Route path="salones/:id/lecciones" element={<LeccionesSalonPage />} />
+                  <Route path="salones/:id/estudiantes/:estudianteId" element={<FichaEstudiantePage />} />
                   <Route path="lecciones" element={<LeccionesPage />} />
                   <Route path="groups" element={<Navigate to="/teacher/salones" replace />} />
                   <Route path="groups/:id" element={<GroupDetailPage />} />

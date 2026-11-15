@@ -31,7 +31,7 @@ interface NavItem {
   activo?: (ruta: string) => boolean;
 }
 
-const RUTA_LECCIONES_SALON = /^\/teacher\/salones\/\d+\/lecciones/;
+const RUTA_LECCIONES_SALON = /^\/teacher\/salones\/\d+\/(lecciones|estudiantes)/;
 
 const studentNav: NavItem[] = [
   { title: 'Inicio', href: '/student/dashboard', icon: Home },

@@ -22,19 +22,33 @@ Profesor (pantalla "Lecciones del salón", fase 6a; solo sus propios salones):
 - DELETE /asignaciones/{asignacion_id}                   Cancelar una asignación
 - GET    /anios/{anio_id}/ajustes                        Banco forzado de cada estudiante del salón
 - PUT    /anios/{anio_id}/estudiantes/{estudiante_id}/ajustes   Forzar el banco
+
+Seguimiento (fase 6b):
+- GET    /anios/{anio_id}/seguimiento?trimestre=N        Tabla por lección y por estudiante (hoy o en un trimestre)
+- GET    /anios/{anio_id}/alertas                        Alertas de dificultad y excelencia del salón
+- POST   /anios/{anio_id}/alertas/ocultar                Ocultar una alerta unos días
+- GET    /alertas                                        Alertas de todos los salones activos del profesor
+- GET    /anios/{anio_id}/estudiantes/{estudiante_id}/ficha?trimestre=N   Ficha del estudiante
+- GET    /anios/{anio_id}/plan                           Plan por trimestre (lo aplica antes de responder)
+- PUT    /anios/{anio_id}/plan                           Guardar el plan
+- DELETE /anios/{anio_id}/plan/manual/{leccion_id}       Devolver una lección al plan
 - GET    /anios/{anio_id}/estudiantes/{estudiante_id}/dominio   Dominio de un estudiante
 
 Los errores de reglas responden con {"detail", "codigo"} (manejador de ErrorSalon).
 """
 
-from fastapi import APIRouter, status
+from typing import Optional
+
+from fastapi import APIRouter, Query, status
 
 from app.api.dependencies import CurrentStudent, CurrentStudentConSalon, CurrentTeacher, DBSession
 from app.nucleo.problema import problema_a_dict, problema_desde_dict
 from app.nucleo.registro import tiene_generador
 from app.nucleo.servicios.grafo import prerrequisitos_efectivos
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
+from app.nucleo.servicios.plan import ServicioPlan
 from app.nucleo.servicios.practica import ServicioPractica
+from app.nucleo.servicios.seguimiento import ServicioSeguimiento
 from app.schemas.nucleo import (
     AjustesIn,
     AjustesOut,
@@ -45,8 +59,10 @@ from app.schemas.nucleo import (
     HabilitacionIn,
     HabilitacionOut,
     LeccionSalonOut,
+    OcultarAlertaIn,
     PistaIn,
     PistaOut,
+    PlanIn,
     PrerrequisitosIn,
     PrerrequisitosOut,
     ProblemaOut,
@@ -123,7 +139,10 @@ async def mi_dominio(db: DBSession, estudiante: CurrentStudentConSalon):
 
 @router.get("/anios/{anio_id}/catalogo", response_model=list[LeccionSalonOut])
 async def catalogo(anio_id: int, db: DBSession, profesor: CurrentTeacher):
-    return await ServicioHabilitacion(db).catalogo(anio_id, profesor.id)
+    servicio = ServicioHabilitacion(db)
+    await servicio.school.anio_del_profesor(anio_id, profesor.id)
+    await ServicioPlan(db).aplicar(anio_id)
+    return await servicio.catalogo(anio_id, profesor.id)
 
 
 @router.put("/anios/{anio_id}/lecciones/{leccion_id}/prerrequisitos", response_model=PrerrequisitosOut)
@@ -212,3 +231,49 @@ async def ajustes(anio_id: int, estudiante_id: int, datos: AjustesIn, db: DBSess
 async def dominio_estudiante(anio_id: int, estudiante_id: int, db: DBSession, profesor: CurrentTeacher):
     await ServicioHabilitacion(db).exigir_estudiante_del_profesor(anio_id, profesor.id, estudiante_id)
     return await ServicioPractica(db).resumen_dominio(estudiante_id, anio_id)
+
+
+# ─── Seguimiento (fase 6b) ───────────────────────────────────────────────────
+
+Trimestre = Query(None, ge=1, le=3, description="Corte por trimestre; sin él, el estado de hoy")
+
+
+@router.get("/anios/{anio_id}/seguimiento")
+async def seguimiento(anio_id: int, db: DBSession, profesor: CurrentTeacher, trimestre: Optional[int] = Trimestre):
+    return await ServicioSeguimiento(db).seguimiento(anio_id, profesor.id, trimestre)
+
+
+@router.get("/anios/{anio_id}/alertas")
+async def alertas_del_salon(anio_id: int, db: DBSession, profesor: CurrentTeacher, incluir_ocultas: bool = False):
+    return await ServicioSeguimiento(db).alertas(anio_id, profesor.id, incluir_ocultas)
+
+
+@router.post("/anios/{anio_id}/alertas/ocultar", status_code=status.HTTP_204_NO_CONTENT)
+async def ocultar_alerta(anio_id: int, datos: OcultarAlertaIn, db: DBSession, profesor: CurrentTeacher):
+    await ServicioSeguimiento(db).ocultar(anio_id, profesor.id, datos.estudiante_id, datos.leccion_id, datos.tipo)
+
+
+@router.get("/alertas")
+async def alertas_del_profesor(db: DBSession, profesor: CurrentTeacher):
+    return await ServicioSeguimiento(db).alertas_del_profesor(profesor.id)
+
+
+@router.get("/anios/{anio_id}/estudiantes/{estudiante_id}/ficha")
+async def ficha(anio_id: int, estudiante_id: int, db: DBSession, profesor: CurrentTeacher,
+                trimestre: Optional[int] = Trimestre):
+    return await ServicioSeguimiento(db).ficha(anio_id, profesor.id, estudiante_id, trimestre)
+
+
+@router.get("/anios/{anio_id}/plan")
+async def plan(anio_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioPlan(db).resumen(anio_id, profesor.id)
+
+
+@router.put("/anios/{anio_id}/plan")
+async def guardar_plan(anio_id: int, datos: PlanIn, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioPlan(db).guardar(anio_id, profesor.id, datos.plan)
+
+
+@router.delete("/anios/{anio_id}/plan/manual/{leccion_id}")
+async def devolver_al_plan(anio_id: int, leccion_id: str, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioPlan(db).devolver_al_plan(anio_id, profesor.id, leccion_id)
