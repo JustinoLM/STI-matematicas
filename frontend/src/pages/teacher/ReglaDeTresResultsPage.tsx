@@ -7,15 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertCircle, Scale } from 'lucide-react';
 import { reglaDeTresService } from '@/services/reglaDeTresService';
+import { formatearFecha } from '@/lib/fechas';
 
 function formatFecha(isoStr: string | null): string {
   if (!isoStr) return '—';
   try {
-    return new Date(isoStr).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    return formatearFecha(isoStr, { day: 'numeric', month: 'short', year: 'numeric' }, 'es-ES');
   } catch {
     return isoStr;
   }

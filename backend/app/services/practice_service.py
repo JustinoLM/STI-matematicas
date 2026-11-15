@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from fastapi import HTTPException, status
 
 from app.core.respuestas import respuesta_es_correcta
+from app.core.tiempo import fecha_local, hoy_local
 from app.models.adaptive import EstadoSesion, SesionPractica, TipoAlerta
 from app.models.problem import TipoSesion
 from app.repositories.adaptive_repository import AdaptiveRepository
@@ -632,7 +633,7 @@ class PracticeService:
         precision_por_fecha = {}
         
         for sesion in sesiones:
-            fecha = sesion.fecha_inicio.date()
+            fecha = fecha_local(sesion.fecha_inicio)
             
             if fecha not in precision_por_fecha:
                 precision_por_fecha[fecha] = []
@@ -641,7 +642,7 @@ class PracticeService:
                 precision = (sesion.problemas_correctos or 0) / sesion.cantidad_problemas
                 precision_por_fecha[fecha].append(precision)
         
-        hoy = datetime.utcnow().date()
+        hoy = hoy_local()
         resultado = []
         
         for i in range(6, -1, -1):
@@ -659,10 +660,10 @@ class PracticeService:
         sesiones_por_fecha = {}
         
         for sesion in sesiones:
-            fecha = sesion.fecha_inicio.date()
+            fecha = fecha_local(sesion.fecha_inicio)
             sesiones_por_fecha[fecha] = sesiones_por_fecha.get(fecha, 0) + 1
         
-        hoy = datetime.utcnow().date()
+        hoy = hoy_local()
         resultado = []
         
         for i in range(6, -1, -1):

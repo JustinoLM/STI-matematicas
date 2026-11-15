@@ -2,10 +2,11 @@
 Schemas Pydantic para organizaciones / colegios.
 """
 
-from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+from app.core.tiempo import FechaHora
 
 # ============================================
 # Schemas de Request
@@ -41,7 +42,7 @@ class OrganizacionResponse(BaseModel):
     descripcion: Optional[str]
     ciudad: Optional[str]
     pais: Optional[str]
-    fecha_creacion: datetime
+    fecha_creacion: FechaHora
     activa: bool
     post_test_activo: bool = False
     total_profesores: int = 0

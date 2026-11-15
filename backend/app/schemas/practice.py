@@ -4,11 +4,12 @@ Schemas Pydantic para gestión de prácticas e intentos.
 Define contratos para sesiones, progreso y estadísticas.
 """
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
+
+from app.core.tiempo import FechaHora
 
 # ============================================
 # Schemas de Progreso de Sesión
@@ -117,8 +118,8 @@ class SubmitProblemResponse(BaseModel):
 class SessionHistoryItem(BaseModel):
     """Item de historial de sesiones."""
     sesion_id: int
-    fecha_inicio: datetime
-    fecha_fin: Optional[datetime]
+    fecha_inicio: FechaHora
+    fecha_fin: Optional[FechaHora]
     estado: str
     nivel_actual: int
     cantidad_problemas: int
@@ -166,8 +167,8 @@ class ProblemaSummary(BaseModel):
 class SessionSummaryResponse(BaseModel):
     """Resumen detallado de una sesión específica."""
     sesion_id: int
-    fecha_inicio: datetime
-    fecha_fin: Optional[datetime]
+    fecha_inicio: FechaHora
+    fecha_fin: Optional[FechaHora]
     estado: str
     
     # Métricas globales
@@ -246,7 +247,7 @@ class AlertaSospechosa(BaseModel):
     severidad: str
     mensaje: str
     datos_contexto: Dict
-    fecha_deteccion: datetime
+    fecha_deteccion: FechaHora
     
     model_config = {"from_attributes": True}
 

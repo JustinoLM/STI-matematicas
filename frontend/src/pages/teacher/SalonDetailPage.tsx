@@ -37,9 +37,10 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { clavesProfesor, nucleoProfesorService } from '@/services/nucleoService';
 import { MAX_PRIORITARIAS, prioritarias } from '@/lib/leccionesSalon';
+import { formatearFecha } from '@/lib/fechas';
 
 const fechaCorta = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString('es-PA', { day: 'numeric', month: 'short' });
+  formatearFecha(iso);
 
 export default function SalonDetailPage() {
   const { id } = useParams<{ id: string }>();

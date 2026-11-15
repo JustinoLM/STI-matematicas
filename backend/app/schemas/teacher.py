@@ -1,11 +1,11 @@
 """Schemas para APIs del profesor."""
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.tiempo import FechaHora
 from app.models.adaptive import TipoAlerta
 
 # ==================== GRUPOS ====================
@@ -22,7 +22,7 @@ class EstudianteEnGrupo(BaseModel):
     nombre_completo: str
     nivel_actual: int
     precision_ultimos_15: float
-    fecha_ingreso: datetime
+    fecha_ingreso: FechaHora
     activo: bool
 
     class Config:
@@ -88,7 +88,7 @@ class ConfiguracionPracticaResponse(BaseModel):
     rango_max: Decimal
     decimales_maximos: int
     pistas_habilitadas: Dict[str, bool]
-    fecha_aplicacion: datetime
+    fecha_aplicacion: FechaHora
     activa: bool
 
     class Config:
@@ -114,7 +114,7 @@ class DesafioGrupalCreate(BaseModel):
     parametro_adicional: Optional[int] = Field(None, gt=0)   # Parámetro secundario (Y)
     recompensa_texto: Optional[str] = None                    # Recompensa física
     recompensa_puntos: Optional[int] = Field(None, ge=0)      # XP otorgados al completar
-    fecha_limite: Optional[datetime] = None
+    fecha_limite: Optional[FechaHora] = None
     anio_lectivo_id: int                                      # Salón (año lectivo) del desafío
     grupos_ids: List[int] = []                                # Vacío = el salón completo es un equipo
 
@@ -144,8 +144,8 @@ class DesafioGrupalDetalle(BaseModel):
     parametro_adicional: Optional[int]  # Parámetro Y (max errores / seg / min)
     recompensa_texto: Optional[str]
     recompensa_puntos: Optional[int]    # XP otorgados al completar
-    fecha_creacion: datetime
-    fecha_limite: Optional[datetime]
+    fecha_creacion: FechaHora
+    fecha_limite: Optional[FechaHora]
     completado: bool
     vencido: bool  # True si fecha_limite pasó sin alcanzar el objetivo
     eliminado: bool
@@ -195,7 +195,7 @@ class AlertaEstudianteResponse(BaseModel):
     datos_contexto: Optional[Dict[str, Any]]
     activa: bool
     leida: bool
-    fecha_creacion: datetime
+    fecha_creacion: FechaHora
 
     class Config:
         from_attributes = True

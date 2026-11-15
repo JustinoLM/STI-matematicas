@@ -5,7 +5,10 @@ fijo de consultas (no una por estudiante y lección) y delega el cálculo en app
 - seguimiento(): tabla por lección y por estudiante, hoy o en un trimestre.
 - alertas(): alertas de dificultad y excelencia del salón; ocultar() las esconde unos días.
 - ficha(): dominio por lección y camino, errores frecuentes, asignaciones, ajustes, sesiones
-  recientes y años anteriores del estudiante.
+  recientes, diagnóstico inicial y años anteriores del estudiante.
+- diagnostico(): el profesor pide repetirlo, lo cierra con lo obtenido o lo cancela (fase 7a).
+
+Los problemas del diagnóstico no entran en los resultados (ni dominio, ni acierto, ni periodo).
 """
 
 from datetime import datetime, timedelta
@@ -14,12 +17,14 @@ from typing import Callable, Optional
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tiempo import ahora_utc
 from app.models.curriculo import CaminoCurricular, LeccionCamino, LeccionCurricular
 from app.models.nucleo import (
     ASIGNACION_ACTIVA,
     PROBLEMA_TERMINADO,
     TIPOS_ALERTA,
     XP_LECCION_DOMINADA,
+    ZONA_DIAGNOSTICO,
     ZONA_EXTENSION,
     ZONA_REFUERZO,
     NucleoAjusteEstudiante,
@@ -39,6 +44,7 @@ from app.nucleo import seguimiento as calc
 from app.nucleo.dominio import Resultado
 from app.nucleo.parametros import ParametrosNucleo, cargar_parametros
 from app.nucleo.registro import GENERADORES, tiene_generador
+from app.nucleo.servicios.diagnostico import ServicioDiagnostico
 from app.nucleo.servicios.grafo import prerrequisitos_efectivos
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
 from app.nucleo.servicios.plan import ServicioPlan
@@ -53,7 +59,7 @@ def descripciones_de_errores() -> dict[str, str]:
 
 class ServicioSeguimiento:
     def __init__(self, db: AsyncSession, parametros: Optional[ParametrosNucleo] = None,
-                 reloj: Callable[[], datetime] = datetime.utcnow):
+                 reloj: Callable[[], datetime] = ahora_utc):
         self.db = db
         self.school = SchoolService(db)
         self._parametros = parametros
@@ -66,6 +72,9 @@ class ServicioSeguimiento:
 
     def _plan(self) -> ServicioPlan:
         return ServicioPlan(self.db, self._parametros, self.reloj)
+
+    def _diag(self) -> ServicioDiagnostico:
+        return ServicioDiagnostico(self.db, self._parametros, self.reloj)
 
     # ── Foto del salón (consultas fijas) ────────────────────────────────────
 
@@ -100,6 +109,8 @@ class ServicioSeguimiento:
             .order_by(NucleoProblemaSesion.fecha_fin, NucleoProblemaSesion.id)
         )
         for est, lec, zona, acierto, fecha in filas.tuples():
+            if zona == ZONA_DIAGNOSTICO:
+                continue
             r = Resultado(bool(acierto), fecha)
             if zona == ZONA_EXTENSION:
                 extension.setdefault((est, lec), []).append(r)
@@ -172,6 +183,10 @@ class ServicioSeguimiento:
             "estudiantes": [{"id": e.id, "nombre": e.nombre, "codigo": e.codigo} for e in foto.estudiantes],
             "por_leccion": calc.tabla_por_leccion(foto, ahora, p),
             "por_estudiante": calc.tabla_por_estudiante(foto, alertas, ahora, p),
+            "diagnosticos": {
+                str(k): v for k, v in (await self._diag().abiertos_del_salon(
+                    [e.id for e in foto.estudiantes], anio_lectivo_id)).items()
+            },
             "alertas_dificultad": sum(a["tipo"] == "dificultad" for a in alertas),
             "alertas_excelencia": sum(a["tipo"] == "excelencia" for a in alertas),
             "periodo": None,
@@ -279,7 +294,8 @@ class ServicioSeguimiento:
             .join(NucleoProblemaSesion, NucleoProblemaSesion.id == NucleoIntento.problema_sesion_id)
             .join(NucleoSesion, NucleoSesion.id == NucleoProblemaSesion.sesion_id)
             .where(and_(NucleoIntento.estudiante_id == estudiante_id, NucleoIntento.correcto.is_(False),
-                        NucleoSesion.anio_lectivo_id == anio_lectivo_id))
+                        NucleoSesion.anio_lectivo_id == anio_lectivo_id,
+                        NucleoProblemaSesion.zona != ZONA_DIAGNOSTICO))
         )
         codigos = [
             c for errores, fecha in (await self.db.execute(consulta)).tuples()
@@ -298,7 +314,8 @@ class ServicioSeguimiento:
 
         # Sesiones recientes del año lectivo (con sus aciertos, en una consulta)
         sesiones = (await self.db.execute(
-            select(NucleoSesion, func.count(NucleoProblemaSesion.id).filter(NucleoProblemaSesion.acierto.is_(True)))
+            select(NucleoSesion, func.count(NucleoProblemaSesion.id).filter(and_(
+                NucleoProblemaSesion.acierto.is_(True), NucleoProblemaSesion.zona != ZONA_DIAGNOSTICO)))
             .outerjoin(NucleoProblemaSesion, NucleoProblemaSesion.sesion_id == NucleoSesion.id)
             .where(and_(NucleoSesion.estudiante_id == estudiante_id, NucleoSesion.anio_lectivo_id == anio_lectivo_id))
             .group_by(NucleoSesion.id).order_by(NucleoSesion.fecha_inicio.desc()).limit(8)
@@ -317,12 +334,30 @@ class ServicioSeguimiento:
             "errores": errores,
             "asignaciones": (await ServicioHabilitacion(self.db).describir(asignaciones))[:10],
             "sesiones": [
-                {"id": s.id, "estado": s.estado, "fecha_inicio": s.fecha_inicio, "fecha_fin": s.fecha_fin,
+                {"id": s.id, "estado": s.estado, "tipo": s.tipo, "fecha_inicio": s.fecha_inicio, "fecha_fin": s.fecha_fin,
                  "problemas": s.progreso, "cantidad_problemas": s.cantidad_problemas, "aciertos": int(aciertos)}
                 for s, aciertos in sesiones
             ],
+            "diagnostico": await self._diag().para_la_ficha(estudiante_id, anio_lectivo_id),
             "anios_anteriores": await self._anios_anteriores(estudiante_id, anio_lectivo_id),
         }
+
+    # ── Diagnóstico ─────────────────────────────────────────────────────────
+
+    async def diagnostico(self, anio_lectivo_id: int, profesor_id: int, estudiante_id: int, accion: str) -> dict:
+        """pedir / cerrar / cancelar. Devuelve el diagnóstico como lo muestra la ficha."""
+        await self.school.anio_del_profesor(anio_lectivo_id, profesor_id, para_escribir=True)
+        await ServicioHabilitacion(self.db).exigir_estudiante_del_profesor(anio_lectivo_id, profesor_id, estudiante_id)
+        servicio = self._diag()
+        if accion == "pedir":
+            await servicio.pedir(estudiante_id, anio_lectivo_id, profesor_id)
+        elif accion == "cerrar":
+            await servicio.cerrar(estudiante_id, anio_lectivo_id, profesor_id)
+        elif accion == "cancelar":
+            await servicio.cancelar(estudiante_id, anio_lectivo_id, profesor_id)
+        else:
+            raise Conflicto("Acción desconocida.")
+        return await servicio.para_la_ficha(estudiante_id, anio_lectivo_id)
 
     async def _anios_anteriores(self, estudiante_id: int, anio_actual_id: int) -> list[dict]:
         """Resumen de solo lectura de los otros años lectivos del estudiante (2 consultas)."""
@@ -342,7 +377,8 @@ class ServicioSeguimiento:
                        func.count(NucleoProblemaSesion.id).filter(NucleoProblemaSesion.acierto.is_(True)))
                 .join(NucleoProblemaSesion, NucleoProblemaSesion.sesion_id == NucleoSesion.id)
                 .where(and_(NucleoSesion.estudiante_id == estudiante_id, NucleoSesion.anio_lectivo_id.in_(ids),
-                            NucleoProblemaSesion.estado == PROBLEMA_TERMINADO))
+                            NucleoProblemaSesion.estado == PROBLEMA_TERMINADO,
+                            NucleoProblemaSesion.zona != ZONA_DIAGNOSTICO))
                 .group_by(NucleoSesion.anio_lectivo_id)
             )).tuples()
         }

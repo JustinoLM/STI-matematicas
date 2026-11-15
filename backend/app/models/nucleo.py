@@ -19,6 +19,8 @@ intento. Los estados son texto con CHECK (como en school.py), no tipos ENUM de P
 - NucleoExtension: pausa de la zona de extensión por estudiante y lección.
 - NucleoSesion / NucleoProblemaSesion / NucleoIntento / NucleoEvento: la práctica.
 - NucleoExperiencia: experiencia acumulada, aparte del saldo de puntos.
+- NucleoDiagnostico: diagnóstico inicial (fase 7a). Usa una NucleoSesion de tipo "diagnostico" cuyo
+  plan se arma problema a problema; sus problemas (zona "diagnostico") no cuentan para el dominio.
 """
 
 from datetime import datetime
@@ -58,12 +60,29 @@ SESION_ACTIVA = "activa"
 SESION_COMPLETADA = "completada"
 SESION_ABANDONADA = "abandonada"
 
+SESION_PRACTICA = "practica"
+SESION_DIAGNOSTICO = "diagnostico"
+TIPOS_SESION = (SESION_PRACTICA, SESION_DIAGNOSTICO)
+
 ZONA_PRIORIDAD = "prioridad"
 ZONA_NORMAL = "normal"
 ZONA_REPASO = "repaso"
 ZONA_EXTENSION = "extension"
 ZONA_REFUERZO = "refuerzo"
-ZONAS = (ZONA_PRIORIDAD, ZONA_NORMAL, ZONA_REPASO, ZONA_EXTENSION, ZONA_REFUERZO)
+ZONA_DIAGNOSTICO = "diagnostico"
+ZONAS = (ZONA_PRIORIDAD, ZONA_NORMAL, ZONA_REPASO, ZONA_EXTENSION, ZONA_REFUERZO, ZONA_DIAGNOSTICO)
+# Zonas que no cuentan para la regla de dominio
+ZONAS_FUERA_DEL_DOMINIO = (ZONA_EXTENSION, ZONA_DIAGNOSTICO)
+
+DIAGNOSTICO_PENDIENTE = "pendiente"
+DIAGNOSTICO_EN_CURSO = "en_curso"
+DIAGNOSTICO_TERMINADO = "terminado"       # lo terminó el estudiante (o un tope)
+DIAGNOSTICO_CERRADO = "cerrado"           # el profesor lo cerró con lo obtenido
+DIAGNOSTICO_CANCELADO = "cancelado"       # el profesor lo canceló: no se aplicó nada
+ESTADOS_DIAGNOSTICO = (DIAGNOSTICO_PENDIENTE, DIAGNOSTICO_EN_CURSO, DIAGNOSTICO_TERMINADO,
+                       DIAGNOSTICO_CERRADO, DIAGNOSTICO_CANCELADO)
+DIAGNOSTICO_AUTOMATICO = "automatico"
+DIAGNOSTICO_PROFESOR = "profesor"
 
 PROBLEMA_PENDIENTE = "pendiente"
 PROBLEMA_TERMINADO = "terminado"
@@ -232,6 +251,7 @@ class NucleoSesion(Base):
     estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, index=True)
     anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), nullable=False, index=True)
     estado = Column(String(15), nullable=False, default=SESION_ACTIVA, server_default=SESION_ACTIVA)
+    tipo = Column(String(15), nullable=False, default=SESION_PRACTICA, server_default=SESION_PRACTICA)
     plan = Column(JSON, nullable=False)                 # [{"leccion_id": ..., "zona": ...}, ...]
     cantidad_problemas = Column(Integer, nullable=False)
     progreso = Column(Integer, nullable=False, default=0, server_default="0")  # problemas terminados
@@ -246,6 +266,7 @@ class NucleoSesion(Base):
             name="ck_nucleo_sesion_estado",
         ),
         CheckConstraint("progreso BETWEEN 0 AND cantidad_problemas", name="ck_nucleo_sesion_progreso"),
+        CheckConstraint(f"tipo IN {_en(TIPOS_SESION)}", name="ck_nucleo_sesion_tipo"),
         Index("uq_nucleo_sesion_activa", "estudiante_id", unique=True,
               postgresql_where=text("estado = 'activa'")),
     )
@@ -317,6 +338,39 @@ class NucleoEvento(Base):
     valor = Column(JSON, nullable=True)
     ms = Column(Integer, nullable=True)                 # ms desde que se mostró el problema
     fecha = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+# ─── Diagnóstico inicial (fase 7a) ───────────────────────────────────────────
+
+class NucleoDiagnostico(Base):
+    """Un diagnóstico del estudiante en un año lectivo. `lecciones` fija al empezar qué se prueba
+    ({"candidatas": [...], "conocidas": [...]}); `resultado` guarda la decisión por lección."""
+
+    __tablename__ = "nucleo_diagnostico"
+
+    id = Column(Integer, primary_key=True)
+    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, index=True)
+    anio_lectivo_id = Column(Integer, ForeignKey("anio_lectivo.id"), nullable=False, index=True)
+    sesion_id = Column(Integer, ForeignKey("nucleo_sesion.id"), nullable=True)
+    estado = Column(String(15), nullable=False, default=DIAGNOSTICO_PENDIENTE, server_default=DIAGNOSTICO_PENDIENTE)
+    origen = Column(String(15), nullable=False)
+    profesor_id = Column(Integer, ForeignKey("profesor.id"), nullable=True)   # quién lo pidió o cerró
+    lecciones = Column(JSON, nullable=True)
+    resultado = Column(JSON, nullable=True)             # [{"leccion_id", "decision", "origen", ...}]
+    motivo_fin = Column(String(20), nullable=True)
+    problemas = Column(Integer, nullable=False, default=0, server_default="0")
+    tiempo_ms = Column(Integer, nullable=False, default=0, server_default="0")
+    fecha_creacion = Column(DateTime, default=datetime.utcnow, nullable=False)
+    fecha_inicio = Column(DateTime, nullable=True)
+    fecha_fin = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(f"estado IN {_en(ESTADOS_DIAGNOSTICO)}", name="ck_nucleo_diagnostico_estado"),
+        CheckConstraint(f"origen IN {_en((DIAGNOSTICO_AUTOMATICO, DIAGNOSTICO_PROFESOR))}",
+                        name="ck_nucleo_diagnostico_origen"),
+        Index("uq_nucleo_diagnostico_abierto", "estudiante_id", unique=True,
+              postgresql_where=text("estado IN ('pendiente', 'en_curso')")),
+    )
 
 
 # ─── Experiencia ─────────────────────────────────────────────────────────────

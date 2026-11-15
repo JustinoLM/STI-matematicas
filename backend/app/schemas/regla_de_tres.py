@@ -5,11 +5,12 @@ Define contratos para práctica adaptativa, evaluación de respuestas
 y notas por estudiante (profesor/admin).
 """
 
-from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
+
+from app.core.tiempo import FechaHora
 
 
 def _format_decimal(value: Decimal) -> str:
@@ -116,7 +117,7 @@ class EstudianteNotaR3(BaseModel):
     codigo: str
     nombre_completo: str
     tiene_practica: bool
-    ultima_fecha: Optional[datetime] = None
+    ultima_fecha: Optional[FechaHora] = None
     correctos: Optional[int] = None
     total: Optional[int] = None
     nota_pct: Optional[float] = None

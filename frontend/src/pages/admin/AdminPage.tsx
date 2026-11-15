@@ -67,17 +67,14 @@ import {
   type AllUsersResponse,
 } from '@/services/adminService';
 import { reglaDeTresService, type EstudianteNotaR3 } from '@/services/reglaDeTresService';
+import { anioLocal, formatearFechaHora, hoyLocal } from '@/lib/fechas';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatFecha(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('es-PA', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
+  return formatearFechaHora(iso);
 }
 
 function CopiarBtn({ texto }: { texto: string }) {
@@ -535,7 +532,7 @@ function EditarEstudianteModal({
 // ─── Salones, trimestres y cierre del año de una organización ───────────────
 
 function SalonesOrgPanel({ orgId }: { orgId: number }) {
-  const anioActual = new Date().getFullYear();
+  const anioActual = anioLocal();
   const [anio, setAnio] = useState(anioActual);
   const [fechas, setFechas] = useState<{ fecha_inicio: string; fecha_fin: string }[]>([]);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -1909,7 +1906,7 @@ function FormImportarMasivo({ organizaciones }: { organizaciones: OrgCreated[] }
 
   // ── Excel completo (8 hojas, sandbox) ────────────────────────────────────
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
-  const [orgDestino, setOrgDestino] = useState(() => `Sandbox - ${new Date().toISOString().slice(0, 10)}`);
+  const [orgDestino, setOrgDestino] = useState(() => `Sandbox - ${hoyLocal()}`);
   const [resumenExcel, setResumenExcel] = useState<ImportResumenExcel | null>(null);
   const [importandoExcel, setImportandoExcel] = useState(false);
   const [errorExcel, setErrorExcel] = useState<string | null>(null);

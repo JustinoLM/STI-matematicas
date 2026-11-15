@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import type { AjusteEstudiante, AsignacionNucleo, LeccionSalon } from '@/types/nucleo';
 import type { EstudianteDelSalon } from '@/types';
 import { nombreLeccion } from '@/lib/leccionesSalon';
+import { formatearFecha } from '@/lib/fechas';
 
 interface Props {
   estudiantes: EstudianteDelSalon[];
@@ -27,7 +28,7 @@ const ESTADO_CERRADA: Record<string, string> = {
 };
 
 const fecha = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('es-PA', { day: 'numeric', month: 'short' }) : '';
+  iso ? formatearFecha(iso) : '';
 
 export function PorEstudiante({ estudiantes, catalogo, asignaciones, ajustes, soloLectura, onAsignar, onCerrar, onForzarBanco }: Props) {
   const asignables = catalogo

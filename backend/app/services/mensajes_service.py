@@ -6,9 +6,9 @@ Caché diaria: un mensaje por (estudiante_id, tipo, fecha, tema).
 Si el estudiante cambia de tema, se genera un nuevo mensaje ese día.
 """
 
-from datetime import date
 from typing import Optional
 
+from app.core.tiempo import hoy_local
 from app.models.user import Estudiante
 from app.repositories.mensajes_repository import MensajesRepository
 from app.services.llm_service import LLMPrompts, LLMService
@@ -47,7 +47,7 @@ class MensajesService:
         Returns:
             (texto, generada_llm)
         """
-        hoy = date.today()
+        hoy = hoy_local()
         nombre = estudiante.nombre_completo
         tema = LLMPrompts.resolver_tema(tema)   # clave canónica (None si no es narrativo)
         genero_val = getattr(estudiante, "genero", None)

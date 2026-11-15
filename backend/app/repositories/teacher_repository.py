@@ -1,12 +1,12 @@
 """Repositorio para operaciones de profesor."""
 
-from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.tiempo import dia_local_sql, hoy_local
 from app.models.challenge import DesafioGrupal, GrupoDesafio
 from app.models.practice_config import ConfiguracionPractica
 from app.models.problem import Intento
@@ -102,12 +102,12 @@ class TeacherRepository:
     
     async def get_problemas_resueltos_hoy(self, estudiantes_ids: List[int]) -> int:
         """Cuenta problemas resueltos hoy por estudiantes."""
-        hoy = datetime.utcnow().date()
+        hoy = hoy_local()
         result = await self.db.execute(
             select(func.count(Intento.id))
             .where(and_(
                 Intento.estudiante_id.in_(estudiantes_ids),
-                func.date(Intento.timestamp) == hoy
+                dia_local_sql(Intento.timestamp) == hoy
             ))
         )
         return result.scalar() or 0

@@ -9,16 +9,17 @@ Endpoints (todos bajo /admin/organizations — sin auth por ahora):
 - PUT    /admin/organizations/{id}/students/{est_id}      Asignar/quitar org a estudiante
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import Date, and_, cast, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import DBSession, require_admin
+from app.core.tiempo import dia_local_sql, hoy_local
 from app.models.adaptive import (
     AlertaEstudiante,
     EstadoSesion,
@@ -596,7 +597,7 @@ async def sistema_stats(db: DBSession):
     """
     Estadísticas globales del sistema para el tab de Sistema en el panel admin.
     """
-    today = date.today()
+    today = hoy_local()
     hace_7_dias = today - timedelta(days=7)
 
     # Totales de usuarios y estructura
@@ -611,11 +612,11 @@ async def sistema_stats(db: DBSession):
     # Sesiones de práctica
     sesiones_hoy = await db.scalar(
         select(func.count()).select_from(SesionPractica)
-        .where(cast(SesionPractica.fecha_inicio, Date) == today)
+        .where(dia_local_sql(SesionPractica.fecha_inicio) == today)
     )
     sesiones_semana = await db.scalar(
         select(func.count()).select_from(SesionPractica)
-        .where(cast(SesionPractica.fecha_inicio, Date) >= hace_7_dias)
+        .where(dia_local_sql(SesionPractica.fecha_inicio) >= hace_7_dias)
     )
     sesiones_activas = await db.scalar(
         select(func.count()).select_from(SesionPractica)

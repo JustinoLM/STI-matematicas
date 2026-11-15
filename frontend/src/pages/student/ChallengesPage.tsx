@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { studentService } from '@/services/studentService';
 import type { DesafioEstudiante } from '@/types';
+import { formatearFecha } from '@/lib/fechas';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,11 +183,7 @@ function DesafioCard({ desafio }: { desafio: DesafioEstudiante }) {
             <Clock className="h-3.5 w-3.5" />
             <span>
               Límite:{' '}
-              {new Date(desafio.fecha_limite).toLocaleDateString('es-CO', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {formatearFecha(desafio.fecha_limite, { day: 'numeric', month: 'long', year: 'numeric' }, 'es-CO')}
             </span>
           </div>
         )}

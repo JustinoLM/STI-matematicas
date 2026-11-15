@@ -1,21 +1,24 @@
 /**
  * Ficha del estudiante en el núcleo (fase 6b): dominio por camino y por lección, errores más
- * frecuentes con nombres para docentes, asignaciones, ajustes, sesiones recientes y un resumen de
- * sus años lectivos anteriores (solo lectura).
+ * frecuentes con nombres para docentes, asignaciones, ajustes, sesiones recientes, diagnóstico
+ * inicial (fase 7a) y un resumen de sus años lectivos anteriores (solo lectura).
  */
 
 import { History, ListChecks, TriangleAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { FichaEstudiante as Ficha } from '@/types/nucleo';
-import { COLOR_ESTADO, ESTADO_UNO, fechaDelServidor, porcentaje } from '@/lib/seguimiento';
+import { COLOR_ESTADO, ESTADO_UNO, porcentaje } from '@/lib/seguimiento';
+import { fechaDelServidor, formatearFecha } from '@/lib/fechas';
+import { DiagnosticoFicha } from './DiagnosticoFicha';
 
 const fechaCorta = (iso: string | null) =>
-  iso ? fechaDelServidor(iso).toLocaleDateString('es-PA', { day: 'numeric', month: 'short' }) : '—';
+  formatearFecha(iso);
 
 const minutos = (inicio: string, fin: string | null) =>
   fin ? Math.max(1, Math.round((fechaDelServidor(fin).getTime() - fechaDelServidor(inicio).getTime()) / 60000)) : null;
 
 const ESTADO_SESION: Record<string, string> = { completada: 'Completada', abandonada: 'Descartada', activa: 'A medias' };
+const ESTADO_DIAGNOSTICO: Record<string, string> = { completada: 'Diagnóstico', abandonada: 'Diagnóstico cerrado', activa: 'Diagnóstico a medias' };
 const ESTADO_ASIGNACION: Record<string, string> = { activa: 'Abierta', cerrada_por_dominio: 'La dominó', cancelada: 'Cerrada a mano' };
 
 export function FichaEstudiante({ ficha }: { ficha: Ficha }) {
@@ -38,13 +41,16 @@ export function FichaEstudiante({ ficha }: { ficha: Ficha }) {
         <CardContent className="space-y-3">
           {ficha.por_camino.length === 0 && <p className="text-sm text-muted-foreground">Sin lecciones en práctica.</p>}
           {ficha.por_camino.map((c) => (
-            <div key={c.camino} data-testid={`camino-${c.camino}`} className="grid items-center gap-2 sm:grid-cols-[12rem_minmax(0,1fr)_7rem]">
+            <div key={c.camino} data-testid={`camino-${c.camino}`} className="grid items-center gap-2 sm:grid-cols-[12rem_minmax(0,1fr)_9rem]">
               <span className="text-sm font-medium">{c.nombre}</span>
               <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
                 <div className="bg-emerald-500" style={{ width: `${c.total ? (c.dominadas / c.total) * 100 : 0}%` }} />
+                <div className="bg-sky-300" style={{ width: `${c.total ? ((c.por_confirmar ?? 0) / c.total) * 100 : 0}%` }} />
                 <div className="bg-amber-400" style={{ width: `${c.total ? (c.en_progreso / c.total) * 100 : 0}%` }} />
               </div>
-              <span className="text-xs text-muted-foreground sm:text-right">domina {c.dominadas} de {c.total}</span>
+              <span className="text-xs text-muted-foreground sm:text-right">
+                domina {c.dominadas} de {c.total}{c.por_confirmar ? ` · ${c.por_confirmar} por confirmar` : ''}
+              </span>
             </div>
           ))}
         </CardContent>
@@ -121,8 +127,15 @@ export function FichaEstudiante({ ficha }: { ficha: Ficha }) {
                   const m = minutos(s.fecha_inicio, s.fecha_fin);
                   return (
                     <li key={s.id} className="flex justify-between gap-2">
-                      <span>{fechaCorta(s.fecha_inicio)} · {s.problemas} de {s.cantidad_problemas} {s.cantidad_problemas === 1 ? 'problema' : 'problemas'} · {s.aciertos} {s.aciertos === 1 ? 'acierto' : 'aciertos'}{m ? ` · ${m} min` : ''}</span>
-                      <span className="text-muted-foreground">{ESTADO_SESION[s.estado] ?? s.estado}</span>
+                      <span>
+                        {s.tipo === 'diagnostico'
+                          ? `${fechaCorta(s.fecha_inicio)} · ${s.problemas} ${s.problemas === 1 ? 'problema' : 'problemas'}`
+                          : `${fechaCorta(s.fecha_inicio)} · ${s.problemas} de ${s.cantidad_problemas} ${s.cantidad_problemas === 1 ? 'problema' : 'problemas'} · ${s.aciertos} ${s.aciertos === 1 ? 'acierto' : 'aciertos'}`}
+                        {m ? ` · ${m} min` : ''}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {(s.tipo === 'diagnostico' ? ESTADO_DIAGNOSTICO : ESTADO_SESION)[s.estado] ?? s.estado}
+                      </span>
                     </li>
                   );
                 })}
@@ -131,6 +144,9 @@ export function FichaEstudiante({ ficha }: { ficha: Ficha }) {
           </CardContent>
         </Card>
       </div>
+
+      <DiagnosticoFicha diagnostico={ficha.diagnostico} anioId={ficha.salon.anio_lectivo_id}
+        estudianteId={ficha.estudiante.id} soloLectura={ficha.salon.cerrado} />
 
       {ficha.asignaciones.length > 0 && (
         <Card>

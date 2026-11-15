@@ -5,11 +5,11 @@ Login: codigo + password (sin email)
 Usuarios creados por administrador (no registro público).
 """
 
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, validator
 
+from app.core.tiempo import FechaHora
 from app.models.user import Genero, TipoUsuario
 
 # ============================================
@@ -100,8 +100,8 @@ class UserBase(BaseModel):
     """Schema base para usuarios."""
     id: int
     tipo_usuario: TipoUsuario
-    fecha_creacion: datetime
-    ultimo_acceso: Optional[datetime]
+    fecha_creacion: FechaHora
+    ultimo_acceso: Optional[FechaHora]
     activo: bool
 
     class Config:

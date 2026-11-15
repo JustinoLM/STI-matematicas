@@ -1,6 +1,7 @@
 /**
  * Aviso de práctica a medias del núcleo: continuar donde la dejó o descartarla y empezar otra.
  * Se usa en el dashboard y al entrar a la pantalla de práctica.
+ * El diagnóstico inicial a medias (fase 7a) no se descarta ni muestra conteos: solo "Continuar".
  */
 
 import { Play, Trash2 } from 'lucide-react';
@@ -25,6 +26,18 @@ function hace(min: number): string {
 }
 
 export function AvisoSesionAMedias({ sesion, onContinuar, onDescartar, ocupado, textoDescartar = 'Descartar' }: AvisoProps) {
+  if (sesion.tipo === 'diagnostico') {
+    return (
+      <div className="rounded-3xl border-4 border-sky-300 bg-sky-50 p-6" data-testid="aviso-diagnostico">
+        <p className="text-2xl font-bold text-sky-900">Seguimos donde quedamos</p>
+        <p className="mt-1 text-lg text-sky-800">Te faltan unos problemas para que te conozca mejor.</p>
+        <button type="button" onClick={onContinuar} disabled={ocupado} data-testid="continuar"
+          className="mt-5 flex min-h-[4.5rem] items-center gap-3 rounded-2xl bg-green-600 px-8 text-2xl font-bold text-white disabled:opacity-50">
+          <Play className="h-8 w-8" /> Continuar
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="rounded-3xl border-4 border-amber-300 bg-amber-50 p-6" data-testid="aviso-sesion">
       <p className="text-2xl font-bold text-amber-900">Tienes una práctica a medias</p>

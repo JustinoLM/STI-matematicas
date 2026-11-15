@@ -15,6 +15,7 @@ from app.models.nucleo import ZONA_NORMAL, ZONA_REFUERZO
 from app.models.school import ANIO_CERRADO, AnioLectivo
 from app.nucleo.prerrequisitos import camino_de_ciclo, combinar
 from app.nucleo.registro import GENERADORES
+from app.nucleo.servicios.diagnostico import ServicioDiagnostico
 from app.nucleo.servicios.habilitacion import (
     CicloPrerrequisitos,
     MaxPrioritarias,
@@ -37,6 +38,14 @@ from tests.test_nucleo_practica import (
 from tests.test_organizacion_escolar import _estudiante, _org, _profesor, _salon
 
 pytestmark = pytest.mark.db
+
+
+@pytest.fixture(autouse=True)
+def _sin_diagnostico_automatico(monkeypatch):
+    """Estas pruebas son de la práctica: el diagnóstico inicial se prueba en test_nucleo_diagnostico.py."""
+    async def nunca(self, estudiante_id):
+        return False
+    monkeypatch.setattr(ServicioDiagnostico, "_corresponde_automatico", nunca)
 
 L03 = "g1-u03-l03"   # depende de L02 en el currículo
 N11 = "g1-u04-l01"   # Conozcamos los números del 11 al 20 (depende de g1-u02-l01)

@@ -17,6 +17,7 @@ import { teacherService } from '@/services/teacherService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { diaLocalHace, formatearFecha } from '@/lib/fechas';
 
 const OP_CONFIG: Record<string, { label: string; colorBar: string }> = {
   suma:           { label: 'Suma',           colorBar: 'bg-blue-500' },
@@ -248,9 +249,7 @@ export default function StudentDetailPage() {
                 const maxSesiones = Math.max(...stats.sesiones_ultimos_7_dias, 1);
                 const altura = Math.round((sesiones / maxSesiones) * 100);
                 const diasAtras = 6 - i;
-                const fecha = new Date();
-                fecha.setDate(fecha.getDate() - diasAtras);
-                const diaSemana = fecha.toLocaleDateString('es-ES', { weekday: 'short' });
+                const diaSemana = formatearFecha(diaLocalHace(diasAtras), { weekday: 'short' }, 'es-ES');
 
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1">

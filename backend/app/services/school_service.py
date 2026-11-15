@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.tiempo import hoy_local
 from app.models.adaptive import PerfilEstudiante
 from app.models.challenge import DESAFIO_ACTIVO, DESAFIO_NO_COMPLETADO, DesafioGrupal
 from app.models.group import EstudianteGrupo, Grupo
@@ -81,7 +82,7 @@ class SinSalon(ErrorSalon):
 
 def anio_actual() -> int:
     """Año lectivo en curso: en Panamá coincide con el año calendario (marzo a diciembre)."""
-    return date.today().year
+    return hoy_local().year
 
 
 def trimestres_por_defecto(anio: int) -> list[tuple[date, date]]:

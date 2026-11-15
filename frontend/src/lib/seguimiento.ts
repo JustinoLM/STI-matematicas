@@ -5,11 +5,13 @@
 
 import type { AlertaNucleo, EstadoVisible, FilaAvanceLeccion } from '@/types/nucleo';
 
-export const ESTADOS: EstadoVisible[] = ['dominado', 'repaso', 'en_progreso', 'no_iniciado'];
+export const ESTADOS: EstadoVisible[] = ['dominado', 'repaso', 'por_confirmar', 'en_progreso', 'no_iniciado'];
 
+/** "Por confirmar": el diagnóstico inicial la dio por sabida; la práctica la confirma o la retira. */
 export const ETIQUETA_ESTADO: Record<EstadoVisible, string> = {
   dominado: 'Dominan',
   repaso: 'En repaso',
+  por_confirmar: 'Por confirmar',
   en_progreso: 'En progreso',
   no_iniciado: 'Sin empezar',
 };
@@ -18,6 +20,7 @@ export const ETIQUETA_ESTADO: Record<EstadoVisible, string> = {
 export const ESTADO_UNO: Record<EstadoVisible, string> = {
   dominado: 'Dominada',
   repaso: 'En repaso',
+  por_confirmar: 'Por confirmar',
   en_progreso: 'En progreso',
   no_iniciado: 'Sin empezar',
 };
@@ -26,6 +29,7 @@ export const ESTADO_UNO: Record<EstadoVisible, string> = {
 export const COLOR_ESTADO: Record<EstadoVisible, { barra: string; chip: string }> = {
   dominado: { barra: 'bg-emerald-500', chip: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
   repaso: { barra: 'bg-emerald-300', chip: 'border-teal-200 bg-teal-50 text-teal-800' },
+  por_confirmar: { barra: 'bg-sky-300', chip: 'border-sky-200 bg-sky-50 text-sky-800' },
   en_progreso: { barra: 'bg-amber-400', chip: 'border-amber-200 bg-amber-50 text-amber-800' },
   no_iniciado: { barra: 'bg-slate-200', chip: 'border-slate-200 bg-slate-50 text-slate-700' },
 };
@@ -96,14 +100,4 @@ export function textoAlerta(a: AlertaNucleo): TextoAlerta {
   }
   if (a.total_salon) detalle.push(`${a.dominan_salon} de ${a.total_salon} compañeros ya la dominan.`);
   return { titulo: `${a.estudiante_nombre} tiene dificultad con «${a.leccion_titulo}»`, detalle };
-}
-
-/**
- * El backend guarda las horas en UTC sin zona ("2026-11-15T00:02:00"); `new Date` las tomaría como
- * hora local y de noche mostraría el día siguiente. Una fecha sola ("2026-11-14") es un día del
- * calendario y se queda en hora local.
- */
-export function fechaDelServidor(iso: string): Date {
-  if (iso.length === 10) return new Date(`${iso}T00:00:00`);
-  return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`);
 }

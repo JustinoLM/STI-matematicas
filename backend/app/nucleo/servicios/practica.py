@@ -9,6 +9,10 @@ Flujo:
    intentos agotados) actualiza el dominio o la extensión, la experiencia y la asignación.
 4. pista: registra el nivel usado (el nivel 3 hace que el problema no cuente como acierto).
 
+Diagnóstico inicial (fase 7a): si le toca, iniciar_sesion arma una sesión de tipo "diagnostico"
+(servicios/diagnostico.py). Sus problemas son de un intento, sin pistas, sin experiencia y sin
+decir si acertó; no cuentan para el dominio.
+
 Todo el tiempo sale de `reloj` (UTC sin zona), así las pruebas pueden simular días distintos.
 """
 
@@ -21,6 +25,7 @@ from typing import Any, Callable, Optional
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tiempo import ahora_utc
 from app.models.curriculo import LeccionCurricular
 from app.models.nucleo import (
     ASIGNACION_ACTIVA,
@@ -30,10 +35,12 @@ from app.models.nucleo import (
     SESION_ABANDONADA,
     SESION_ACTIVA,
     SESION_COMPLETADA,
+    SESION_DIAGNOSTICO,
     XP_ACIERTO,
     XP_LECCION_DOMINADA,
     XP_PRACTICA,
     ZONA_EXTENSION,
+    ZONAS_FUERA_DEL_DOMINIO,
     NucleoAjusteEstudiante,
     NucleoAsignacion,
     NucleoDominio,
@@ -61,6 +68,7 @@ from app.nucleo.reparto import (
     repartir,
 )
 from app.nucleo.servicios import Prohibido, RespuestaInvalida, SaldoInsuficiente
+from app.nucleo.servicios.diagnostico import ServicioDiagnostico
 from app.nucleo.servicios.grafo import cargar_grafo
 from app.nucleo.servicios.habilitacion import PISTAS_POR_DEFECTO
 from app.nucleo.validacion import RespuestaMalFormada
@@ -102,7 +110,7 @@ class ServicioPractica:
         db: AsyncSession,
         parametros: Optional[ParametrosNucleo] = None,
         rng: Optional[random.Random] = None,
-        reloj: Callable[[], datetime] = datetime.utcnow,
+        reloj: Callable[[], datetime] = ahora_utc,
     ):
         self.db = db
         self.school = SchoolService(db)
@@ -115,6 +123,9 @@ class ServicioPractica:
             self._parametros = await cargar_parametros(self.db)
         return self._parametros
 
+    async def diagnostico(self) -> ServicioDiagnostico:
+        return ServicioDiagnostico(self.db, await self.parametros(), self.reloj)
+
     # ── Lecturas ────────────────────────────────────────────────────────────
 
     async def contexto(self, estudiante_id: int) -> Contexto:
@@ -126,11 +137,11 @@ class ServicioPractica:
         return await cargar_grafo(self.db, anio_lectivo_id)
 
     async def resultados(self, estudiante_id: int, leccion_id: Optional[str] = None) -> dict[str, list[Resultado]]:
-        """Resultados que cuentan para el dominio (sin extensión), en orden cronológico."""
+        """Resultados que cuentan para el dominio (sin extensión ni diagnóstico), en orden cronológico."""
         condiciones = [
             NucleoProblemaSesion.estudiante_id == estudiante_id,
             NucleoProblemaSesion.estado == PROBLEMA_TERMINADO,
-            NucleoProblemaSesion.zona != ZONA_EXTENSION,
+            NucleoProblemaSesion.zona.notin_(ZONAS_FUERA_DEL_DOMINIO),
         ]
         if leccion_id is not None:
             condiciones.append(NucleoProblemaSesion.leccion_id == leccion_id)
@@ -211,12 +222,19 @@ class ServicioPractica:
         await ServicioPlan(self.db, await self.parametros(), self.reloj).aplicar(anio_lectivo_id)
 
     async def iniciar_sesion(self, estudiante_id: int) -> NucleoSesion:
-        """Sesión nueva con su plan, o la activa si ya hay una."""
+        """Sesión nueva con su plan, o la activa si ya hay una. Si le toca el diagnóstico, la
+        sesión nueva es la del diagnóstico."""
         ctx = await self.contexto(estudiante_id)
         activa = await self.sesion_activa(estudiante_id)
         if activa is not None:
             return activa
         await self._aplicar_plan(ctx.anio_lectivo_id)
+        servicio_diag = await self.diagnostico()
+        diag = await servicio_diag.por_hacer(estudiante_id, ctx.anio_lectivo_id)
+        if diag is not None:
+            sesion_diag = await servicio_diag.iniciar(diag)
+            if sesion_diag is not None:
+                return sesion_diag
         try:
             plan = await self.planificar(estudiante_id, ctx.anio_lectivo_id)
         except SinLecciones:
@@ -267,11 +285,16 @@ class ServicioPractica:
         if activa is not None:
             minutos = max(int((self.reloj() - activa.fecha_inicio).total_seconds() // 60), 0)
             sesion = {
-                "sesion_id": activa.id, "estado": activa.estado,
+                "sesion_id": activa.id, "estado": activa.estado, "tipo": activa.tipo,
                 "cantidad_problemas": activa.cantidad_problemas, "progreso": activa.progreso,
                 "fecha_inicio": activa.fecha_inicio, "minutos_transcurridos": minutos,
             }
-        return {"disponible": disponible, "sesion_activa": sesion}
+        diagnostico_pendiente = False
+        if activa is not None:
+            diagnostico_pendiente = activa.tipo == SESION_DIAGNOSTICO
+        elif disponible and matricula is not None:
+            diagnostico_pendiente = await (await self.diagnostico()).tocaria(estudiante_id, matricula.anio_lectivo_id)
+        return {"disponible": disponible, "sesion_activa": sesion, "diagnostico_pendiente": diagnostico_pendiente}
 
     async def descartar(self, estudiante_id: int, sesion_id: int) -> NucleoSesion:
         """Abandona la sesión activa. El problema que quedó pendiente no se termina, así que no
@@ -279,6 +302,8 @@ class ServicioPractica:
         sesion = await self.sesion_del_estudiante(sesion_id, estudiante_id)
         if sesion.estado != SESION_ACTIVA:
             raise Conflicto("Esta sesión ya terminó.")
+        if sesion.tipo == SESION_DIAGNOSTICO:
+            raise Conflicto("El diagnóstico no se puede descartar: se retoma donde quedó.")
         sesion.estado = SESION_ABANDONADA
         sesion.fecha_fin = self.reloj()
         await self.db.flush()
@@ -317,6 +342,10 @@ class ServicioPractica:
         if pendiente is not None:
             return pendiente
 
+        if sesion.tipo == SESION_DIAGNOSTICO and sesion.progreso >= len(sesion.plan):
+            if await (await self.diagnostico()).siguiente_leccion(sesion) is None:
+                await self.db.flush()
+                return None
         item = sesion.plan[sesion.progreso]
         leccion_id = item["leccion_id"]
         p = await self.parametros()
@@ -409,6 +438,9 @@ class ServicioPractica:
             ))
         ps.intentos = numero
 
+        if sesion.tipo == SESION_DIAGNOSTICO:
+            return await self._responder_diagnostico(sesion, ps, resultado.correcto, ahora)
+
         terminado = resultado.correcto or numero >= p.intentos_por_problema
         respuesta: dict[str, Any] = {
             "correcto": resultado.correcto,
@@ -426,6 +458,22 @@ class ServicioPractica:
                 respuesta["solucion"] = solucion(problema)
         await self.db.flush()
         return respuesta
+
+    async def _responder_diagnostico(self, sesion: NucleoSesion, ps: NucleoProblemaSesion, correcto: bool,
+                                     ahora: datetime) -> dict:
+        """Un solo intento; la respuesta no dice si acertó (la pantalla no celebra ni marca)."""
+        ps.estado = PROBLEMA_TERMINADO
+        ps.fecha_fin = ahora
+        ps.correcto = correcto
+        ps.acierto = correcto
+        sesion.progreso += 1
+        await self.db.flush()
+        diag = await (await self.diagnostico()).tras_responder(sesion)
+        return {
+            "correcto": None, "huecos": {}, "intentos_restantes": 0, "problema_terminado": True,
+            "solucion": None, "experiencia_ganada": 0, "evento_dominio": None,
+            "sesion_completada": diag["terminado"], "diagnostico": diag,
+        }
 
     async def _terminar_problema(
         self, sesion: NucleoSesion, ps: NucleoProblemaSesion, correcto: bool, numero: int,
@@ -533,6 +581,8 @@ class ServicioPractica:
         sesion, ps = await self._problema_del_turno(estudiante_id, sesion_id, problema_sesion_id)
         if nivel not in (1, 2, 3):
             raise RespuestaInvalida("El nivel de pista es 1, 2 o 3.")
+        if sesion.tipo == SESION_DIAGNOSTICO:
+            raise Prohibido("En el diagnóstico no hay pistas.")
         if not (await self.pistas_habilitadas(sesion, ps.leccion_id)).get(str(nivel), True):
             raise Prohibido(f"Tu profesor deshabilitó la pista de nivel {nivel}.")
         gasto = 0

@@ -11,10 +11,11 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Optional
 
-from sqlalchemy import Date, and_, cast, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.tiempo import dia_local_sql, hoy_local
 from app.models.adaptive import (
     AlertaEstudiante,
     EstadoSesion,
@@ -131,6 +132,7 @@ class StatsService:
 
         estudiante_ids = [e.id for e, _ in rows]
         ahora = datetime.utcnow()
+        hoy = hoy_local()
 
         # 3. Alertas activas por estudiante (lote único)
         alertas_res = await self.db.execute(
@@ -147,10 +149,9 @@ class StatsService:
             alertas_por_est.setdefault(eid, []).append(tipo_str)
 
         # 4. Sesiones por estudiante por día (últimas 2 semanas, lote único)
-        # Usamos cast(fecha_fin, Date) en lugar de func.date() para que SQLAlchemy
-        # genere CAST(...) consistente tanto en el SELECT como en el GROUP BY.
+        # Día de Panamá (app/core/tiempo.py); la misma expresión en el SELECT y el GROUP BY.
         hace_14 = ahora - timedelta(days=14)
-        dia_col = cast(SesionPractica.fecha_fin, Date)
+        dia_col = dia_local_sql(SesionPractica.fecha_fin)
         sesiones_res = await self.db.execute(
             select(
                 SesionPractica.estudiante_id,
@@ -237,7 +238,7 @@ class StatsService:
             # ── Actividad individual (14 días) ────────────────────────────────
             actividad_14: list[ActividadDia] = []
             for i in range(14):
-                dia = (ahora - timedelta(days=13 - i)).date()
+                dia = hoy - timedelta(days=13 - i)
                 dia_str = str(dia)
                 n = sesiones_por_est.get(estudiante.id, {}).get(dia_str, 0)
                 actividad_14.append(ActividadDia(fecha=dia_str, sesiones=n))
@@ -330,7 +331,7 @@ class StatsService:
         # 8. Actividad grupal (últimas 2 semanas)
         actividad_grupal: list[ActividadDia] = []
         for i in range(14):
-            dia = (ahora - timedelta(days=13 - i)).date()
+            dia = hoy - timedelta(days=13 - i)
             dia_str = str(dia)
             actividad_grupal.append(
                 ActividadDia(fecha=dia_str, sesiones=sesiones_grupo_dia.get(dia_str, 0))

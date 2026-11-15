@@ -4,7 +4,10 @@ trimestre. Todo es puro: recibe una "foto del salón" ya cargada (servicios/segu
 con pocas consultas fijas) y devuelve diccionarios listos para la API.
 
 - El dominio del salón se calcula a partir del de cada estudiante; no se guarda aparte.
-- Estados visibles: dominado, en repaso (dominada con repaso pendiente), en progreso, no iniciado.
+- Estados visibles: dominado, en repaso (dominada con repaso pendiente), por confirmar (dominio
+  provisional del diagnóstico, fase 7a), en progreso, no iniciado. "Dominan" cuenta solo los
+  confirmados (dominado y en repaso). Un provisional no genera alertas: para ellas cuenta como
+  sabido; si la práctica lo retira vuelve a "en progreso" sin alerta.
 - Las alertas comparan con el salón solo para avisar al profesor; el reparto nunca las lee.
 """
 
@@ -26,9 +29,10 @@ from app.nucleo.parametros import ParametrosNucleo
 
 DOMINADO = "dominado"
 REPASO = "repaso"
+POR_CONFIRMAR = "por_confirmar"
 EN_PROGRESO = "en_progreso"
 SIN_EMPEZAR = "no_iniciado"
-ESTADOS_VISIBLES = (DOMINADO, REPASO, EN_PROGRESO, SIN_EMPEZAR)
+ESTADOS_VISIBLES = (DOMINADO, REPASO, POR_CONFIRMAR, EN_PROGRESO, SIN_EMPEZAR)
 
 MOTIVO_REFUERZO = "refuerzo_insuficiente"   # ya tuvo refuerzo del prerrequisito y sigue por debajo
 MOTIVO_SIN_REFUERZO = "sin_refuerzo"        # no hay prerrequisito que se pueda reforzar
@@ -73,13 +77,21 @@ class FotoSalon:
 def estado_visible(e: Optional[EstadoDominio], ahora: datetime, p: ParametrosNucleo) -> str:
     if e is None or e.estado == NO_INICIADO:
         return SIN_EMPEZAR
-    if e.estado in (DOMINIO_DOMINADO, DOMINIO_PROVISIONAL):
+    if e.estado == DOMINIO_PROVISIONAL:
+        return POR_CONFIRMAR
+    if e.estado == DOMINIO_DOMINADO:
         return REPASO if reglas.repaso_pendiente(e, ahora, p) else DOMINADO
     return EN_PROGRESO
 
 
 def _domina(estado: str) -> bool:
+    """Dominio confirmado (lo que cuenta en "dominan")."""
     return estado in (DOMINADO, REPASO)
+
+
+def _sabida(estado: str) -> bool:
+    """Para las alertas, el provisional cuenta como sabido."""
+    return estado in (DOMINADO, REPASO, POR_CONFIRMAR)
 
 
 def _redondear(x: Optional[float]) -> Optional[float]:
@@ -187,7 +199,7 @@ def alertas(
             motivo, pre_id, prec_pre, refuerzo = None, None, None, 0
             if prec is not None and prec < p.alerta_dificultad_umbral:
                 debiles = [pre for pre in foto.prerrequisitos.get(lec_id, ())
-                           if not _domina(estado(e.id, pre))]
+                           if not _sabida(estado(e.id, pre))]
                 for pre in debiles:
                     recibido = foto.refuerzo_reciente.get((e.id, pre), 0)
                     prec_p = reglas.precision(reglas.recientes(foto.resultados.get((e.id, pre), []), p))
@@ -221,7 +233,7 @@ def alertas(
 
         # ── Excelencia en la extensión ──────────────────────────────────────
         for (est_id, lec_id), ext in sorted(foto.extension.items()):
-            if est_id != e.id or lec_id in en_practica or _domina(estado(e.id, lec_id)):
+            if est_id != e.id or lec_id in en_practica or _sabida(estado(e.id, lec_id)):
                 continue
             if len(ext) < p.alerta_excelencia_min_problemas:
                 continue
@@ -258,7 +270,7 @@ class Periodo:
     fin: date
 
     def contiene(self, momento: datetime, p: ParametrosNucleo) -> bool:
-        return self.inicio <= reglas.fecha_local(momento, p) <= self.fin
+        return self.inicio <= reglas.fecha_local(momento) <= self.fin
 
 
 def tabla_del_periodo(
@@ -351,7 +363,8 @@ def dominio_por_camino(
             por_camino.setdefault(c, []).append(lec.id)
     return [
         {"camino": c, "total": len(ids), "dominadas": sum(_domina(estados.get(i, SIN_EMPEZAR)) for i in ids),
-         "en_progreso": sum(estados.get(i) == EN_PROGRESO for i in ids)}
+         "en_progreso": sum(estados.get(i) == EN_PROGRESO for i in ids),
+         "por_confirmar": sum(estados.get(i) == POR_CONFIRMAR for i in ids)}
         for c, ids in por_camino.items()
     ]
 

@@ -4,10 +4,11 @@ Schemas Pydantic para gamificación.
 Define contratos para tienda, medallas, puntos y personalización.
 """
 
-from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel
+
+from app.core.tiempo import FechaHora
 
 # ============================================
 # Schemas de Desbloqueables (Tienda)
@@ -31,7 +32,7 @@ class DesbloqueableResponse(DesbloqueableBase):
     
     # Información de propiedad (si el estudiante lo tiene)
     poseido: bool = False
-    fecha_compra: Optional[datetime] = None
+    fecha_compra: Optional[FechaHora] = None
     
     model_config = {"from_attributes": True}
 
@@ -93,7 +94,7 @@ class TransaccionPuntosResponse(BaseModel):
     cantidad: int
     concepto: str
     saldo_resultante: int
-    fecha: datetime
+    fecha: FechaHora
     
     model_config = {"from_attributes": True}
 
@@ -153,7 +154,7 @@ class MedallaResponse(MedallaBase):
 
     # Información de obtención
     obtenida: bool = False
-    fecha_obtencion: Optional[datetime] = None
+    fecha_obtencion: Optional[FechaHora] = None
 
     model_config = {"from_attributes": True}
 
@@ -192,7 +193,7 @@ class PersonalizacionResponse(BaseModel):
     # Efectos
     efectos_activos: List[int]
     
-    fecha_actualizacion: datetime
+    fecha_actualizacion: FechaHora
     
     model_config = {"from_attributes": True}
 

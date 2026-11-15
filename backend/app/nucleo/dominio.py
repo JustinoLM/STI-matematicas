@@ -22,9 +22,10 @@ Estados: no iniciado (sin fila) → en progreso → dominado. El diagnóstico (f
 """
 
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, Sequence
 
+from app.core import tiempo
 from app.models.nucleo import (
     DOMINIO_DOMINADO,
     DOMINIO_EN_PROGRESO,
@@ -55,8 +56,8 @@ class EstadoDominio:
     repaso_desde: Optional[datetime] = None
 
 
-def fecha_local(momento: datetime, p: ParametrosNucleo) -> date:
-    return (momento + timedelta(hours=p.desfase_horario_horas)).date()
+# La fecha de Panamá sale de un solo lugar (app/core/tiempo.py).
+fecha_local = tiempo.fecha_local
 
 
 def precision(resultados: Sequence[Resultado]) -> Optional[float]:
@@ -76,7 +77,7 @@ def cumple_regla_dominio(resultados: Sequence[Resultado], p: ParametrosNucleo) -
         return False
     if precision(ventana) < p.umbral_dominio:
         return False
-    return len({fecha_local(r.fecha, p) for r in ventana}) >= p.dias_distintos_dominio
+    return len({fecha_local(r.fecha) for r in ventana}) >= p.dias_distintos_dominio
 
 
 def repaso_vencido(e: EstadoDominio, ahora: datetime, p: ParametrosNucleo) -> bool:

@@ -43,6 +43,7 @@ from app.nucleo.modos import ModoRespuesta
 from app.nucleo.problema import HuecoNumero, HuecoOpcion, problema_desde_dict, solucion
 from app.nucleo.registro import GENERADORES
 from app.nucleo.servicios import Prohibido, RespuestaInvalida
+from app.nucleo.servicios.diagnostico import ServicioDiagnostico
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
 from app.nucleo.servicios.practica import ServicioPractica
 from app.services.curriculo_service import cargar_programa, leer_programa
@@ -52,6 +53,14 @@ from tests.salones_helpers import crear_organizacion, salon_con_estudiantes
 from tests.test_organizacion_escolar import _estudiante, _org, _profesor, _salon
 
 pytestmark = pytest.mark.db
+
+
+@pytest.fixture(autouse=True)
+def _sin_diagnostico_automatico(monkeypatch):
+    """Estas pruebas son de la práctica: el diagnóstico inicial se prueba en test_nucleo_diagnostico.py."""
+    async def nunca(self, estudiante_id):
+        return False
+    monkeypatch.setattr(ServicioDiagnostico, "_corresponde_automatico", nunca)
 
 L01 = "g1-u03-l01"   # Sumemos de forma horizontal (generador real)
 L02 = "g1-u03-l02"   # Restemos de forma horizontal: depende de L01 (generador de prueba)
@@ -192,7 +201,7 @@ async def test_estado_y_sesion_a_medias():
         est, _, _ = await preparar(db, habilitar=())
         reloj = Reloj()
         serv = ServicioPractica(db, rng=random.Random(3), reloj=reloj)
-        assert await serv.estado(est.id) == {"disponible": False, "sesion_activa": None}
+        assert await serv.estado(est.id) == {"disponible": False, "sesion_activa": None, "diagnostico_pendiente": False}
 
         est2, _, _ = await preparar(db)
         assert (await serv.estado(est2.id))["disponible"] is True
@@ -544,7 +553,7 @@ async def test_api_del_nucleo_de_punta_a_punta():
 
         # Sin lecciones habilitadas no hay sesión ni práctica disponible; sin salón, 403
         r = await c.get("/api/nucleo/estado", headers=HE2)
-        assert r.status_code == 200 and r.json() == {"disponible": False, "sesion_activa": None}
+        assert r.status_code == 200 and r.json() == {"disponible": False, "sesion_activa": None, "diagnostico_pendiente": False}
         assert (await c.get("/api/nucleo/estado", headers=HE)).json()["disponible"] is False
         assert (await c.post("/api/nucleo/sesiones", headers=HE)).status_code == 409
         assert (await c.post("/api/nucleo/sesiones", headers=HE2)).status_code == 403

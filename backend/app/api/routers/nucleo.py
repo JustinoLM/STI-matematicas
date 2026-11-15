@@ -34,6 +34,11 @@ Seguimiento (fase 6b):
 - DELETE /anios/{anio_id}/plan/manual/{leccion_id}       Devolver una lección al plan
 - GET    /anios/{anio_id}/estudiantes/{estudiante_id}/dominio   Dominio de un estudiante
 
+Diagnóstico inicial (fase 7a; el del estudiante corre por las mismas rutas de sesión):
+- POST   /anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico           Pedir que lo repita
+- POST   /anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico/cerrar    Cerrar con lo obtenido
+- POST   /anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico/cancelar  Cancelar sin aplicar nada
+
 Los errores de reglas responden con {"detail", "codigo"} (manejador de ErrorSalon).
 """
 
@@ -42,6 +47,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, status
 
 from app.api.dependencies import CurrentStudent, CurrentStudentConSalon, CurrentTeacher, DBSession
+from app.models.nucleo import SESION_DIAGNOSTICO
 from app.nucleo.problema import problema_a_dict, problema_desde_dict
 from app.nucleo.registro import tiene_generador
 from app.nucleo.servicios.grafo import prerrequisitos_efectivos
@@ -75,7 +81,7 @@ router = APIRouter()
 
 
 def _sesion_out(s) -> SesionOut:
-    return SesionOut(sesion_id=s.id, estado=s.estado, cantidad_problemas=s.cantidad_problemas,
+    return SesionOut(sesion_id=s.id, estado=s.estado, tipo=s.tipo, cantidad_problemas=s.cantidad_problemas,
                      progreso=s.progreso, fecha_inicio=s.fecha_inicio)
 
 
@@ -105,6 +111,15 @@ async def siguiente(sesion_id: int, db: DBSession, estudiante: CurrentStudentCon
         return ProblemaOut(sesion_completada=True)
     p = await servicio.parametros()
     sesion = await servicio.sesion_del_estudiante(sesion_id, estudiante.id)
+    if sesion.tipo == SESION_DIAGNOSTICO:
+        servicio_diag = await servicio.diagnostico()
+        estado_diag = await servicio_diag.calcular(await servicio_diag.de_la_sesion(sesion.id))
+        return ProblemaOut(
+            sesion_completada=False, problema_sesion_id=ps.id, orden=ps.orden,
+            problema=problema_a_dict(problema_desde_dict(ps.problema), incluir_respuestas=False),
+            intentos_restantes=1, pistas_habilitadas={"1": False, "2": False, "3": False},
+            diagnostico=True, avance=estado_diag.avance(p),
+        )
     return ProblemaOut(
         sesion_completada=False,
         problema_sesion_id=ps.id,
@@ -277,3 +292,20 @@ async def guardar_plan(anio_id: int, datos: PlanIn, db: DBSession, profesor: Cur
 @router.delete("/anios/{anio_id}/plan/manual/{leccion_id}")
 async def devolver_al_plan(anio_id: int, leccion_id: str, db: DBSession, profesor: CurrentTeacher):
     return await ServicioPlan(db).devolver_al_plan(anio_id, profesor.id, leccion_id)
+
+
+# ─── Diagnóstico (profesor) ──────────────────────────────────────────────────
+
+@router.post("/anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico")
+async def pedir_diagnostico(anio_id: int, estudiante_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioSeguimiento(db).diagnostico(anio_id, profesor.id, estudiante_id, "pedir")
+
+
+@router.post("/anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico/cerrar")
+async def cerrar_diagnostico(anio_id: int, estudiante_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioSeguimiento(db).diagnostico(anio_id, profesor.id, estudiante_id, "cerrar")
+
+
+@router.post("/anios/{anio_id}/estudiantes/{estudiante_id}/diagnostico/cancelar")
+async def cancelar_diagnostico(anio_id: int, estudiante_id: int, db: DBSession, profesor: CurrentTeacher):
+    return await ServicioSeguimiento(db).diagnostico(anio_id, profesor.id, estudiante_id, "cancelar")

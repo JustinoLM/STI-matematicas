@@ -95,7 +95,7 @@ def test_los_dias_son_de_panama():
     a = datetime(2026, 11, 12, 3, 0)
     b = datetime(2026, 11, 12, 6, 0)
     assert a.date() == b.date()
-    assert fecha_local(a, P) != fecha_local(b, P)
+    assert fecha_local(a) != fecha_local(b)
     resultados = serie("11111", a - timedelta(minutes=5)) + serie("11111", b)
     assert cumple_regla_dominio(resultados, P)
 

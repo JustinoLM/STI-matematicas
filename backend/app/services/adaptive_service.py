@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from fastapi import HTTPException, status
 
 from app.core.respuestas import respuesta_es_correcta
+from app.core.tiempo import a_iso_utc
 from app.models.adaptive import (
     EstadoDiagnostico,
     EstadoSesion,
@@ -692,7 +693,7 @@ class AdaptiveService:
         # que SQLAlchemy detecte el cambio en la columna JSON)
         if cambios:
             historial = list(perfil.historial_promociones or [])
-            ahora = datetime.utcnow().isoformat()
+            ahora = a_iso_utc(datetime.utcnow())
             historial.extend(
                 {
                     "fecha": ahora,

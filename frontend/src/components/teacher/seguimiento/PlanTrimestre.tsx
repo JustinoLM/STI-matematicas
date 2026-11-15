@@ -9,6 +9,7 @@ import { Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { LeccionSalon, PlanTrimestres } from '@/types/nucleo';
 import { nombreLeccion } from '@/lib/leccionesSalon';
+import { formatearFecha } from '@/lib/fechas';
 
 interface Props {
   catalogo: LeccionSalon[];
@@ -19,7 +20,7 @@ interface Props {
   onDevolver: (leccionId: string) => void;
 }
 
-const fecha = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('es-PA', { day: 'numeric', month: 'short' });
+const fecha = (iso: string) => formatearFecha(iso);
 
 export function PlanTrimestre({ catalogo, plan, gradoSalon, soloLectura, onGuardar, onDevolver }: Props) {
   const [borrador, setBorrador] = useState<Record<string, number[]>>(plan.plan);

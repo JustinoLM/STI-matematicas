@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { TrendingUp, Target, Clock, Loader2, Lock, RefreshCw } from 'lucide-react';
 import { studentService } from '@/services/studentService';
 import { useThemeStore } from '@/store/themeStore';
+import { diaLocalHace, formatearFecha, hoyLocal } from '@/lib/fechas';
 
 // ─── Tipos de stats ───────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ function formatSegundos(segundos: number): string {
 export function ProgressPage() {
   const navigate = useNavigate();
   const { temaActivoId } = useThemeStore();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
 
   // Mensaje motivacional LLM — queryKey incluye fecha Y temaActivoId para que al
   // cambiar de tema se genere un nuevo mensaje acorde a la temática activa.
@@ -305,9 +306,7 @@ export function ProgressPage() {
                 const maxSesiones = Math.max(...data, 1);
                 const altura = Math.round((sesiones / maxSesiones) * 100);
                 const diasAtras = 6 - i;
-                const fecha = new Date();
-                fecha.setDate(fecha.getDate() - diasAtras);
-                const diaSemana = fecha.toLocaleDateString('es-ES', { weekday: 'short' });
+                const diaSemana = formatearFecha(diaLocalHace(diasAtras), { weekday: 'short' }, 'es-ES');
 
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1">

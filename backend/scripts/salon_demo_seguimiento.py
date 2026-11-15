@@ -267,6 +267,7 @@ _BORRAR_NUCLEO = [
     "DELETE FROM nucleo_intento WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_experiencia WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_problema_sesion WHERE estudiante_id = ANY(:e)",
+    "DELETE FROM nucleo_diagnostico WHERE estudiante_id = ANY(:e) OR anio_lectivo_id = ANY(:a)",
     "DELETE FROM nucleo_sesion WHERE estudiante_id = ANY(:e) OR anio_lectivo_id = ANY(:a)",
     "DELETE FROM nucleo_dominio WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_extension WHERE estudiante_id = ANY(:e)",
@@ -291,34 +292,7 @@ async def borrar() -> int:
             print("No hay nada que borrar.")
             return 0
         p = {"e": ests or [0], "a": anios or [0]}
-        for sql in _BORRAR_NUCLEO:
-            await db.execute(text(sql), p)
-
-        # Lo demás que apunte a estos estudiantes o años lectivos (decimales, gamificación, grupos…):
-        # se borra en rondas hasta que no queden dependencias.
-        fks = (await db.execute(text("""
-            SELECT tc.table_name, kcu.column_name, ccu.table_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-            JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-              AND ccu.table_name IN ('estudiante', 'usuario', 'anio_lectivo')
-              AND tc.table_name NOT IN ('estudiante', 'profesor', 'anio_lectivo')
-        """))).tuples().all()
-        pendientes = [(t, c, "e" if ref in ("estudiante", "usuario") else "a") for t, c, ref in fks]
-        for _ in range(5):
-            fallidas = []
-            for tabla, columna, clave in pendientes:
-                try:
-                    async with db.begin_nested():
-                        await db.execute(text(f'DELETE FROM "{tabla}" WHERE "{columna}" = ANY(:v)'), {"v": p[clave]})
-                except Exception:
-                    fallidas.append((tabla, columna, clave))
-            if not fallidas:
-                break
-            pendientes = fallidas
-        else:
-            print(f"No se pudieron borrar: {pendientes}", file=sys.stderr)
+        if not await borrar_dependencias(db, p):
             await db.rollback()
             return 1
 
@@ -329,6 +303,39 @@ async def borrar() -> int:
         await db.commit()
         print(f"Borrados {len(ests)} estudiantes {PREFIJO}*, {len(salones)} salones y {len(anios)} años lectivos de prueba.")
         return 0
+
+
+async def borrar_dependencias(db, p: dict) -> bool:
+    """Borra lo del núcleo y todo lo que apunte a los estudiantes `p["e"]` o a los años lectivos
+    `p["a"]` (decimales, gamificación, grupos…), en rondas hasta que no queden dependencias.
+    No borra los estudiantes, los años ni los salones. También lo usa estudiante_prueba_7a.py."""
+    for sql in _BORRAR_NUCLEO:
+        await db.execute(text(sql), p)
+    fks = (await db.execute(text("""
+        SELECT tc.table_name, kcu.column_name, ccu.table_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+        JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND ccu.table_name IN ('estudiante', 'usuario', 'anio_lectivo')
+          AND tc.table_name NOT IN ('estudiante', 'profesor', 'anio_lectivo')
+    """))).tuples().all()
+    pendientes = [(t, c, "e" if ref in ("estudiante", "usuario") else "a") for t, c, ref in fks]
+    for _ in range(5):
+        fallidas = []
+        for tabla, columna, clave in pendientes:
+            try:
+                async with db.begin_nested():
+                    await db.execute(text(f'DELETE FROM "{tabla}" WHERE "{columna}" = ANY(:v)'), {"v": p[clave]})
+            except Exception:
+                fallidas.append((tabla, columna, clave))
+        if not fallidas:
+            break
+        pendientes = fallidas
+    else:
+        print(f"No se pudieron borrar: {pendientes}", file=sys.stderr)
+        return False
+    return True
 
 
 def main() -> int:

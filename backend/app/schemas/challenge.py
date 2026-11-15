@@ -2,10 +2,11 @@
 Schemas Pydantic para desafíos desde la perspectiva del estudiante.
 """
 
-from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
+
+from app.core.tiempo import FechaHora
 
 
 class ContribuidorInfo(BaseModel):
@@ -33,8 +34,8 @@ class DesafioEstudianteResponse(BaseModel):
     parametro_adicional: Optional[int] = None   # Parámetro Y según tipo
     recompensa_texto: Optional[str] = None
     recompensa_puntos: Optional[int] = None      # Puntos a ganar al completar
-    fecha_creacion: datetime
-    fecha_limite: Optional[datetime] = None
+    fecha_creacion: FechaHora
+    fecha_limite: Optional[FechaHora] = None
     completado: bool
 
     # Progreso del equipo del estudiante (grupo_id None = el salón completo)

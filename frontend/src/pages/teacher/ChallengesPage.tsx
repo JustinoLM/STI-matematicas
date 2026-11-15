@@ -42,10 +42,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { fechaDelServidor, formatearFecha } from '@/lib/fechas';
 
 /** Días restantes hasta fecha límite (negativo = vencido hace N días). */
 function diasRestantes(fechaLimite: string): number {
-  const diff = new Date(fechaLimite).getTime() - Date.now();
+  const diff = fechaDelServidor(fechaLimite).getTime() - Date.now();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
@@ -323,12 +324,12 @@ export function ChallengesPage() {
                             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                               <span className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                Creado: {new Date(desafio.fecha_creacion).toLocaleDateString('es-ES')}
+                                Creado: {formatearFecha(desafio.fecha_creacion, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                               </span>
                               {desafio.fecha_limite && (
                                 <span className={`flex items-center gap-1 ${vencido ? 'text-orange-600 font-medium' : ''}`}>
                                   <Calendar className="h-4 w-4" />
-                                  Límite: {new Date(desafio.fecha_limite).toLocaleDateString('es-ES')}
+                                  Límite: {formatearFecha(desafio.fecha_limite, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                                 </span>
                               )}
                             </div>

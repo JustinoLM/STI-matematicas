@@ -25,6 +25,7 @@ import {
 import { CanvasAnimationModal } from '@/components/practice/CanvasAnimationModal';
 import { studentService, type AnimacionGuardadaResponse } from '@/services/studentService';
 import type { Operacion } from '@/types';
+import { formatearFecha } from '@/lib/fechas';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -51,11 +52,7 @@ const SIMBOLO: Record<string, string> = {
 
 function formatFecha(isoStr: string): string {
   try {
-    return new Date(isoStr).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    return formatearFecha(isoStr, { day: 'numeric', month: 'short', year: 'numeric' }, 'es-ES');
   } catch {
     return isoStr;
   }

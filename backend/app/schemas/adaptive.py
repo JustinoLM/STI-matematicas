@@ -4,11 +4,12 @@ Schemas Pydantic para sistema adaptativo y machine learning.
 Define contratos para diagnóstico, perfiles, sesiones y recomendaciones.
 """
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer
+
+from app.core.tiempo import FechaHora
 
 # ============================================
 # Schemas de Diagnóstico
@@ -132,7 +133,7 @@ class PerfilResponse(BaseModel):
     umbral_promocion: int
     
     # Actividad
-    ultima_actividad: datetime
+    ultima_actividad: FechaHora
     dias_sin_practicar: int
 
     # Diagnóstico
@@ -163,7 +164,7 @@ class SesionActivaResponse(BaseModel):
     operaciones_incluidas: Dict[str, int]
     nivel_actual: int
     minutos_transcurridos: int
-    fecha_inicio: datetime
+    fecha_inicio: FechaHora
 
 
 class SesionStartResponse(BaseModel):

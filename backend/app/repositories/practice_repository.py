@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import and_, case, desc, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tiempo import dia_local_sql, hoy_local
 from app.models.adaptive import EstadoSesion, SesionPractica
 from app.models.error import ErrorComun, EstudianteError
 from app.models.problem import Intento, Problema
@@ -280,14 +281,14 @@ class PracticeRepository:
         Cuenta desde hoy hacia atrás mientras haya al menos una sesión por día.
         """
         result = await self.db.execute(
-            select(func.date(SesionPractica.fecha_inicio).label('fecha'))
+            select(dia_local_sql(SesionPractica.fecha_inicio).label('fecha'))
             .where(
                 and_(
                     SesionPractica.estudiante_id == estudiante_id,
                     SesionPractica.estado == EstadoSesion.COMPLETADA
                 )
             )
-            .group_by(func.date(SesionPractica.fecha_inicio))
+            .group_by(dia_local_sql(SesionPractica.fecha_inicio))
             .order_by(desc('fecha'))
         )
         
@@ -298,7 +299,7 @@ class PracticeRepository:
         
         # Contar días consecutivos desde hoy
         dias_consecutivos = 0
-        fecha_esperada = datetime.utcnow().date()
+        fecha_esperada = hoy_local()
         
         for fecha in fechas:
             if fecha == fecha_esperada:

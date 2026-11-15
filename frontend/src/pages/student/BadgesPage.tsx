@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Trophy, Lock, Star, Loader2, Sparkles } from 'lucide-react';
 import { studentService, type MedallaItem } from '@/services/studentService';
+import { formatearFecha } from '@/lib/fechas';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -89,9 +90,7 @@ function MedallaCard({
           <p className="text-sm text-gray-600 mb-3">{medalla.descripcion}</p>
           {medalla.fecha_obtencion && (
             <p className="text-xs text-gray-500">
-              {new Date(medalla.fecha_obtencion).toLocaleDateString('es-ES', {
-                day: 'numeric', month: 'long', year: 'numeric',
-              })}
+              {formatearFecha(medalla.fecha_obtencion, { day: 'numeric', month: 'long', year: 'numeric' }, 'es-ES')}
             </p>
           )}
         </CardContent>
@@ -125,9 +124,7 @@ function MedallaCard({
         <p className="text-sm text-gray-600 mb-3">{medalla.descripcion}</p>
         {medalla.obtenida && medalla.fecha_obtencion && (
           <p className="text-xs text-gray-500">
-            {new Date(medalla.fecha_obtencion).toLocaleDateString('es-ES', {
-              day: 'numeric', month: 'long', year: 'numeric',
-            })}
+            {formatearFecha(medalla.fecha_obtencion, { day: 'numeric', month: 'long', year: 'numeric' }, 'es-ES')}
           </p>
         )}
         {medalla.obtenida && (

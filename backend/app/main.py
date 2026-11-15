@@ -37,6 +37,7 @@ from app.api.routers import (
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.logging_config import configurar_logging
+from app.core.tiempo import registrar_codificador
 from app.services.ml_service import ml_service
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 from app.services.school_service import ErrorSalon
@@ -46,6 +47,7 @@ configurar_logging(
     nivel=settings.LOG_LEVEL,
 )
 logger = logging.getLogger("sti")
+registrar_codificador()
 
 
 def urls_documentacion(entorno: str) -> dict:

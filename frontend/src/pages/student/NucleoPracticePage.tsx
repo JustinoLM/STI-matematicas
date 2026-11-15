@@ -10,6 +10,11 @@
  *    (fase 5b); el aviso queda para cuando se entra con una sesión abierta.
  * 2. Problema → (intentos) → pantalla entre problemas → siguiente problema.
  * 3. Al final, el resumen. Salir a mitad deja la sesión activa para retomarla.
+ *
+ * Diagnóstico inicial (fase 7a): si /estado dice diagnostico_pendiente, primero un mensaje amable
+ * (o "Seguimos donde quedamos" si quedó a medias; no se puede descartar). Usa la misma pantalla de
+ * problema, pero con un solo intento, sin pistas y sin corrección: entre problemas solo "¡Gracias!",
+ * y una barra de avance sin conteos. Al terminar, "¡Listo! Ya sé por dónde empezar" y a practicar.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +25,7 @@ import { AvisoSesionAMedias } from '@/components/nucleo/AvisoSesionAMedias';
 import { EntreProblemas } from '@/components/nucleo/EntreProblemas';
 import { ProblemaNucleo } from '@/components/nucleo/ProblemaNucleo';
 import { ResumenSesion, type ResultadoProblema } from '@/components/nucleo/ResumenSesion';
+import { BarraAvance, EntreDiagnostico, FinDiagnostico, IntroDiagnostico } from '@/components/nucleo/Diagnostico';
 import { getErrorMessage } from '@/services/api';
 import { CLAVE_ESTADO_NUCLEO, nucleoService } from '@/services/nucleoService';
 import { useThemeStore } from '@/store/themeStore';
@@ -29,6 +35,9 @@ import { iconoDelTema } from '@/utils/nucleo/iconos';
 type Fase =
   | { tipo: 'cargando' }
   | { tipo: 'aviso'; sesion: SesionActivaNucleo }
+  | { tipo: 'intro-diagnostico'; retomando: boolean }
+  | { tipo: 'entre-diagnostico'; resultado: ResultadoRespuesta }
+  | { tipo: 'fin-diagnostico' }
   | { tipo: 'sin-lecciones' }
   | { tipo: 'problema'; turno: ProblemaTurno & { problema: Problema; problema_sesion_id: number } }
   | { tipo: 'entre'; resultado: ResultadoRespuesta; problema: Problema }
@@ -43,10 +52,12 @@ export function NucleoPracticePage() {
   const retomar = (location.state as { retomar?: boolean } | null)?.retomar === true;
 
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
-  const [sesion, setSesion] = useState<{ id: number; cantidad: number; progreso: number } | null>(null);
+  const [sesion, setSesion] = useState<{ id: number; cantidad: number; progreso: number; diagnostico: boolean } | null>(null);
+  const [avance, setAvance] = useState(0);
   const [resultados, setResultados] = useState<ResultadoProblema[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const iniciado = useRef(false);
+  const esDiagnostico = useRef(false);
 
   const fallar = (e: unknown) => setFase({ tipo: 'error', mensaje: getErrorMessage(e) });
 
@@ -55,9 +66,10 @@ export function NucleoPracticePage() {
     try {
       const turno = await nucleoService.siguiente(sesionId);
       if (turno.sesion_completada || !turno.problema || turno.problema_sesion_id == null) {
-        setFase({ tipo: 'resumen' });
+        setFase({ tipo: esDiagnostico.current ? 'fin-diagnostico' : 'resumen' });
         return;
       }
+      if (turno.diagnostico && turno.avance != null) setAvance(turno.avance);
       setSesion(s => (s ? { ...s, progreso: turno.orden ?? s.progreso } : s));
       setFase({ tipo: 'problema', turno: turno as ProblemaTurno & { problema: Problema; problema_sesion_id: number } });
     } catch (e) {
@@ -70,7 +82,9 @@ export function NucleoPracticePage() {
     setFase({ tipo: 'cargando' });
     try {
       const s = await nucleoService.iniciar();
-      setSesion({ id: s.sesion_id, cantidad: s.cantidad_problemas, progreso: s.progreso });
+      esDiagnostico.current = s.tipo === 'diagnostico';
+      setSesion({ id: s.sesion_id, cantidad: s.cantidad_problemas, progreso: s.progreso, diagnostico: esDiagnostico.current });
+      setAvance(0);
       setResultados([]);
       queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
       // Si se recarga la página, se retoma esta sesión sin preguntar
@@ -88,7 +102,9 @@ export function NucleoPracticePage() {
       if (retomar) return empezar();
       try {
         const estado = await nucleoService.estado();
-        if (estado.sesion_activa) setFase({ tipo: 'aviso', sesion: estado.sesion_activa });
+        if (estado.sesion_activa?.tipo === 'diagnostico') setFase({ tipo: 'intro-diagnostico', retomando: true });
+        else if (estado.sesion_activa) setFase({ tipo: 'aviso', sesion: estado.sesion_activa });
+        else if (estado.disponible && estado.diagnostico_pendiente) setFase({ tipo: 'intro-diagnostico', retomando: false });
         else if (!estado.disponible) setFase({ tipo: 'sin-lecciones' });
         else await empezar();
       } catch (e) {
@@ -110,7 +126,17 @@ export function NucleoPracticePage() {
   };
 
   const alTerminarProblema = (resultado: ResultadoRespuesta, problema: Problema) => {
-    setResultados(r => [...r, { correcto: resultado.correcto, experiencia: resultado.experiencia_ganada }]);
+    if (sesion?.diagnostico) {
+      if (resultado.diagnostico) setAvance(resultado.diagnostico.avance);
+      if (resultado.sesion_completada) {
+        queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
+        setFase({ tipo: 'fin-diagnostico' });
+      } else {
+        setFase({ tipo: 'entre-diagnostico', resultado });
+      }
+      return;
+    }
+    setResultados(r => [...r, { correcto: resultado.correcto === true, experiencia: resultado.experiencia_ganada }]);
     setFase({ tipo: 'entre', resultado, problema });
   };
 
@@ -129,6 +155,7 @@ export function NucleoPracticePage() {
   };
 
   const enPractica = fase.tipo === 'problema' || fase.tipo === 'entre';
+  const enDiagnostico = !!sesion?.diagnostico && (fase.tipo === 'problema' || fase.tipo === 'entre-diagnostico');
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-6rem)] w-full max-w-4xl flex-col px-4 py-3 md:landscape:max-w-6xl">
@@ -142,7 +169,8 @@ export function NucleoPracticePage() {
         >
           <X className="h-9 w-9" />
         </button>
-        {enPractica && sesion && (
+        {enDiagnostico && <BarraAvance avance={avance} />}
+        {enPractica && sesion && !sesion.diagnostico && (
           <span className="rounded-full bg-white/80 px-5 py-2 text-xl font-semibold text-slate-600" data-testid="contador">
             {Math.min(sesion.progreso + 1, sesion.cantidad)} de {sesion.cantidad}
           </span>
@@ -161,6 +189,16 @@ export function NucleoPracticePage() {
             onDescartar={() => descartarYEmpezar(fase.sesion.sesion_id)}
           />
         )}
+
+        {fase.tipo === 'intro-diagnostico' && (
+          <IntroDiagnostico retomando={fase.retomando} onEmpezar={empezar} />
+        )}
+
+        {fase.tipo === 'entre-diagnostico' && sesion && (
+          <EntreDiagnostico onSiguiente={() => cargarSiguiente(sesion.id)} />
+        )}
+
+        {fase.tipo === 'fin-diagnostico' && <FinDiagnostico onPracticar={empezar} onInicio={salir} />}
 
         {fase.tipo === 'sin-lecciones' && (
           <p className="text-center text-2xl text-slate-700">

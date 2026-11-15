@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatearFechaHora } from '@/lib/fechas';
 
 export default function AlertsPage() {
   const [selectedTab, setSelectedTab] = useState<'all' | 'alta' | 'media' | 'baja'>('all');
@@ -189,12 +190,7 @@ export default function AlertsPage() {
 
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">
-                              {new Date(alerta.fecha_creacion).toLocaleDateString('es-ES', {
-                                day: 'numeric',
-                                month: 'short',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                              {formatearFechaHora(alerta.fecha_creacion, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, 'es-ES')}
                             </span>
                             <Link to={`/teacher/students/${alerta.estudiante_id}`}>
                               <Button variant="outline" size="sm">

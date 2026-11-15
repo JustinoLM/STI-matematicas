@@ -137,9 +137,13 @@ export interface EventoNucleo {
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
+export type TipoSesionNucleo = 'practica' | 'diagnostico';
+
 export interface SesionNucleo {
   sesion_id: number;
   estado: string;
+  /** "diagnostico": diagnóstico inicial (fase 7a) */
+  tipo?: TipoSesionNucleo;
   cantidad_problemas: number;
   progreso: number;
   fecha_inicio?: string | null;
@@ -152,6 +156,8 @@ export interface SesionActivaNucleo extends SesionNucleo {
 export interface EstadoNucleo {
   disponible: boolean;
   sesion_activa: SesionActivaNucleo | null;
+  /** Al entrar a practicar empieza (o sigue) el diagnóstico inicial */
+  diagnostico_pendiente?: boolean;
 }
 
 export interface ProblemaTurno {
@@ -161,6 +167,10 @@ export interface ProblemaTurno {
   problema?: Problema | null;
   intentos_restantes?: number | null;
   pistas_habilitadas?: Record<string, boolean> | null;
+  /** Problema del diagnóstico: un intento, sin pistas, sin corrección */
+  diagnostico?: boolean;
+  /** Diagnóstico: avance entre 0 y 1 (sin conteos) */
+  avance?: number | null;
 }
 
 export interface EnvioRespuesta {
@@ -171,7 +181,8 @@ export interface EnvioRespuesta {
 }
 
 export interface ResultadoRespuesta {
-  correcto: boolean;
+  /** null en el diagnóstico: no se dice si acertó */
+  correcto: boolean | null;
   huecos: Record<string, boolean>;
   intentos_restantes: number;
   problema_terminado: boolean;
@@ -179,6 +190,7 @@ export interface ResultadoRespuesta {
   experiencia_ganada: number;
   evento_dominio: string | null;
   sesion_completada: boolean;
+  diagnostico?: { terminado: boolean; avance: number } | null;
 }
 
 // ─── Profesor: lecciones del salón (fase 6a) ─────────────────────────────────
@@ -243,7 +255,9 @@ export interface AjusteEstudiante {
 
 // ─── Profesor: seguimiento (fase 6b) ─────────────────────────────────────────
 
-export type EstadoVisible = 'dominado' | 'repaso' | 'en_progreso' | 'no_iniciado';
+/** por_confirmar: dominio provisional del diagnóstico inicial (fase 7a) */
+export type EstadoVisible = 'dominado' | 'repaso' | 'por_confirmar' | 'en_progreso' | 'no_iniciado';
+export type EstadoDiagnostico = 'pendiente' | 'en_curso' | 'terminado' | 'cerrado' | 'cancelado';
 
 export interface FilaAvanceLeccion {
   leccion_id: string;
@@ -294,6 +308,8 @@ export interface Seguimiento {
   alertas_dificultad: number;
   alertas_excelencia: number;
   periodo: { numero: number; inicio: string; fin: string; por_leccion: FilaPeriodo[] } | null;
+  /** estudiante → diagnóstico pendiente o en curso */
+  diagnosticos?: Record<string, 'pendiente' | 'en_curso'>;
 }
 
 export type TipoAlerta = 'dificultad' | 'excelencia';
@@ -349,17 +365,47 @@ export interface FichaEstudiante {
   periodo: { numero: number; inicio: string; fin: string } | null;
   banco_forzado: boolean;
   lecciones: FichaLeccion[];
-  por_camino: { camino: string; nombre: string; total: number; dominadas: number; en_progreso: number }[];
+  por_camino: { camino: string; nombre: string; total: number; dominadas: number; en_progreso: number; por_confirmar?: number }[];
   errores: { codigo: string; descripcion: string; camino: string | null; camino_nombre: string | null; veces: number }[];
   asignaciones: AsignacionNucleo[];
+  diagnostico?: DiagnosticoFicha | null;
   sesiones: {
-    id: number; estado: string; fecha_inicio: string; fecha_fin: string | null;
+    id: number; estado: string; tipo?: TipoSesionNucleo; fecha_inicio: string; fecha_fin: string | null;
     problemas: number; cantidad_problemas: number; aciertos: number;
   }[];
   anios_anteriores: {
     anio_lectivo_id: number; anio: number; salon: string; grado: number;
     problemas: number; aciertos: number; lecciones_dominadas: number;
   }[];
+}
+
+export interface DiagnosticoLeccion {
+  leccion_id: string;
+  titulo: string;
+  grado: number | null;
+  unidad_numero: number | null;
+  leccion_numero: number | null;
+  decision: 'sabida' | 'no_sabida' | 'sin_decidir';
+  /** probada, inferida (por el grafo) o previa (ya la dominaba) */
+  origen: 'probada' | 'inferida' | 'previa' | null;
+  aciertos: number;
+  problemas: number;
+  aplicada?: boolean;
+  /** Qué pasó después con el provisional */
+  seguimiento: 'por_confirmar' | 'confirmado' | 'retirado' | null;
+}
+
+export interface DiagnosticoFicha {
+  id: number;
+  estado: EstadoDiagnostico;
+  origen: 'automatico' | 'profesor';
+  motivo_fin: 'completo' | 'tope_problemas' | 'tope_tiempo' | 'sin_lecciones' | null;
+  fecha_creacion: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  problemas: number;
+  minutos: number;
+  lecciones: DiagnosticoLeccion[];
 }
 
 export interface PlanTrimestres {

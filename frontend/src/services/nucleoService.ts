@@ -11,6 +11,7 @@ import type {
   ConfigLeccion,
   EnvioRespuesta,
   EstadoNucleo,
+  DiagnosticoFicha,
   FichaEstudiante,
   LeccionSalon,
   PlanTrimestres,
@@ -159,6 +160,12 @@ export const nucleoProfesorService = {
 
   guardarPlan(anioId: number, plan: Record<string, number[]>): Promise<PlanTrimestres> {
     return llamar(() => apiClient.put<PlanTrimestres>(`/nucleo/anios/${anioId}/plan`, { plan }));
+  },
+
+  /** Diagnóstico inicial (fase 7a): pedir que lo repita, cerrarlo con lo obtenido o cancelarlo */
+  diagnostico(anioId: number, estudianteId: number, accion: 'pedir' | 'cerrar' | 'cancelar'): Promise<DiagnosticoFicha> {
+    const base = `/nucleo/anios/${anioId}/estudiantes/${estudianteId}/diagnostico`;
+    return llamar(() => apiClient.post<DiagnosticoFicha>(accion === 'pedir' ? base : `${base}/${accion}`));
   },
 
   devolverAlPlan(anioId: number, leccionId: string): Promise<PlanTrimestres> {

@@ -3,22 +3,34 @@
  * trimestre, más los textos de las alertas.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as renderBase, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TablaAvance } from '@/components/teacher/seguimiento/TablaAvance';
 import { ListaAlertas } from '@/components/teacher/seguimiento/ListaAlertas';
 import { FichaEstudiante } from '@/components/teacher/seguimiento/FichaEstudiante';
 import { PlanTrimestre } from '@/components/teacher/seguimiento/PlanTrimestre';
-import { agruparAvance, textoAlerta, fechaDelServidor } from '@/lib/seguimiento';
-import type { AlertaNucleo, FichaEstudiante as Ficha, FilaAvanceLeccion, Seguimiento } from '@/types/nucleo';
+import { agruparAvance, textoAlerta } from '@/lib/seguimiento';
+import type {
+  AlertaNucleo, DiagnosticoFicha, DiagnosticoLeccion, FichaEstudiante as Ficha, FilaAvanceLeccion, Seguimiento,
+} from '@/types/nucleo';
+import { DiagnosticoFicha as DiagnosticoFichaComp } from '@/components/teacher/seguimiento/DiagnosticoFicha';
+import { nucleoProfesorService } from '@/services/nucleoService';
 import { catalogoBase } from './fixtures';
+
+// La ficha tiene acciones del diagnóstico (fase 7a) que usan React Query
+function render(ui: ReactElement) {
+  const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderBase(<QueryClientProvider client={cliente}>{ui}</QueryClientProvider>);
+}
 
 function fila(id: string, extra: Partial<FilaAvanceLeccion> = {}): FilaAvanceLeccion {
   const [, u, l] = /u(\d+)-l(\d+)/.exec(id)!;
   return {
     leccion_id: id, titulo: `Lección ${id}`, grado: 1, unidad_numero: Number(u), unidad_titulo: `Unidad ${Number(u)}`,
     leccion_numero: Number(l), caminos: ['naturales.suma'], habilitada: true, prioritaria: false, total: 4, dominan: 2,
-    porcentaje_dominan: 0.5, conteos: { dominado: 1, repaso: 1, en_progreso: 1, no_iniciado: 1 },
-    estudiantes: { dominado: [1], repaso: [2], en_progreso: [3], no_iniciado: [4] }, ...extra,
+    porcentaje_dominan: 0.5, conteos: { dominado: 1, repaso: 1, por_confirmar: 0, en_progreso: 1, no_iniciado: 1 },
+    estudiantes: { dominado: [1], repaso: [2], por_confirmar: [], en_progreso: [3], no_iniciado: [4] }, ...extra,
   };
 }
 
@@ -34,13 +46,13 @@ function datos(extra: Partial<Seguimiento> = {}): Seguimiento {
       fila('g1-u03-l01', { prioritaria: true }),
       fila('g1-u03-l02', { porcentaje_dominan: 0.25, dominan: 1 }),
       fila('g1-u05-l01', { habilitada: false, total: 1, dominan: 0, porcentaje_dominan: 0,
-        conteos: { dominado: 0, repaso: 0, en_progreso: 1, no_iniciado: 0 },
-        estudiantes: { dominado: [], repaso: [], en_progreso: [3], no_iniciado: [] } }),
+        conteos: { dominado: 0, repaso: 0, por_confirmar: 0, en_progreso: 1, no_iniciado: 0 },
+        estudiantes: { dominado: [], repaso: [], por_confirmar: [], en_progreso: [3], no_iniciado: [] } }),
     ],
     por_estudiante: [
-      { estudiante_id: 3, nombre: 'Marta Ruiz', codigo: 'E3', total: 2, conteos: { dominado: 0, repaso: 0, en_progreso: 2, no_iniciado: 0 },
+      { estudiante_id: 3, nombre: 'Marta Ruiz', codigo: 'E3', total: 2, conteos: { dominado: 0, repaso: 0, por_confirmar: 0, en_progreso: 2, no_iniciado: 0 },
         alertas_dificultad: 1, alertas_excelencia: 0 },
-      { estudiante_id: 1, nombre: 'Ana Pérez', codigo: 'E1', total: 2, conteos: { dominado: 2, repaso: 0, en_progreso: 0, no_iniciado: 0 },
+      { estudiante_id: 1, nombre: 'Ana Pérez', codigo: 'E1', total: 2, conteos: { dominado: 2, repaso: 0, por_confirmar: 0, en_progreso: 0, no_iniciado: 0 },
         alertas_dificultad: 0, alertas_excelencia: 1 },
     ],
     alertas_dificultad: 1, alertas_excelencia: 1, periodo: null, ...extra,
@@ -93,7 +105,7 @@ describe('TablaAvance', () => {
     const filaL1 = screen.getByTestId('avance-g1-u03-l01');
     expect(within(filaL1).getByText('50 %')).toBeInTheDocument();
     expect(within(filaL1).getByText(/2 de 4 dominan · 1 en repaso · 1 en progreso/)).toBeInTheDocument();
-    expect(within(filaL1).getByRole('img').getAttribute('aria-label')).toBe('Dominan: 1, En repaso: 1, En progreso: 1, Sin empezar: 1');
+    expect(within(filaL1).getByRole('img').getAttribute('aria-label')).toBe('Dominan: 1, En repaso: 1, Por confirmar: 0, En progreso: 1, Sin empezar: 1');
     expect(within(filaL1).queryByText('Marta Ruiz')).toBeNull();
     fireEvent.click(within(filaL1).getByRole('button', { expanded: false }));
     fireEvent.click(within(filaL1).getByRole('button', { name: 'Marta Ruiz' }));
@@ -261,12 +273,82 @@ describe('PlanTrimestre', () => {
   });
 });
 
-describe('fechaDelServidor', () => {
-  it('lee como UTC las horas sin zona y deja las fechas solas en hora local', () => {
-    expect(fechaDelServidor('2026-11-15T00:02:00').toISOString()).toBe('2026-11-15T00:02:00.000Z');
-    expect(fechaDelServidor('2026-11-15T00:02:00Z').toISOString()).toBe('2026-11-15T00:02:00.000Z');
-    expect(fechaDelServidor('2026-11-15T00:02:00+00:00').toISOString()).toBe('2026-11-15T00:02:00.000Z');
-    const dia = fechaDelServidor('2026-11-14');
-    expect([dia.getFullYear(), dia.getMonth(), dia.getDate()]).toEqual([2026, 10, 14]);
+// ─── Diagnóstico inicial (fase 7a) ───────────────────────────────────────────
+
+describe('diagnóstico inicial para el profesor', () => {
+  const lec = (id: string, decision: 'sabida' | 'no_sabida' | 'sin_decidir', origen: DiagnosticoLeccion['origen'],
+    extra: Partial<DiagnosticoLeccion> = {}): DiagnosticoLeccion => ({
+    leccion_id: id, titulo: `Lección ${id}`, grado: 1, unidad_numero: Number(id[5]), leccion_numero: Number(id[9]),
+    decision, origen, aciertos: 0, problemas: 0, seguimiento: null, ...extra,
+  });
+  const diagnostico: DiagnosticoFicha = {
+    id: 1, estado: 'terminado', origen: 'automatico', motivo_fin: 'tope_problemas',
+    fecha_creacion: '2026-11-14T15:00:00Z', fecha_inicio: '2026-11-14T15:00:00Z', fecha_fin: '2026-11-15T04:30:00Z',
+    problemas: 16, minutos: 9.6,
+    lecciones: [
+      lec('g1-u02-l01', 'sabida', 'inferida', { aplicada: true, seguimiento: 'confirmado' }),
+      lec('g1-u03-l01', 'sabida', 'probada', { aciertos: 2, problemas: 2, aplicada: true, seguimiento: 'retirado' }),
+      lec('g1-u05-l01', 'sabida', 'probada', { aciertos: 2, problemas: 3, aplicada: true, seguimiento: 'por_confirmar' }),
+      lec('g1-u07-l03', 'no_sabida', 'probada', { aciertos: 0, problemas: 2 }),
+      lec('g1-u07-l02', 'no_sabida', 'inferida'),
+      lec('g1-u06-l05', 'sin_decidir', null),
+    ],
+  };
+
+  it('muestra lo probado, lo inferido, lo que quedó sin decidir y qué pasó con cada provisional', () => {
+    render(<DiagnosticoFichaComp diagnostico={diagnostico} anioId={9} estudianteId={3} soloLectura={false} />);
+    const card = screen.getByTestId('diagnostico-ficha');
+    // 11:30 p. m. del 14 en Panamá: la fecha es el 14
+    expect(card).toHaveTextContent('14 nov');
+    expect(card).toHaveTextContent('16 problemas · 10 min de trabajo');
+    expect(card).toHaveTextContent('llegó al máximo de problemas');
+    const probadas = screen.getByTestId('diag-probadas');
+    expect(within(probadas).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(screen.getByTestId('diag-g1-u07-l03')).getByLabelText('Todavía no')).toBeInTheDocument();
+    expect(within(screen.getByTestId('diag-g1-u05-l01')).getByText('(2 de 3)')).toBeInTheDocument();
+    expect(within(screen.getByTestId('diag-g1-u05-l01')).getByText('Por confirmar')).toBeInTheDocument();
+    expect(within(screen.getByTestId('diag-g1-u02-l01')).getByText('Confirmada con la práctica')).toBeInTheDocument();
+    // Retirado: información neutra, sin estilo de alerta
+    const retirado = within(screen.getByTestId('diag-g1-u03-l01')).getByText('La práctica mostró que aún no la domina');
+    expect(retirado.className).not.toMatch(/red|amber|orange/);
+    expect(within(screen.getByTestId('diag-inferidas-no')).getByText(/Lección g1-u07-l02/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('diag-sin-decidir')).getByText(/Lección g1-u06-l05/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Repetir diagnóstico' })).toBeInTheDocument();
+  });
+
+  it('a medias se puede cerrar con lo obtenido o cancelar; en un año cerrado, solo lectura', async () => {
+    const pedir = vi.spyOn(nucleoProfesorService, 'diagnostico').mockResolvedValue({ ...diagnostico, estado: 'cerrado' });
+    const { unmount } = render(<DiagnosticoFichaComp diagnostico={{ ...diagnostico, estado: 'en_curso', motivo_fin: null }}
+      anioId={9} estudianteId={3} soloLectura={false} />);
+    expect(screen.queryByRole('button', { name: 'Repetir diagnóstico' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar con lo obtenido' }));
+    await waitFor(() => expect(pedir).toHaveBeenCalledWith(9, 3, 'cerrar'));
+    expect(screen.getByRole('button', { name: 'Cancelar diagnóstico' })).toBeInTheDocument();
+    unmount();
+    render(<DiagnosticoFichaComp diagnostico={diagnostico} anioId={9} estudianteId={3} soloLectura />);
+    expect(screen.queryByRole('button')).toBeNull();
+    pedir.mockRestore();
+  });
+
+  it('sin diagnóstico ofrece pedirlo', () => {
+    render(<DiagnosticoFichaComp diagnostico={null} anioId={9} estudianteId={3} soloLectura={false} />);
+    expect(screen.getByText(/No hizo diagnóstico en este salón/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pedir diagnóstico' })).toBeInTheDocument();
+  });
+
+  it('en el avance, "por confirmar" va aparte de "dominan" y se ve quién tiene el diagnóstico pendiente', () => {
+    const conProvisional = fila('g1-u03-l01', {
+      dominan: 1, conteos: { dominado: 1, repaso: 0, por_confirmar: 2, en_progreso: 1, no_iniciado: 0 },
+      estudiantes: { dominado: [1], repaso: [], por_confirmar: [2, 4], en_progreso: [3], no_iniciado: [] },
+    });
+    render(<TablaAvance onAbrirFicha={vi.fn()} datos={datos({
+      por_leccion: [conProvisional], diagnosticos: { 3: 'en_curso', 1: 'pendiente' },
+    })} />);
+    const filaL1 = screen.getByTestId('avance-g1-u03-l01');
+    expect(filaL1).toHaveTextContent('1 de 4 dominan · 2 por confirmar · 1 en progreso');
+    expect(screen.getByText('Por confirmar', { selector: 'span' })).toBeInTheDocument();     // en la leyenda
+    fireEvent.click(screen.getByRole('button', { name: 'Por estudiante' }));
+    expect(screen.getByTestId('diag-3')).toHaveTextContent('Diagnóstico en curso');
+    expect(screen.getByTestId('diag-1')).toHaveTextContent('Diagnóstico pendiente');
   });
 });

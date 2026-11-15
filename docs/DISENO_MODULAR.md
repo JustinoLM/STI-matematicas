@@ -322,9 +322,8 @@ el plan.
     programadas.
   - Un cambio a mano del profesor marca la lección con `ajuste_manual` y el plan no la toca hasta
     que el profesor pulse "Devolver al plan".
-  - **Trimestre vigente:** el último que ya empezó; en vacaciones sigue el anterior. Hoy se
-    calcula con la fecha UTC, así que el último día de un trimestre cambia a las 7 p. m. de
-    Panamá. Hay que pasarlo a la fecha de Panamá, como el dominio.
+  - **Trimestre vigente:** el último que ya empezó; en vacaciones sigue el anterior. Se calcula
+    con la fecha de Panamá (fase 7a): el último día de un trimestre lo es hasta la medianoche.
 
 ### Configuración por lección
 
@@ -432,15 +431,39 @@ el plan.
 
 ### Diagnóstico inicial
 
-- **Cuándo se hace:** solo la primera vez que el estudiante entra al sistema.
-- **Cómo funciona:** recorre el grafo de forma adaptativa.
+- **Cuándo se hace (fase 7a):** al entrar a practicar en el núcleo, si el estudiante no tiene
+  ninguna práctica en el núcleo ni un diagnóstico previo, o cuando el profesor lo pide. Lo ya
+  confirmado no se vuelve a probar. Para el núcleo reemplaza al diagnóstico de decimales, que
+  sigue igual para quien practica decimales.
+- **Cómo funciona:** recorre el grafo de prerrequisitos del año lectivo de forma adaptativa.
   - Empieza por las lecciones más avanzadas que habilitó el profesor.
   - Si el estudiante acierta, se dan por sabidas las anteriores.
   - Si falla, retrocede por el grafo.
-- **Duración:** alrededor de 10 minutos. La cantidad de problemas se ajusta midiendo cuánto
-  tardan los niños, que también tienen que interpretar las figuras.
+  - Si una lección queda empatada, un problema más la decide; si el desempate no cabe en el
+    tope, la lección queda sin decidir y la descubre la práctica.
+  - El estado se recalcula a partir de las respuestas guardadas, así que retomarlo no necesita
+    nada aparte. Está en `backend/app/nucleo/diagnostico.py`.
+- **Duración:** alrededor de 10 minutos, con tope de problemas y de tiempo. Los valores son
+  claves `nucleo.diagnostico_*` y hay que ajustarlos midiendo cuánto tardan los niños, que también
+  tienen que interpretar las figuras. En la verificación, un recorrido terminó por el tope: 15
+  problemas en 8,7 minutos.
+- **Pantalla:** la misma del núcleo, con un mensaje inicial amable y voz. No hay pistas, ni
+  conteo "3 de 10", ni corrección: después de cada problema, acierte o falle, aparece "¡Gracias!
+  Vamos con otro". Hay una barra de avance sin números. Si el niño sale a mitad, el dashboard dice
+  "Seguimos donde quedamos" y solo ofrece continuar, no descartar.
 - **Valor del resultado:** el dominio que marca es **provisional**, y la práctica lo confirma o lo
-  retira con la regla absoluta. El profesor recibe el resultado.
+  retira con la regla absoluta.
+  - Los problemas del diagnóstico quedan registrados, pero no cuentan para el dominio ni para los
+    errores frecuentes de la ficha.
+  - Si un diagnóstico repetido da por no sabida una lección provisional, se retira.
+  - En el reparto, una lección provisional desbloquea a las siguientes y, si es prioritaria, cede
+    su espacio; pero no abre la zona de extensión hasta confirmarse.
+- **Lo que ve el profesor:** "Por confirmar" en el avance y en la ficha, aparte de "dominan" y sin
+  alertas; la etiqueta "Diagnóstico pendiente" o "en curso"; y en la ficha, la sección del
+  diagnóstico con lo que dio por sabido y lo que no, y las acciones Repetir, Cerrar con lo
+  obtenido y Cancelar. Un provisional retirado se muestra de forma neutra.
+  - Pendiente: "Diagnóstico pendiente" solo aparece cuando el estudiante ya entró a practicar; un
+    estudiante que nunca entró no lo muestra.
 - **Post-test:** se retira, porque solo existía para medir el efecto del sistema en la
   validación de la versión anterior.
 
@@ -532,7 +555,8 @@ el plan.
 | 5b. Números de 1.º ✅ | 10 generadores (U2, U4, U6), reglas de numeración, semirrecta para leer y ubicar, errores al ordenar y recarga que retoma la práctica. Capturas de toda la fase 5 con tema para el docente |
 | 6a. Preparar el salón ✅ | Catálogo, habilitación, configuración por lección, prioridad, asignación individual, banco forzado y prerrequisitos editables por año lectivo |
 | 6b. Seguimiento ✅ | Avance del salón por lección y por estudiante con corte por trimestre, alertas por lección (dificultad, excelencia, va detrás del salón), ficha del estudiante con historial y plan por trimestre con ajuste manual |
-| 7. Entrada y motivación | Diagnóstico adaptativo, medallas nuevas, mapa del camino |
+| 7a. Entrada ✅ | Fechas de Panamá en todo el sistema y diagnóstico inicial adaptativo con dominio provisional |
+| 7b. Motivación | Fórmula del nivel de jugador, barras de progreso, medallas nuevas, mapa del camino y tienda |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
 | 9. Lo que sigue | Plan para 3.º a 6.º y para pasar los decimales al núcleo (solo plan) |
 
@@ -543,8 +567,8 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 6b:** 629 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 197 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
+- **Estado tras la fase 7a:** 661 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 210 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
   problemas aleatorios en cerca de 1,4 s. Fracción, cantidad y teclado solo tienen pruebas de
   Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
@@ -558,9 +582,12 @@ el plan.
   primaria conocido revisará capturas o un video al terminar la fase 5. El piloto en una escuela
   se hará con el sistema terminado.
 - **Cuentas y administración por escuela** siguen sin definir.
-- **Fechas en UTC.** El backend guarda las horas en UTC sin zona y varias pantallas las leen como
-  hora local, así que de noche pueden mostrar el día siguiente. La ficha del estudiante ya lo
-  corrige (`fechaDelServidor`); falta revisar las demás pantallas y el trimestre vigente.
+- ~~**Fechas en UTC.**~~ Resuelto en la fase 7a. La base guarda UTC sin zona, la API manda las
+  horas con "Z" y todo lo que depende del día (dominio, repaso, trimestre vigente, racha,
+  "resueltos hoy", caché diaria de mensajes, fechas límite de desafíos) usa la fecha de Panamá
+  desde `backend/app/core/tiempo.py` (`ZONA_HORARIA`). El frontend muestra las fechas con
+  `lib/fechas.ts`. Una prueba falla si un esquema vuelve a mandar horas sin zona.
+  `STI_RELOJ_FIJO` fija la hora para probar, y no funciona en producción.
 
 ---
 

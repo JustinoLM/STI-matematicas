@@ -27,6 +27,7 @@ import type { SesionActivaResponse } from '@/services/studentService';
 import { AvisoSesionAMedias } from '@/components/nucleo/AvisoSesionAMedias';
 import { RUTA_PRACTICA_NUCLEO, useEstadoNucleo } from '@/hooks/useEstadoNucleo';
 import { CLAVE_ESTADO_NUCLEO, nucleoService } from '@/services/nucleoService';
+import { hoyLocal } from '@/lib/fechas';
 
 export function StudentDashboard() {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ export function StudentDashboard() {
 
   // Mensaje motivacional LLM — queryKey incluye fecha Y temaActivoId para que al
   // cambiar de tema se cargue un mensaje nuevo en vez de servir el del tema anterior.
-  const today = new Date().toISOString().split('T')[0];
+  const today = hoyLocal();
   const { data: mensajeLLM } = useQuery({
     queryKey: ['mensaje-dashboard', today, temaActivoId],
     queryFn: () => studentService.getMensajeMotivacional('dashboard'),

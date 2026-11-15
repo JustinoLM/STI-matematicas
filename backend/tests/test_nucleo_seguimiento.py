@@ -41,6 +41,7 @@ from app.nucleo.seguimiento import (
     MOTIVO_REFUERZO,
     MOTIVO_SALON,
     MOTIVO_SIN_REFUERZO,
+    POR_CONFIRMAR,
     REPASO,
     SIN_EMPEZAR,
     EstudianteFoto,
@@ -114,7 +115,7 @@ def test_tabla_por_leccion_cuenta_estados_y_porcentaje():
     filas = calc.tabla_por_leccion(f, AHORA, P)
     assert [x["leccion_id"] for x in filas] == [L2, L3, EXT]           # asignada solo a uno: al final
     l2 = filas[0]
-    assert l2["conteos"] == {DOMINADO: 1, REPASO: 1, EN_PROGRESO: 1, SIN_EMPEZAR: 1}
+    assert l2["conteos"] == {DOMINADO: 1, REPASO: 1, POR_CONFIRMAR: 0, EN_PROGRESO: 1, SIN_EMPEZAR: 1}
     assert (l2["dominan"], l2["total"], l2["porcentaje_dominan"]) == (2, 4, 0.5)
     assert l2["estudiantes"][REPASO] == [2]
     ext = filas[2]

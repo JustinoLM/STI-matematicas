@@ -10,6 +10,11 @@ profesor habilitó.
 
 Orden de criterios: prioridad del profesor, debilidad, novedad, orden curricular y repaso.
 
+Dominio provisional (diagnóstico, fase 7a): cuenta como dominado para desbloquear lecciones nuevas
+y para que una prioritaria ceda su espacio; va al repaso hasta confirmarse o retirarse; no abre la
+extensión (esa espera la confirmación) y el refuerzo puede usarlo, lo que también sirve para
+comprobarlo.
+
 1. **Prioridad.** Las prioritarias que el estudiante aún no domina se reparten
    `fraccion_prioridad` de la sesión (redondeando hacia arriba). Una prioritaria ya dominada
    cede su espacio.
@@ -40,6 +45,7 @@ from typing import Callable, Iterable, Optional, Sequence
 from app.models.nucleo import (
     DOMINIO_DOMINADO,
     DOMINIO_EN_PROGRESO,
+    DOMINIO_PROVISIONAL,
     NO_INICIADO,
     ZONA_EXTENSION,
     ZONA_NORMAL,
@@ -48,6 +54,9 @@ from app.models.nucleo import (
     ZONA_REPASO,
 )
 from app.nucleo.parametros import ParametrosNucleo
+
+# Para desbloquear y para la prioridad, el provisional cuenta como dominado
+SABIDAS = (DOMINIO_DOMINADO, DOMINIO_PROVISIONAL)
 
 
 class SinLecciones(Exception):
@@ -159,7 +168,7 @@ def repartir(
     por_orden = sorted(candidatas, key=lambda c: (c.orden, c.leccion_id))
 
     # 1. Prioridad
-    prioritarias = [c.leccion_id for c in por_orden if c.prioritaria and c.estado != DOMINIO_DOMINADO]
+    prioritarias = [c.leccion_id for c in por_orden if c.prioritaria and c.estado not in SABIDAS]
     cupo_prioridad = min(n, math.ceil(n * p.fraccion_prioridad)) if prioritarias else 0
 
     # 2 y 3. Refuerzo y extensión, sin pasarse de lo que queda
@@ -176,7 +185,7 @@ def repartir(
         (c for c in generales if c.estado == DOMINIO_EN_PROGRESO and not c.repaso_pendiente),
         key=lambda c: (c.precision if c.precision is not None else 0.0, c.orden),
     )
-    dominadas = {c.leccion_id for c in candidatas if c.estado == DOMINIO_DOMINADO}
+    dominadas = {c.leccion_id for c in candidatas if c.estado in SABIDAS}
     ids_candidatas = {c.leccion_id for c in candidatas}
     nuevas = [
         c for c in generales

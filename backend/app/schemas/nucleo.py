@@ -1,10 +1,10 @@
 """Esquemas de la API del núcleo de práctica (/api/nucleo)."""
 
-from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.tiempo import FechaHora
 from app.nucleo.modos import Modo
 
 # ─── Profesor ────────────────────────────────────────────────────────────────
@@ -41,8 +41,8 @@ class AsignacionOut(BaseModel):
     estudiante_id: int
     leccion_id: str
     estado: str
-    fecha_asignacion: datetime
-    fecha_cierre: Optional[datetime] = None
+    fecha_asignacion: FechaHora
+    fecha_cierre: Optional[FechaHora] = None
     leccion_titulo: str = ""
     estudiante_nombre: str = ""
 
@@ -116,9 +116,10 @@ class AjustesOut(BaseModel):
 class SesionOut(BaseModel):
     sesion_id: int
     estado: str
+    tipo: str = Field("practica", description='"practica" o "diagnostico"')
     cantidad_problemas: int
     progreso: int
-    fecha_inicio: Optional[datetime] = None
+    fecha_inicio: Optional[FechaHora] = None
 
 
 class SesionActivaOut(SesionOut):
@@ -128,6 +129,7 @@ class SesionActivaOut(SesionOut):
 class EstadoNucleoOut(BaseModel):
     disponible: bool = Field(description="Tiene lecciones del núcleo para practicar o una sesión a medias")
     sesion_activa: Optional[SesionActivaOut] = None
+    diagnostico_pendiente: bool = Field(False, description="Al entrar a practicar empieza (o sigue) el diagnóstico")
 
 
 class ProblemaOut(BaseModel):
@@ -137,6 +139,8 @@ class ProblemaOut(BaseModel):
     problema: Optional[dict[str, Any]] = Field(None, description="Vista pública: sin respuestas")
     intentos_restantes: Optional[int] = None
     pistas_habilitadas: Optional[dict[str, bool]] = None
+    diagnostico: bool = False
+    avance: Optional[float] = Field(None, description="Diagnóstico: avance entre 0 y 1 (sin conteos)")
 
 
 class EventoIn(BaseModel):
@@ -153,8 +157,13 @@ class RespuestaIn(BaseModel):
     eventos: list[EventoIn] = Field(default_factory=list, max_length=500)
 
 
+class DiagnosticoAvanceOut(BaseModel):
+    terminado: bool
+    avance: float
+
+
 class RespuestaOut(BaseModel):
-    correcto: bool
+    correcto: Optional[bool] = Field(description="None en el diagnóstico: no se dice si acertó")
     huecos: dict[str, bool]
     intentos_restantes: int
     problema_terminado: bool
@@ -162,6 +171,7 @@ class RespuestaOut(BaseModel):
     experiencia_ganada: int
     evento_dominio: Optional[str] = None
     sesion_completada: bool
+    diagnostico: Optional[DiagnosticoAvanceOut] = None
 
 
 class PistaIn(BaseModel):
@@ -181,8 +191,8 @@ class DominioLeccionOut(BaseModel):
     estado: str
     aciertos_recientes: int
     problemas_recientes: int
-    fecha_dominio: Optional[datetime] = None
-    ultima_practica: Optional[datetime] = None
+    fecha_dominio: Optional[FechaHora] = None
+    ultima_practica: Optional[FechaHora] = None
     repaso_pendiente: bool
     habilitada: bool
     prioritaria: bool

@@ -1,10 +1,11 @@
 """Schemas de la organización escolar: salones, años lectivos y trimestres."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.tiempo import FechaHora
 from app.schemas.teacher import ConfiguracionPracticaResponse
 
 
@@ -50,7 +51,7 @@ class EstudianteDelSalon(BaseModel):
     nombre_completo: str
     nivel_actual: int
     precision_ultimos_15: float
-    fecha_ingreso: datetime
+    fecha_ingreso: FechaHora
 
 
 class GrupoDelSalon(BaseModel):

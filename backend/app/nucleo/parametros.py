@@ -39,7 +39,6 @@ class ParametrosNucleo:
     dias_para_repaso: int = 14              # sin practicar una lección dominada → repaso
     ventana_repaso: int = 5                 # primeros N problemas tras vencer el repaso
     umbral_repaso: float = 0.6              # por debajo, la lección vuelve a "en progreso"
-    desfase_horario_horas: int = -5         # Panamá (UTC−5, sin horario de verano): para contar días
 
     # --- Reparto de la sesión ---
     problemas_por_sesion: int = 10
@@ -71,6 +70,13 @@ class ParametrosNucleo:
     alerta_salon_min_estudiantes: int = 5       # con menos estudiantes no se compara
     alerta_dias_oculta: int = 14                # días que dura "Ocultar" una alerta
 
+    # --- Diagnóstico inicial (fase 7a): ver app/nucleo/diagnostico.py ---
+    diagnostico_activo: bool = True             # se hace la primera vez que el estudiante practica
+    diagnostico_problemas_por_leccion: int = 2  # problemas por lección probada (un intento, sin pistas)
+    diagnostico_problemas_desempate: int = 1    # problemas extra si acierta unos y falla otros
+    diagnostico_max_problemas: int = 16         # tope de problemas
+    diagnostico_max_minutos: int = 12           # tope de tiempo activo (suma del tiempo por problema)
+
     def __post_init__(self):
         if self.intentos_por_problema < 1:
             raise ValueError("intentos_por_problema debe ser al menos 1")
@@ -89,16 +95,17 @@ class ParametrosNucleo:
                        "problemas_por_sesion", "max_prioritarias", "max_lecciones_resto",
                        "fallos_pausa_extension", "minimo_resultados_refuerzo", "alerta_dificultad_min_problemas",
                        "alerta_dificultad_min_refuerzo", "alerta_dificultad_dias_refuerzo",
-                       "alerta_excelencia_min_problemas", "alerta_salon_min_estudiantes", "alerta_dias_oculta"):
+                       "alerta_excelencia_min_problemas", "alerta_salon_min_estudiantes", "alerta_dias_oculta",
+                       "diagnostico_problemas_por_leccion", "diagnostico_max_problemas", "diagnostico_max_minutos"):
             if getattr(self, nombre) < 1:
                 raise ValueError(f"{nombre} debe ser al menos 1")
         for nombre in ("nuevas_por_sesion", "problemas_extension", "problemas_refuerzo",
                        "dias_pausa_extension", "costo_pista_nivel_3", "xp_practica", "xp_acierto",
-                       "xp_bono_dominio"):
+                       "xp_bono_dominio", "diagnostico_problemas_desempate"):
             if getattr(self, nombre) < 0:
                 raise ValueError(f"{nombre} no puede ser negativo")
-        if not -12 <= self.desfase_horario_horas <= 14:
-            raise ValueError("desfase_horario_horas debe estar entre -12 y 14")
+        if self.diagnostico_max_problemas < self.diagnostico_problemas_por_leccion:
+            raise ValueError("diagnostico_max_problemas debe alcanzar para probar al menos una lección")
 
 
 _CONVERSORES = {int: int, float: float, bool: lambda v: v.strip().lower() in ("1", "true", "si", "sí")}

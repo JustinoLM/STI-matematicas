@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import type { TipoDesafioGrupal } from '@/types';
+import { finDelDiaLocal, hoyLocal } from '@/lib/fechas';
 
 // ─── Metadatos de cada tipo ───────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ export default function CreateChallengePage() {
           ? parseInt(recompensaPuntos) : undefined,
       anio_lectivo_id: salonId,
       grupos_ids: gruposIds,
-      fecha_limite: fechaLimite || undefined,
+      fecha_limite: fechaLimite ? finDelDiaLocal(fechaLimite) : undefined,
     });
   };
 
@@ -338,7 +339,7 @@ export default function CreateChallengePage() {
                 id="fecha_limite"
                 type="date"
                 value={fechaLimite}
-                min={new Date().toISOString().split('T')[0]}
+                min={hoyLocal()}
                 onChange={(e) => setFechaLimite(e.target.value)}
               />
             </div>

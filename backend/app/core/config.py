@@ -53,6 +53,10 @@ class Settings(BaseSettings):
         "https://tesis-sti-matematicas.vercel.app",
     ]
 
+    # Zona horaria del colegio: las reglas que dependen del día (dominio, racha, trimestre
+    # vigente, caché diaria) usan la fecha de esta zona. Las horas se guardan en UTC.
+    ZONA_HORARIA: str = "America/Panama"
+
     # Entorno: por defecto seguro (producción). En local, ENVIRONMENT=development y DEBUG=True.
     ENVIRONMENT: str = "production"
     DEBUG: bool = False

@@ -18,6 +18,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.tiempo import ahora_utc
 from app.models.nucleo import NucleoHabilitacion, NucleoPlanTrimestre
 from app.models.school import ANIO_ACTIVO, AnioLectivo
 from app.nucleo.dominio import fecha_local
@@ -30,7 +31,7 @@ from app.services.school_service import Conflicto, SchoolService
 
 class ServicioPlan:
     def __init__(self, db: AsyncSession, parametros: Optional[ParametrosNucleo] = None,
-                 reloj: Callable[[], datetime] = datetime.utcnow):
+                 reloj: Callable[[], datetime] = ahora_utc):
         self.db = db
         self.school = SchoolService(db)
         self._parametros = parametros
@@ -48,7 +49,7 @@ class ServicioPlan:
         return [Periodo(t.numero, t.fecha_inicio, t.fecha_fin) for t in ts]
 
     async def vigente(self, anio: AnioLectivo) -> Optional[int]:
-        hoy = fecha_local(self.reloj(), await self.parametros())
+        hoy = fecha_local(self.reloj())
         return trimestre_vigente(await self.periodos(anio), hoy)
 
     async def plan(self, anio_lectivo_id: int) -> dict[str, set[int]]:
@@ -105,7 +106,7 @@ class ServicioPlan:
         periodos = await self.periodos(anio)
         return {
             "trimestres": [{"numero": t.numero, "inicio": t.inicio, "fin": t.fin} for t in periodos],
-            "vigente": trimestre_vigente(periodos, fecha_local(self.reloj(), await self.parametros())),
+            "vigente": trimestre_vigente(periodos, fecha_local(self.reloj())),
             "plan": {lec: sorted(ts) for lec, ts in sorted((await self.plan(anio_lectivo_id)).items())},
         }
 

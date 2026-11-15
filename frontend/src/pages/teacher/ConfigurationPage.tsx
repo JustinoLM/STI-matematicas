@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatearFecha } from '@/lib/fechas';
 
 export function ConfigurationPage() {
   const [searchParams] = useSearchParams();
@@ -164,7 +165,7 @@ export function ConfigurationPage() {
                 <AlertCircle className="h-4 w-4 text-blue-500" />
                 <span className="text-sm text-muted-foreground">
                   Este salón tiene configuración activa desde:{' '}
-                  {new Date(configuracionActual.fecha_aplicacion).toLocaleDateString('es-ES')}
+                  {formatearFecha(configuracionActual.fecha_aplicacion, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-ES')}
                 </span>
               </div>
             )}
