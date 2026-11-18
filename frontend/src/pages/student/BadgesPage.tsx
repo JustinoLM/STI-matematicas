@@ -14,6 +14,8 @@ import { Progress } from '@/components/ui/progress';
 import { Trophy, Lock, Star, Loader2, Sparkles } from 'lucide-react';
 import { studentService, type MedallaItem } from '@/services/studentService';
 import { formatearFecha } from '@/lib/fechas';
+import { useEstadoNucleo } from '@/hooks/useEstadoNucleo';
+import { MedalleroNucleo } from '@/components/nucleo/motivacion/MedalleroNucleo';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -162,6 +164,14 @@ function MedallaCard({
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function BadgesPage() {
+  // Quien practica en el núcleo ve sus medallas nuevas (fase 7b); en decimales, las de siempre
+  const { data: estadoNucleo, isLoading: cargandoNucleo } = useEstadoNucleo();
+  if (cargandoNucleo) return null;
+  if (estadoNucleo?.disponible) return <MedalleroNucleo />;
+  return <MedalleroDecimales />;
+}
+
+function MedalleroDecimales() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({

@@ -29,6 +29,7 @@ import {
 } from '@/types';
 import { FONDOS } from '@/types/shop';
 import { useThemeStore } from '@/store/themeStore';
+import { useProgresoNucleo } from '@/hooks/useProgresoNucleo';
 
 export function ShopPage() {
   const queryClient = useQueryClient();
@@ -71,7 +72,12 @@ export function ShopPage() {
   }
 
   const puntosDisponibles = saldo?.puntos_totales ?? 0;
-  const nivelEstudiante = perfil?.nivel_actual ?? 1;
+  // Quien practica en el núcleo usa su nivel de jugador, con el requisito reescalado (fase 7b,
+  // pregunta abierta 14). En decimales sigue el nivel adaptativo de 1 a 5.
+  const { enNucleo, data: progresoNucleo } = useProgresoNucleo();
+  const nivelEstudiante = enNucleo ? (progresoNucleo?.nivel ?? 1) : (perfil?.nivel_actual ?? 1);
+  const requisito = (r: number) =>
+    enNucleo && progresoNucleo ? (progresoNucleo.tienda_nivel_por_requisito[Math.min(Math.max(r, 1), 5) - 1] ?? r) : r;
 
   // Mutation de compra
   const compraMutation = useMutation({
@@ -154,9 +160,9 @@ export function ShopPage() {
   const renderItem = (item: DesbloquableDetallado) => {
     const puedeComprar = !item.estaDesbloqueado &&
                          puntosDisponibles >= item.precio &&
-                         nivelEstudiante >= item.nivelRequerido;
+                         nivelEstudiante >= requisito(item.nivelRequerido);
 
-    const nivelBloqueado = nivelEstudiante < item.nivelRequerido;
+    const nivelBloqueado = nivelEstudiante < requisito(item.nivelRequerido);
     const puntosBloqueado = puntosDisponibles < item.precio;
 
     return (
@@ -202,10 +208,10 @@ export function ShopPage() {
 
           {/* Requisitos */}
           <div className="mt-2 space-y-1 text-xs">
-            {item.nivelRequerido > 1 && (
+            {requisito(item.nivelRequerido) > 1 && (
               <div className={`flex items-center gap-1 ${nivelBloqueado ? 'text-red-600' : 'text-gray-600'}`}>
                 <TrendingUp className="w-3 h-3" />
-                <span>Requiere Nivel {item.nivelRequerido}</span>
+                <span>Requiere Nivel {requisito(item.nivelRequerido)}</span>
                 {nivelBloqueado && (
                   <span className="text-red-600 font-medium">
                     (Tu nivel: {nivelEstudiante})
@@ -236,7 +242,7 @@ export function ShopPage() {
             ) : nivelBloqueado ? (
               <Button variant="secondary" disabled size="sm" className="w-full">
                 <Lock className="h-4 w-4 mr-2" />
-                Nivel {item.nivelRequerido} requerido
+                Nivel {requisito(item.nivelRequerido)} requerido
               </Button>
             ) : item.esGratuito ? (
               <Button
@@ -415,8 +421,8 @@ export function ShopPage() {
 
                   const puedeComprar = !fondo.estaDesbloqueado &&
                                        puntosDisponibles >= fondo.precio &&
-                                       nivelEstudiante >= fondo.nivelRequerido;
-                  const nivelBloqueado = nivelEstudiante < fondo.nivelRequerido;
+                                       nivelEstudiante >= requisito(fondo.nivelRequerido);
+                  const nivelBloqueado = nivelEstudiante < requisito(fondo.nivelRequerido);
                   const puntosBloqueado = puntosDisponibles < fondo.precio;
 
                   return (
@@ -456,7 +462,7 @@ export function ShopPage() {
                         {nivelBloqueado && (
                           <div className="mt-2 flex items-center gap-1 text-xs text-red-600">
                             <TrendingUp className="w-3 h-3" />
-                            <span>Requiere Nivel {fondo.nivelRequerido} (tu nivel: {nivelEstudiante})</span>
+                            <span>Requiere Nivel {requisito(fondo.nivelRequerido)} (tu nivel: {nivelEstudiante})</span>
                           </div>
                         )}
                       </CardHeader>
@@ -477,7 +483,7 @@ export function ShopPage() {
                           ) : nivelBloqueado ? (
                             <Button variant="secondary" disabled size="sm" className="w-full">
                               <Lock className="h-4 w-4 mr-2" />
-                              Nivel {fondo.nivelRequerido} requerido
+                              Nivel {requisito(fondo.nivelRequerido)} requerido
                             </Button>
                           ) : (
                             <Button

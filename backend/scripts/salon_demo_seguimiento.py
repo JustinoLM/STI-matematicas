@@ -266,6 +266,7 @@ _BORRAR_NUCLEO = [
     "DELETE FROM nucleo_evento WHERE problema_sesion_id IN (SELECT id FROM nucleo_problema_sesion WHERE estudiante_id = ANY(:e))",
     "DELETE FROM nucleo_intento WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_experiencia WHERE estudiante_id = ANY(:e)",
+    "DELETE FROM nucleo_medalla WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_problema_sesion WHERE estudiante_id = ANY(:e)",
     "DELETE FROM nucleo_diagnostico WHERE estudiante_id = ANY(:e) OR anio_lectivo_id = ANY(:a)",
     "DELETE FROM nucleo_sesion WHERE estudiante_id = ANY(:e) OR anio_lectivo_id = ANY(:a)",

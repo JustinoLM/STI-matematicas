@@ -57,7 +57,20 @@ class ParametrosNucleo:
     costo_pista_nivel_3: int = 0            # puntos del saldo; 0 = gratis
     xp_practica: int = 1                    # por problema terminado
     xp_acierto: int = 2                     # por problema resuelto al primer intento
-    xp_bono_dominio: int = 50               # al dominar una lección (la fórmula del nivel es de la fase 7)
+    xp_bono_dominio: int = 50               # al dominar una lección por primera vez (también al confirmar un provisional)
+    xp_bono_recuperada: float = 0.2         # al volver a dominarla tras un repaso fallido: esta parte del bono
+
+    # --- Nivel de jugador (fase 7b): ver app/nucleo/motivacion.py ---
+    # Para pasar del nivel n al n+1 hacen falta nivel_base + nivel_incremento·(n−1) de experiencia.
+    nivel_base: int = 60                    # calibrado con la simulación de la fase 7b (60·n)
+    nivel_incremento: int = 60
+    # Tienda: un requisito de la escala vieja (1 a 5) equivale a 1 + nivel_tienda_factor·(r−1)
+    nivel_tienda_factor: int = 3
+
+    # --- Medallas de hito del camino (fase 7b): parte de las lecciones del camino en el grado ---
+    medalla_hito_bronce: float = 0.25
+    medalla_hito_plata: float = 0.5
+    medalla_hito_oro: float = 1.0
 
     # --- Alertas del profesor (fase 6b): comparar con el salón solo alerta, nunca decide la práctica ---
     alerta_dificultad_min_problemas: int = 10   # problemas de la lección antes de alertar
@@ -88,7 +101,8 @@ class ParametrosNucleo:
         if not 1 <= self.grado_maximo_banco < self.grado_minimo_teclado <= 7:
             raise ValueError("Debe cumplirse 1 <= grado_maximo_banco < grado_minimo_teclado <= 7")
         for nombre in ("umbral_dominio", "umbral_repaso", "umbral_refuerzo", "fraccion_prioridad",
-                       "alerta_dificultad_umbral", "alerta_excelencia_umbral", "alerta_salon_proporcion"):
+                       "alerta_dificultad_umbral", "alerta_excelencia_umbral", "alerta_salon_proporcion",
+                       "xp_bono_recuperada"):
             if not 0 <= getattr(self, nombre) <= 1:
                 raise ValueError(f"{nombre} debe estar entre 0 y 1")
         for nombre in ("ventana_dominio", "dias_distintos_dominio", "dias_para_repaso", "ventana_repaso",
@@ -96,14 +110,17 @@ class ParametrosNucleo:
                        "fallos_pausa_extension", "minimo_resultados_refuerzo", "alerta_dificultad_min_problemas",
                        "alerta_dificultad_min_refuerzo", "alerta_dificultad_dias_refuerzo",
                        "alerta_excelencia_min_problemas", "alerta_salon_min_estudiantes", "alerta_dias_oculta",
-                       "diagnostico_problemas_por_leccion", "diagnostico_max_problemas", "diagnostico_max_minutos"):
+                       "diagnostico_problemas_por_leccion", "diagnostico_max_problemas", "diagnostico_max_minutos",
+                       "nivel_base", "nivel_tienda_factor"):
             if getattr(self, nombre) < 1:
                 raise ValueError(f"{nombre} debe ser al menos 1")
         for nombre in ("nuevas_por_sesion", "problemas_extension", "problemas_refuerzo",
                        "dias_pausa_extension", "costo_pista_nivel_3", "xp_practica", "xp_acierto",
-                       "xp_bono_dominio", "diagnostico_problemas_desempate"):
+                       "xp_bono_dominio", "diagnostico_problemas_desempate", "nivel_incremento"):
             if getattr(self, nombre) < 0:
                 raise ValueError(f"{nombre} no puede ser negativo")
+        if not 0 < self.medalla_hito_bronce < self.medalla_hito_plata < self.medalla_hito_oro <= 1:
+            raise ValueError("Los hitos deben cumplir 0 < bronce < plata < oro <= 1")
         if self.diagnostico_max_problemas < self.diagnostico_problemas_por_leccion:
             raise ValueError("diagnostico_max_problemas debe alcanzar para probar al menos una lección")
 

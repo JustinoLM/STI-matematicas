@@ -339,11 +339,29 @@ class ServicioDiagnostico:
         }
 
     async def abiertos_del_salon(self, ids: list[int], anio_lectivo_id: int) -> dict[int, str]:
-        """estudiante → "pendiente" o "en_curso" (para la vista por estudiante)."""
+        """estudiante → "pendiente" o "en_curso" (para la vista por estudiante). También sale
+        "pendiente" para quien todavía no entró: el automático le tocará al entrar si el salón tiene
+        lecciones habilitadas (con generador) y nunca practicó ni tuvo diagnóstico (fase 7b)."""
         if not ids:
             return {}
-        return dict((await self.db.execute(
+        resultado = dict((await self.db.execute(
             select(NucleoDiagnostico.estudiante_id, NucleoDiagnostico.estado).where(and_(
                 NucleoDiagnostico.estudiante_id.in_(ids), NucleoDiagnostico.anio_lectivo_id == anio_lectivo_id,
                 NucleoDiagnostico.estado.in_(ABIERTOS)))
         )).tuples().all())
+        if not (await self.parametros()).diagnostico_activo:
+            return resultado
+        habilitadas = (await self.db.execute(select(NucleoHabilitacion.leccion_id).where(and_(
+            NucleoHabilitacion.anio_lectivo_id == anio_lectivo_id, NucleoHabilitacion.habilitada.is_(True))))).scalars()
+        if not any(tiene_generador(x) for x in habilitadas):
+            return resultado
+        con_diagnostico = set((await self.db.execute(
+            select(NucleoDiagnostico.estudiante_id).where(NucleoDiagnostico.estudiante_id.in_(ids)))).scalars())
+        con_practica = set((await self.db.execute(
+            select(NucleoProblemaSesion.estudiante_id).where(and_(
+                NucleoProblemaSesion.estudiante_id.in_(ids), NucleoProblemaSesion.estado == PROBLEMA_TERMINADO))
+            .distinct())).scalars())
+        for e in ids:
+            if e not in resultado and e not in con_diagnostico and e not in con_practica:
+                resultado[e] = DIAGNOSTICO_PENDIENTE
+        return resultado

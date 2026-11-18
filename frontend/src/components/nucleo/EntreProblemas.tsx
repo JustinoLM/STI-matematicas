@@ -2,6 +2,7 @@
  * Pantalla entre problemas: aquí sí van las celebraciones (docs/DISENO_MODULAR.md, sección 3 →
  * Motivación). Si acertó: felicitación, experiencia ganada y el efecto de victoria del
  * estudiante, si tiene uno activo. Si agotó los intentos: la solución, sin castigo.
+ * Fase 7b: también la lección dominada (o recuperada), las medallas nuevas y la subida de nivel.
  */
 
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import type { Problema, ResultadoRespuesta } from '@/types/nucleo';
 import { vocabularioDelTema } from '@/utils/nucleo/plantillas';
 import { respuestasDesdeSolucion } from '@/utils/nucleo/respuestas';
 import { Expresion } from './Expresion';
+import { ListaCelebraciones } from './motivacion/Celebraciones';
 import { Semirrecta } from './Semirrecta';
 
 /** Solución de la semirrecta de leer (el número) o de ubicar (la letra de la flecha) */
@@ -42,7 +44,7 @@ export function EntreProblemas({ resultado, problema, onSiguiente }: EntreProble
             {[0, 1, 2].map(i => <Star key={i} className="h-20 w-20 fill-current" />)}
           </div>
           <h2 className="text-5xl font-extrabold text-green-700">¡Muy bien!</h2>
-          {resultado.evento_dominio === 'dominada' && (
+          {resultado.evento_dominio === 'dominada' && !(resultado.celebraciones ?? []).some(c => c.tipo.startsWith('leccion_')) && (
             <p className="text-3xl font-bold text-primary">¡Ya dominas esta lección!</p>
           )}
           {resultado.experiencia_ganada > 0 && (
@@ -65,6 +67,8 @@ export function EntreProblemas({ resultado, problema, onSiguiente }: EntreProble
           <p className="text-2xl text-slate-600">¡Sigue practicando, lo vas a lograr!</p>
         </>
       )}
+
+      <ListaCelebraciones celebraciones={resultado.celebraciones ?? []} grande={(resultado.celebraciones ?? []).length <= 2} />
 
       <button
         type="button"

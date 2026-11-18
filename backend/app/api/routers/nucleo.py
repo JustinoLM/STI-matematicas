@@ -9,6 +9,8 @@ Estudiante (con salón activo):
 - POST /sesiones/{sesion_id}/problemas/{id}/respuesta    Enviar respuestas, tiempo, voz y eventos
 - POST /sesiones/{sesion_id}/problemas/{id}/pista        Pedir una pista (nivel 1 a 3)
 - GET  /dominio                                          Mi dominio por lección y experiencia
+- GET  /progreso                                         Nivel de jugador, avance por camino y mapa (fase 7b)
+- GET  /medallas                                         Medallas del núcleo del grado (fase 7b)
 
 Profesor (pantalla "Lecciones del salón", fase 6a; solo sus propios salones):
 - GET    /anios/{anio_id}/catalogo                       Todas las lecciones con habilitación y prerrequisitos del año
@@ -52,6 +54,7 @@ from app.nucleo.problema import problema_a_dict, problema_desde_dict
 from app.nucleo.registro import tiene_generador
 from app.nucleo.servicios.grafo import prerrequisitos_efectivos
 from app.nucleo.servicios.habilitacion import ServicioHabilitacion
+from app.nucleo.servicios.motivacion import ServicioMotivacion
 from app.nucleo.servicios.plan import ServicioPlan
 from app.nucleo.servicios.practica import ServicioPractica
 from app.nucleo.servicios.seguimiento import ServicioSeguimiento
@@ -148,6 +151,18 @@ async def pedir_pista(sesion_id: int, problema_sesion_id: int, datos: PistaIn,
 @router.get("/dominio", response_model=DominioOut)
 async def mi_dominio(db: DBSession, estudiante: CurrentStudentConSalon):
     return await ServicioPractica(db).resumen_dominio(estudiante.id)
+
+
+@router.get("/progreso")
+async def mi_progreso(db: DBSession, estudiante: CurrentStudent):
+    """Nivel de jugador y experiencia, avance de cada camino y el mapa del grado. Sin salón, solo el nivel."""
+    return await ServicioMotivacion(db).progreso(estudiante.id)
+
+
+@router.get("/medallas")
+async def mis_medallas(db: DBSession, estudiante: CurrentStudent):
+    """Medallas del núcleo del grado del estudiante (ganadas y por ganar)."""
+    return await ServicioMotivacion(db).medallas(estudiante.id)
 
 
 # ─── Profesor ────────────────────────────────────────────────────────────────

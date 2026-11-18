@@ -21,6 +21,7 @@ import {
   Clapperboard,
   BarChart2,
   Scale,
+  Map as MapIcon,
 } from 'lucide-react';
 
 interface NavItem {
@@ -36,6 +37,7 @@ const RUTA_LECCIONES_SALON = /^\/teacher\/salones\/\d+\/(lecciones|estudiantes)/
 const studentNav: NavItem[] = [
   { title: 'Inicio', href: '/student/dashboard', icon: Home },
   { title: 'Practicar', href: '/student/practice', icon: BookOpen },
+  { title: 'Mi camino', href: '/student/camino', icon: MapIcon },
   { title: 'Desafíos', href: '/student/challenges', icon: Target },
   { title: 'Inventario', href: '/student/inventory', icon: Package },
   { title: 'Tienda', href: '/student/shop', icon: ShoppingBag },
@@ -75,8 +77,11 @@ export function Sidebar({ userRole, isOpen = true, onClose }: SidebarProps) {
   // "Practicar" lleva a la práctica del núcleo si el salón tiene lecciones del núcleo habilitadas
   const { data: estadoNucleo } = useEstadoNucleo(userRole === 'estudiante');
   const navItems = userRole === 'estudiante'
-    ? studentNav.map(item =>
-        item.href === '/student/practice' && estadoNucleo?.disponible ? { ...item, href: RUTA_PRACTICA_NUCLEO } : item)
+    ? studentNav
+        // "Mi camino" (fase 7b) solo para quien practica en el núcleo
+        .filter(item => item.href !== '/student/camino' || estadoNucleo?.disponible)
+        .map(item =>
+          item.href === '/student/practice' && estadoNucleo?.disponible ? { ...item, href: RUTA_PRACTICA_NUCLEO } : item)
     : teacherNav;
 
   return (

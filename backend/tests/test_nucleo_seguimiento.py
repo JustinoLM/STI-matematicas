@@ -332,7 +332,7 @@ async def test_la_tabla_hace_las_mismas_consultas_con_3_o_25_estudiantes():
             r = await serv.seguimiento(al.id, prof.id)
             assert r["por_leccion"][0]["conteos"][EN_PROGRESO] == n
             await db.rollback()
-    assert cuentas[0] == cuentas[1] and cuentas[0] <= 16, cuentas
+    assert cuentas[0] == cuentas[1] and cuentas[0] <= 20, cuentas   # 7b: +3 por "diagnóstico pendiente"
 
 
 @pytest.mark.db

@@ -27,6 +27,7 @@ import { PostTestPage } from '@/pages/student/PostTestPage';
 import { ShopPage } from '@/pages/student/ShopPage';
 import { InventoryPage } from '@/pages/student/InventoryPage';
 import { BadgesPage } from '@/pages/student/BadgesPage';
+import { CaminoPage } from '@/pages/student/CaminoPage';
 import { ProgressPage } from '@/pages/student/ProgressPage';
 import { AnimacionesPage } from '@/pages/student/AnimacionesPage';
 import { ChallengesPage as StudentChallengesPage } from '@/pages/student/ChallengesPage';
@@ -194,6 +195,7 @@ function App() {
                   <Route path="shop" element={<ShopPage />} />
                   <Route path="inventory" element={<InventoryPage />} />
                   <Route path="badges" element={<BadgesPage />} />
+                  <Route path="camino" element={<CaminoPage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="animaciones" element={<AnimacionesPage />} />
                   <Route path="regla-de-tres" element={<ReglaDeTresPracticePage />} />

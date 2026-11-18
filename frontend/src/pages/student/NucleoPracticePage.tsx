@@ -27,9 +27,9 @@ import { ProblemaNucleo } from '@/components/nucleo/ProblemaNucleo';
 import { ResumenSesion, type ResultadoProblema } from '@/components/nucleo/ResumenSesion';
 import { BarraAvance, EntreDiagnostico, FinDiagnostico, IntroDiagnostico } from '@/components/nucleo/Diagnostico';
 import { getErrorMessage } from '@/services/api';
-import { CLAVE_ESTADO_NUCLEO, nucleoService } from '@/services/nucleoService';
+import { CLAVE_ESTADO_NUCLEO, CLAVE_MEDALLAS_NUCLEO, CLAVE_PROGRESO_NUCLEO, nucleoService } from '@/services/nucleoService';
 import { useThemeStore } from '@/store/themeStore';
-import type { Problema, ProblemaTurno, ResultadoRespuesta, SesionActivaNucleo } from '@/types/nucleo';
+import type { Celebracion, Problema, ProblemaTurno, ResultadoRespuesta, SesionActivaNucleo } from '@/types/nucleo';
 import { iconoDelTema } from '@/utils/nucleo/iconos';
 
 type Fase =
@@ -54,6 +54,8 @@ export function NucleoPracticePage() {
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
   const [sesion, setSesion] = useState<{ id: number; cantidad: number; progreso: number; diagnostico: boolean } | null>(null);
   const [avance, setAvance] = useState(0);
+  const [celebraciones, setCelebraciones] = useState<Celebracion[]>([]);
+  const [nivel, setNivel] = useState<ResultadoRespuesta['nivel']>(null);
   const [resultados, setResultados] = useState<ResultadoProblema[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const iniciado = useRef(false);
@@ -86,6 +88,8 @@ export function NucleoPracticePage() {
       setSesion({ id: s.sesion_id, cantidad: s.cantidad_problemas, progreso: s.progreso, diagnostico: esDiagnostico.current });
       setAvance(0);
       setResultados([]);
+      setCelebraciones([]);
+      setNivel(null);
       queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
       // Si se recarga la página, se retoma esta sesión sin preguntar
       navigate(ruta, { replace: true, state: { retomar: true } });
@@ -137,12 +141,16 @@ export function NucleoPracticePage() {
       return;
     }
     setResultados(r => [...r, { correcto: resultado.correcto === true, experiencia: resultado.experiencia_ganada }]);
+    if (resultado.celebraciones?.length) setCelebraciones(c => [...c, ...resultado.celebraciones!]);
+    if (resultado.nivel) setNivel(resultado.nivel);
     setFase({ tipo: 'entre', resultado, problema });
   };
 
   const alSiguiente = (resultado: ResultadoRespuesta) => {
     if (resultado.sesion_completada || !sesion) {
       queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
+      queryClient.invalidateQueries({ queryKey: CLAVE_PROGRESO_NUCLEO });
+      queryClient.invalidateQueries({ queryKey: CLAVE_MEDALLAS_NUCLEO });
       setFase({ tipo: 'resumen' });
     } else {
       cargarSiguiente(sesion.id);
@@ -151,6 +159,8 @@ export function NucleoPracticePage() {
 
   const salir = () => {
     queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO });
+    queryClient.invalidateQueries({ queryKey: CLAVE_PROGRESO_NUCLEO });
+    queryClient.invalidateQueries({ queryKey: CLAVE_MEDALLAS_NUCLEO });
     navigate('/student/dashboard');
   };
 
@@ -177,7 +187,7 @@ export function NucleoPracticePage() {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col justify-center rounded-[2rem] bg-white/90 p-5 shadow-sm md:p-6">
+      <div className="flex flex-1 flex-col justify-center rounded-[2rem] bg-white/90 p-4 shadow-sm md:landscape:p-6">
         {fase.tipo === 'cargando' && <p className="text-center text-2xl text-slate-500">Cargando…</p>}
 
         {fase.tipo === 'aviso' && (
@@ -222,7 +232,7 @@ export function NucleoPracticePage() {
         )}
 
         {fase.tipo === 'resumen' && (
-          <ResumenSesion resultados={resultados} onInicio={salir} onOtra={empezar} />
+          <ResumenSesion resultados={resultados} celebraciones={celebraciones} nivel={nivel} onInicio={salir} onOtra={empezar} />
         )}
 
         {fase.tipo === 'error' && (

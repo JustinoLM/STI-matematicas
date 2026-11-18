@@ -5,6 +5,8 @@
 import axios from 'axios';
 import apiClient, { getErrorMessage } from './api';
 import type {
+  MedallasNucleo,
+  ProgresoNucleo,
   AjusteEstudiante,
   AlertaNucleo,
   AsignacionNucleo,
@@ -23,6 +25,8 @@ import type {
 } from '@/types/nucleo';
 
 export const CLAVE_ESTADO_NUCLEO = ['nucleo-estado'] as const;
+export const CLAVE_PROGRESO_NUCLEO = ['nucleo-progreso'] as const;
+export const CLAVE_MEDALLAS_NUCLEO = ['nucleo-medallas'] as const;
 
 export const nucleoService = {
   /** ¿El estudiante practica en el núcleo? y su sesión a medias, si la tiene */
@@ -44,6 +48,16 @@ export const nucleoService = {
       `/nucleo/sesiones/${sesionId}/problemas/${problemaSesionId}/respuesta`,
       envio,
     )).data;
+  },
+
+  /** Nivel de jugador, avance de cada camino y mapa del grado (fase 7b) */
+  async progreso(): Promise<ProgresoNucleo> {
+    return (await apiClient.get<ProgresoNucleo>('/nucleo/progreso')).data;
+  },
+
+  /** Medallas del núcleo del grado: ganadas y por ganar (fase 7b) */
+  async medallas(): Promise<MedallasNucleo> {
+    return (await apiClient.get<MedallasNucleo>('/nucleo/medallas')).data;
   },
 
   /** Abandona la sesión activa: lo que quedó pendiente no cuenta */

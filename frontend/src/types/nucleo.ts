@@ -191,6 +191,68 @@ export interface ResultadoRespuesta {
   evento_dominio: string | null;
   sesion_completada: boolean;
   diagnostico?: { terminado: boolean; avance: number } | null;
+  /** Fase 7b: lo que se celebra entre problemas y al final de la sesión */
+  celebraciones?: Celebracion[];
+  nivel?: { nivel: number; experiencia_en_nivel: number; experiencia_para_subir: number } | null;
+}
+
+// ─── Motivación (fase 7b) ────────────────────────────────────────────────────
+
+export type TipoMedallaNucleo = 'leccion' | 'unidad' | 'camino';
+export type GradoMedalla = '' | 'bronce' | 'plata' | 'oro';
+
+export interface MedallaNucleo {
+  tipo: TipoMedallaNucleo;
+  clave: string;
+  grado_medalla: GradoMedalla;
+  titulo: string;
+  descripcion: string;
+  meta: number;
+  logradas: number;
+  obtenida: boolean;
+  fecha: string | null;
+}
+
+export type Celebracion =
+  | { tipo: 'leccion_dominada' | 'leccion_recuperada'; leccion_id: string; titulo: string; experiencia: number }
+  | { tipo: 'medalla'; medalla: MedallaNucleo }
+  | { tipo: 'nivel'; nivel: number };
+
+/** Estado de una parada del mapa: provisional = el diagnóstico la dio por sabida, falta confirmarla */
+export type EstadoParada = 'dominado' | 'repaso' | 'provisional' | 'en_progreso' | 'no_iniciado';
+
+export interface ParadaMapa {
+  leccion_id: string;
+  titulo: string;
+  leccion_numero: number;
+  estado: EstadoParada;
+  en_practica: boolean;
+  siguiente: boolean;
+  /** Últimos problemas: true acierto, false no, null todavía sin problema */
+  casillas: (boolean | null)[];
+  aciertos: number;
+  meta: number;
+  ventana: number;
+}
+
+export interface ProgresoNucleo {
+  nivel: number;
+  experiencia: number;
+  experiencia_en_nivel: number;
+  experiencia_para_subir: number;
+  /** Requisito de la tienda (escala vieja 1 a 5, índice r−1) en la escala del nivel de jugador */
+  tienda_nivel_por_requisito: number[];
+  grado: number | null;
+  caminos: { camino: string; nombre: string; total: number; dominadas: number; provisionales: number }[];
+  unidades: { unidad_numero: number; titulo: string; lecciones: ParadaMapa[] }[];
+  siguiente: string | null;
+}
+
+export interface MedallasNucleo {
+  grado: number | null;
+  obtenidas: number;
+  total: number;
+  medallas: MedallaNucleo[];
 }
 
 // ─── Profesor: lecciones del salón (fase 6a) ─────────────────────────────────

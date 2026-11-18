@@ -55,6 +55,7 @@ from app.models.nucleo import (
 from app.nucleo import dominio as reglas_dominio
 from app.nucleo.dominio import EV_DOMINADA, EstadoDominio, Resultado
 from app.nucleo.modos import ConfigModosLeccion, Modo, resolver_modos
+from app.nucleo.motivacion import bono_dominio
 from app.nucleo.parametros import ParametrosNucleo, cargar_parametros
 from app.nucleo.problema import problema_a_dict, problema_desde_dict, solucion
 from app.nucleo.registro import obtener_generador, tiene_generador
@@ -71,6 +72,7 @@ from app.nucleo.servicios import Prohibido, RespuestaInvalida, SaldoInsuficiente
 from app.nucleo.servicios.diagnostico import ServicioDiagnostico
 from app.nucleo.servicios.grafo import cargar_grafo
 from app.nucleo.servicios.habilitacion import PISTAS_POR_DEFECTO
+from app.nucleo.servicios.motivacion import ServicioMotivacion
 from app.nucleo.validacion import RespuestaMalFormada
 from app.services.school_service import Conflicto, NoEncontrado, SchoolService
 
@@ -451,6 +453,7 @@ class ServicioPractica:
             "experiencia_ganada": 0,
             "evento_dominio": None,
             "sesion_completada": False,
+            "celebraciones": [],
         }
         if terminado:
             await self._terminar_problema(sesion, ps, resultado.correcto, numero, ahora, respuesta)
@@ -472,7 +475,7 @@ class ServicioPractica:
         return {
             "correcto": None, "huecos": {}, "intentos_restantes": 0, "problema_terminado": True,
             "solucion": None, "experiencia_ganada": 0, "evento_dominio": None,
-            "sesion_completada": diag["terminado"], "diagnostico": diag,
+            "sesion_completada": diag["terminado"], "diagnostico": diag, "celebraciones": [],
         }
 
     async def _terminar_problema(
@@ -480,6 +483,8 @@ class ServicioPractica:
         ahora: datetime, respuesta: dict,
     ) -> None:
         p = await self.parametros()
+        motivacion = ServicioMotivacion(self.db, p, self.reloj)
+        nivel_antes = await motivacion.nivel(sesion.estudiante_id)
         ps.estado = PROBLEMA_TERMINADO
         ps.fecha_fin = ahora
         ps.correcto = correcto
@@ -501,9 +506,24 @@ class ServicioPractica:
             evento = await self._actualizar_dominio(ps.estudiante_id, ps.leccion_id, ahora)
             respuesta["evento_dominio"] = evento
             if evento == EV_DOMINADA:
-                xp += await self._bono_dominio(ps, ahora)
+                bono, primera_vez = await self._bono_dominio(ps, ahora)
+                xp += bono
                 await self._cerrar_asignaciones(ps.estudiante_id, ps.leccion_id, ahora)
+                titulo = (await self.db.get(LeccionCurricular, ps.leccion_id)).leccion_titulo
+                respuesta["celebraciones"].append({
+                    "tipo": "leccion_dominada" if primera_vez else "leccion_recuperada",
+                    "leccion_id": ps.leccion_id, "titulo": titulo, "experiencia": bono,
+                })
+                await self.db.flush()
+                for medalla in await motivacion.otorgar_medallas(ps.estudiante_id, vista=True):
+                    respuesta["celebraciones"].append({"tipo": "medalla", "medalla": medalla})
         respuesta["experiencia_ganada"] = xp
+        await self.db.flush()
+        nivel_despues = await motivacion.nivel(sesion.estudiante_id)
+        if nivel_despues.nivel > nivel_antes.nivel:
+            respuesta["celebraciones"].append({"tipo": "nivel", "nivel": nivel_despues.nivel})
+        respuesta["nivel"] = {"nivel": nivel_despues.nivel, "experiencia_en_nivel": nivel_despues.en_el_nivel,
+                              "experiencia_para_subir": nivel_despues.para_subir}
 
     def _experiencia(self, ps: NucleoProblemaSesion, tipo: str, cantidad: int, ahora: datetime,
                      primera_vez: Optional[bool] = None) -> int:
@@ -513,9 +533,10 @@ class ServicioPractica:
         ))
         return cantidad
 
-    async def _bono_dominio(self, ps: NucleoProblemaSesion, ahora: datetime) -> int:
-        """El evento se registra cada vez que se domina la lección; `primera_vez` permite a la
-        fase 7 decidir si el bono se da una sola vez."""
+    async def _bono_dominio(self, ps: NucleoProblemaSesion, ahora: datetime) -> tuple[int, bool]:
+        """El evento se registra cada vez que se domina la lección. Bono completo la primera vez
+        (también al confirmar un provisional); al recuperarla tras un repaso fallido, una parte
+        (pregunta abierta 15, fase 7b). Devuelve (bono, primera_vez)."""
         anteriores = await self.db.scalar(
             select(func.count()).select_from(NucleoExperiencia).where(and_(
                 NucleoExperiencia.estudiante_id == ps.estudiante_id,
@@ -524,7 +545,9 @@ class ServicioPractica:
             ))
         )
         p = await self.parametros()
-        return self._experiencia(ps, XP_LECCION_DOMINADA, p.xp_bono_dominio, ahora, primera_vez=anteriores == 0)
+        primera_vez = anteriores == 0
+        bono = bono_dominio(primera_vez, p)
+        return self._experiencia(ps, XP_LECCION_DOMINADA, bono, ahora, primera_vez=primera_vez), primera_vez
 
     async def _actualizar_dominio(self, estudiante_id: int, leccion_id: str, ahora: datetime) -> Optional[str]:
         p = await self.parametros()

@@ -22,12 +22,17 @@ import {
   PlayCircle,
   Trash2,
   ChevronRight,
+  Map as MapIcon,
 } from 'lucide-react';
 import type { SesionActivaResponse } from '@/services/studentService';
 import { AvisoSesionAMedias } from '@/components/nucleo/AvisoSesionAMedias';
 import { RUTA_PRACTICA_NUCLEO, useEstadoNucleo } from '@/hooks/useEstadoNucleo';
 import { CLAVE_ESTADO_NUCLEO, nucleoService } from '@/services/nucleoService';
 import { hoyLocal } from '@/lib/fechas';
+import { useMedallasNucleo, useProgresoNucleo } from '@/hooks/useProgresoNucleo';
+import { BarraNivel } from '@/components/nucleo/motivacion/Barras';
+import { DibujoMedalla } from '@/components/nucleo/motivacion/Medalla';
+import { NOMBRE_GRADO } from '@/components/nucleo/motivacion/textos';
 
 export function StudentDashboard() {
   const navigate = useNavigate();
@@ -99,12 +104,19 @@ export function StudentDashboard() {
   });
 
   // ── Núcleo de práctica (1.º y 2.º): "Practicar" lleva ahí si el salón tiene lecciones del núcleo ──
-  const { data: estadoNucleo } = useEstadoNucleo();
+  const { data: estadoNucleo, isLoading: cargandoNucleo } = useEstadoNucleo();
   const practicaNucleo = estadoNucleo?.disponible ?? false;
   const descartarNucleo = useMutation({
     mutationFn: (sesionId: number) => nucleoService.descartar(sesionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_NUCLEO }),
   });
+
+  // ── Motivación del núcleo (fase 7b): nivel de jugador y medallas nuevas ─────
+  const { data: progresoNucleo } = useProgresoNucleo();
+  const { data: medallasNucleo } = useMedallasNucleo(practicaNucleo);
+  const ultimaMedallaNucleo = medallasNucleo?.medallas
+    .filter(m => m.obtenida)
+    .sort((a, b) => (b.fecha ?? '').localeCompare(a.fecha ?? ''))[0] ?? null;
 
   // ── Valores derivados ──────────────────────────────────────────────────────
   const nivel = perfil?.nivel_actual ?? '-';
@@ -146,7 +158,9 @@ export function StudentDashboard() {
   const navigationCards = [
     { title: 'Práctica',       description: 'Resolver problemas',    icon: BookOpen,   path: '/student/practice',   color: 'bg-blue-500'   },
     { title: 'Inventario',     description: 'Mis desbloqueables',    icon: ShoppingBag,path: '/student/inventory',  color: 'bg-purple-500' },
-    { title: 'Progreso',       description: 'Ver estadísticas',      icon: TrendingUp, path: '/student/progress',   color: 'bg-green-500'  },
+    practicaNucleo
+      ? { title: 'Mi camino',  description: 'Mapa, caminos y nivel', icon: MapIcon,    path: '/student/camino',     color: 'bg-green-500'  }
+      : { title: 'Progreso',   description: 'Ver estadísticas',      icon: TrendingUp, path: '/student/progress',   color: 'bg-green-500'  },
     { title: 'Desafío Grupal', description: 'Colaborar con tu salón',icon: Users,      path: '/student/challenges', color: 'bg-red-500'    },
   ];
 
@@ -297,7 +311,20 @@ export function StudentDashboard() {
             <p className="text-2xl font-medium text-gray-700">
               {mensajeLLM ?? textoMotivacion}
             </p>
-            <div className="mt-2 flex justify-center gap-6">
+            {practicaNucleo && progresoNucleo && (
+              <div className="mx-auto mt-3 flex max-w-xl flex-col items-center gap-3 sm:flex-row">
+                <div className="w-full flex-1">
+                  <BarraNivel nivel={progresoNucleo.nivel} enNivel={progresoNucleo.experiencia_en_nivel}
+                    paraSubir={progresoNucleo.experiencia_para_subir} compacta />
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-yellow-600">{puntos.toLocaleString()}</p>
+                  <p className="text-xs text-gray-600">Puntos</p>
+                </div>
+              </div>
+            )}
+            {/* Mientras no se sabe si practica en el núcleo, no se muestra el nivel de decimales (evita un parpadeo) */}
+            <div className={`mt-2 flex justify-center gap-6 ${practicaNucleo || cargandoNucleo ? 'hidden' : ''}`}>
               <div className="text-center">
                 {isLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin text-blue-400 mx-auto" />
@@ -378,6 +405,28 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center gap-4">
+              {practicaNucleo ? (
+                <>
+                  <DibujoMedalla medalla={ultimaMedallaNucleo ?? { tipo: 'leccion', grado_medalla: '', obtenida: false }} tamano={88} />
+                  <div className="text-center">
+                    <h3 className="text-lg font-bold mb-2">
+                      {ultimaMedallaNucleo
+                        ? `${ultimaMedallaNucleo.titulo}${NOMBRE_GRADO[ultimaMedallaNucleo.grado_medalla] ? ` · ${NOMBRE_GRADO[ultimaMedallaNucleo.grado_medalla]}` : ''}`
+                        : 'Sin medallas aún'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      {ultimaMedallaNucleo ? ultimaMedallaNucleo.descripcion : 'Domina una lección para ganar tu primera medalla'}
+                    </p>
+                    <div className="flex items-center justify-center gap-2">
+                      <Trophy className="h-4 w-4 text-yellow-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        {medallasNucleo?.obtenidas ?? 0} de {medallasNucleo?.total ?? 0} medallas
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+              <>
               <div className="w-24 h-24 bg-gradient-to-br from-yellow-100 to-amber-100 rounded-full flex items-center justify-center shadow-lg">
                 <span className="text-3xl">
                   {medallaDestacada
@@ -399,6 +448,8 @@ export function StudentDashboard() {
                   </span>
                 </div>
               </div>
+              </>
+              )}
             </div>
           </CardContent>
         </Card>

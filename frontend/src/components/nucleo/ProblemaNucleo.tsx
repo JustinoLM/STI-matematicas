@@ -184,9 +184,9 @@ export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, envi
   const contenido = (
     <div
       data-testid="problema"
-      className="flex flex-col items-center gap-5 md:landscape:grid md:landscape:grid-cols-2 md:landscape:items-center md:landscape:gap-8"
+      className="flex flex-col items-center gap-3 md:landscape:grid md:landscape:grid-cols-2 md:landscape:items-center md:landscape:gap-8"
     >
-      <div className="order-1 flex w-full flex-col items-center gap-5" data-testid="columna-problema">
+      <div className="order-1 flex w-full flex-col items-center gap-3 md:landscape:gap-5" data-testid="columna-problema">
         <Enunciado texto={instruccion(problema)} historia={textoEnunciado(problema, tema)}
           vozDisponible={voz.disponible} onEscuchar={escuchar} />
 
@@ -223,7 +223,7 @@ export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, envi
       )}
 
       <div
-        className="order-3 flex w-full flex-col items-center gap-4 md:landscape:order-2 md:landscape:rounded-3xl md:landscape:bg-slate-50 md:landscape:p-4"
+        className="order-3 flex w-full flex-col items-center gap-3 md:landscape:order-2 md:landscape:gap-4 md:landscape:rounded-3xl md:landscape:bg-slate-50 md:landscape:p-4"
         data-testid="columna-respuesta"
       >
         {huecoDelBanco && (
@@ -237,8 +237,12 @@ export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, envi
 
         {campos.length > 0 && <TecladoNumerico onDigito={alDigito} onBorrar={alBorrar} deshabilitado={enviando} />}
 
-        {/* Alto fijo para dos líneas: el botón de comprobar no se mueve cuando aparece el mensaje */}
-        <div className="flex min-h-[3.5rem] items-center justify-center" aria-live="polite">
+        {/* Vertical (fase 7b): el mensaje y "Comprobar" van en una barra pegada al borde de abajo, así el
+            botón se ve siempre sin desplazarse y el mensaje aparece encima sin moverlo.
+            Horizontal: alto fijo para dos líneas, para que el botón tampoco se mueva. */}
+        <div className="sticky bottom-0 z-10 -mx-2 flex w-[calc(100%+1rem)] flex-col items-center gap-1 rounded-t-3xl bg-white/95 px-2 pb-2 pt-1 md:landscape:static md:landscape:mx-0 md:landscape:w-full md:landscape:gap-0 md:landscape:bg-transparent md:landscape:p-0"
+          data-testid="barra-comprobar">
+        <div className="flex items-center justify-center md:landscape:min-h-[3.5rem]" aria-live="polite">
           {mensaje && <p className="text-center text-2xl font-semibold text-orange-700" data-testid="mensaje">{mensaje}</p>}
         </div>
 
@@ -252,6 +256,7 @@ export function ProblemaNucleo({ sesionId, turno, icono, tema, onTerminado, envi
           <Check className="h-9 w-9" />
           Comprobar
         </button>
+        </div>
       </div>
       <p className="sr-only">Intentos que quedan: {intentosRestantes}</p>
     </div>

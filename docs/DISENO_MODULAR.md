@@ -191,6 +191,10 @@ el plan.
     instrucción, los íconos y la expresión; a la derecha el banco o el teclado y "Comprobar". En
     vertical o en pantallas angostas va en una columna. Se decide solo con CSS y girar la tablet
     no borra la respuesta colocada.
+  - En vertical (fase 7b), el mensaje y "Comprobar" van en una barra pegada al borde de abajo:
+    el mensaje aparece encima sin mover el botón. Se midió con los problemas más altos (decenas
+    con 96 íconos, conteo con 90, semirrecta y ordenar) en 768×1024 y 810×1080, y el botón
+    siempre queda a la vista.
   - Pendiente: probar con toque en una tablet real, en ambas orientaciones.
 - **Expresión.** Tiene tres tamaños de letra para no partirse en dos líneas en la tablet (por
   ejemplo, la forma de pasos `5 + 9 = _ + 10 = _`). Si se parte, lo hace antes de un hueco y no en
@@ -462,44 +466,73 @@ el plan.
   alertas; la etiqueta "Diagnóstico pendiente" o "en curso"; y en la ficha, la sección del
   diagnóstico con lo que dio por sabido y lo que no, y las acciones Repetir, Cerrar con lo
   obtenido y Cancelar. Un provisional retirado se muestra de forma neutra.
-  - Pendiente: "Diagnóstico pendiente" solo aparece cuando el estudiante ya entró a practicar; un
-    estudiante que nunca entró no lo muestra.
+  - "Diagnóstico pendiente" aparece también para quien nunca entró, si su salón tiene lecciones
+    habilitadas (fase 7b).
 - **Post-test:** se retira, porque solo existía para medir el efecto del sistema en la
   validación de la versión anterior.
 
 ### Motivación
 
-- **Mapa del camino.** Las lecciones son paradas, con las dominadas encendidas y la siguiente
-  visible. Va decorado según el tema narrativo.
-- **Medallas.** Hay tres tipos: por lección dominada, por unidad completa y por hito de camino
-  (bronce, plata y oro). Reemplazan a las medallas de nivel por operación.
+Implementada en la fase 7b (`backend/app/nucleo/motivacion.py` para la lógica pura y
+`backend/app/nucleo/servicios/motivacion.py` con la base de datos). Aplica a quien practica en el
+núcleo; en decimales todo sigue igual.
+
+- **Mapa del camino** (`/student/camino`, "Mi camino").
+  - Las lecciones son paradas agrupadas por unidad: las dominadas encendidas con estrella, la
+    siguiente con "¡Vas aquí!", las de dominio provisional con borde punteado y "?", y las demás
+    tenues.
+  - Va decorado según el tema narrativo con dibujos propios en SVG.
+  - Al elegir una parada se ve su avance hacia el dominio.
+- **Medallas.** Hay tres tipos, en la tabla `nucleo_medalla`:
+  - por lección dominada;
+  - por unidad completa;
+  - por hito del camino en el grado: bronce, plata y oro al 25, 50 y 100 % de sus lecciones
+    (claves `nucleo.medalla_hito_*`).
+  - Se ganan una sola vez, aunque la lección vuelva a "en progreso". Quien dominó lecciones antes
+    de la fase 7b las recibe al abrir el medallero.
+  - Para el núcleo reemplazan a las medallas de nivel por operación.
 - **Nivel de jugador.** Es una recompensa de gamificación, distinta del dominio: no decide qué
   problemas recibe el estudiante.
-  - Se calcula con **experiencia acumulada**: experiencia por practicar y acertar, más un bono
-    grande al dominar una lección. Nunca baja, aunque una lección vuelva a "en progreso".
-  - La experiencia es un contador aparte del saldo de puntos. `puntos_totales` es en realidad el
-    saldo y baja al comprar en la tienda, así que no sirve para el nivel.
-  - La fórmula del nivel y la barra de experiencia se definen en la fase 7.
-  - Desde la fase 3 ya se registra: 1 de experiencia por problema terminado y 2 por acierto al
-    primer intento (también si usó la pista de nivel 3), más el evento de "lección dominada" con
-    la marca `primera_vez`, para decidir después cómo se da el bono.
+  - Se calcula sumando la **experiencia** ya registrada en los eventos, sin columna aparte, así que
+    nunca baja aunque una lección vuelva a "en progreso".
+  - Experiencia: 1 por problema terminado y 2 por acierto al primer intento (también con la pista
+    de nivel 3), más el bono por dominar.
+  - **Bono por dominar:** 50 la primera vez. Si la vuelve a dominar tras un repaso fallido, recibe el
+    20 % (`nucleo.xp_bono_recuperada`) y la celebración "¡La recuperaste!". El dominio provisional
+    del diagnóstico no da bono; lo da cuando la práctica lo confirma.
+  - **Fórmula:** pasar del nivel n al n+1 cuesta `nivel_base + nivel_incremento·(n−1)`, hoy 60·n.
+    Se calibró con una simulación que usa el reparto y la regla de dominio reales sobre las 21
+    lecciones de 1.º, con 3 sesiones de 10 problemas por semana: sube cerca de un nivel por
+    semana durante cinco semanas, después más despacio, y llega al nivel 12 al final del año. Con
+    40·n llegaba al nivel 3 en la primera semana.
+  - La experiencia es un contador aparte del saldo de puntos. `puntos_totales` es el saldo y baja
+    al comprar en la tienda.
+- **Tienda.** Para el núcleo, el requisito viejo r (1 a 5) se compara con el nivel de jugador
+  reescalado a `1 + 3·(r − 1)`: 1, 4, 7, 10 y 13. El 13 se alcanza cerca del final del año, como
+  antes el 5. Comprar resta saldo y no toca la experiencia.
 - **Barras de progreso.** Nunca durante la práctica.
   - **Avance de cada camino:** lecciones dominadas sobre el total del camino.
-  - **Avance hacia el dominio de cada lección.** Con la regla de "80 % de los últimos 10" puede
-    retroceder, así que debe mostrarse de forma que no parezca un castigo.
-  - **Experiencia hacia el siguiente nivel:** pendiente de la fase 7.
+  - **Avance hacia el dominio de cada lección:** 10 casillas con los últimos problemas y la meta
+    de 8 marcada. Un problema sin acierto deja la casilla vacía, sin rojo ni restas visibles, para
+    que el retroceso no parezca un castigo.
+  - **Experiencia hacia el siguiente nivel:** en el dashboard, en "Mi camino" y en el resumen de
+    la sesión.
 - **Durante el problema.**
   - No hay efectos ni sonidos.
   - La narrativa aparece solo en el enunciado y en los íconos.
-  - Las celebraciones van entre problemas y al final de la sesión.
+  - Las celebraciones (lección dominada o recuperada, medalla y subida de nivel) van entre
+    problemas y en el resumen final de la sesión.
   - Un intento incorrecto solo marca el hueco en naranja y dice cuántos intentos quedan. La
     solución se muestra entre problemas, al agotar los intentos.
   - Se muestra el contador "3 de 10", sin barra de progreso.
+- **Pendiente:** los estudiantes del núcleo no ganan saldo de puntos (solo lo da la práctica de
+  decimales), así que no pueden comprar en la tienda aunque tengan el nivel (pregunta 16).
 
 ### Funciones de IA
 
 - **1.º y 2.º grado.**
-  - No hay análisis posterior a la práctica (R1) ni mensajes motivacionales.
+  - No hay análisis posterior a la práctica (R1). Los mensajes motivacionales son textos fijos
+    que cambian cada día, sin DeepSeek (fase 7b).
   - Los enunciados se generan con **plantillas**, sin DeepSeek: así el ícono y la cantidad salen
     del mismo dato que el problema.
 - **Desde 3.º:** vuelven las funciones de IA.
@@ -556,7 +589,7 @@ el plan.
 | 6a. Preparar el salón ✅ | Catálogo, habilitación, configuración por lección, prioridad, asignación individual, banco forzado y prerrequisitos editables por año lectivo |
 | 6b. Seguimiento ✅ | Avance del salón por lección y por estudiante con corte por trimestre, alertas por lección (dificultad, excelencia, va detrás del salón), ficha del estudiante con historial y plan por trimestre con ajuste manual |
 | 7a. Entrada ✅ | Fechas de Panamá en todo el sistema y diagnóstico inicial adaptativo con dominio provisional |
-| 7b. Motivación | Fórmula del nivel de jugador, barras de progreso, medallas nuevas, mapa del camino y tienda |
+| 7b. Motivación ✅ | Nivel de jugador por experiencia, bono por dominar, medallas por lección, unidad e hito, mapa del camino con tema, barras de progreso, celebraciones, tienda con nivel reescalado y "Comprobar" siempre visible en tablet vertical |
 | 8. Lecciones de 2.º | Generadores y reglas de error nuevas (llevar, pedir prestado) |
 | 9. Lo que sigue | Plan para 3.º a 6.º y para pasar los decimales al núcleo (solo plan) |
 
@@ -567,8 +600,8 @@ el plan.
   que los números están dentro del rango de la lección.
 - **Por regla de negocio:** pruebas unitarias del dominio, el reparto, la extensión, el refuerzo y
   el cierre automático de la asignación individual.
-- **Estado tras la fase 7a:** 661 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
-  las pruebas, de la integración continua y de las dependencias), y 210 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
+- **Estado tras la fase 7b:** 673 pruebas de backend, **solo en PostgreSQL** (SQLite se quitó de
+  las pruebas, de la integración continua y de las dependencias), y 221 de frontend. Una prueba parametrizada recorre los 21 generadores de 1.º con muchos
   problemas aleatorios en cerca de 1,4 s. Fracción, cantidad y teclado solo tienen pruebas de
   Vitest hasta que un generador los produzca. El
   workflow `.github/workflows/pruebas.yml` las ejecuta en cada push y pull request a `master`.
@@ -624,11 +657,12 @@ el plan.
 12. **Medidas de volumen** (6.º U6 L4). Quedó excluida como cálculo sobre figuras, pero si es
     conversión de unidades debería incluirse como parcial, igual que las de superficie.
 13. **Grafo de prerrequisitos de 3.º a 6.º.** Pendiente; hace falta antes de construir esos grados.
-14. **Tienda y nivel de jugador.** Hoy los artículos de la tienda exigen un `nivel_minimo_requerido`
-    que se compara con el nivel adaptativo de 1 a 5, que va a desaparecer. ¿El nivel de jugador
-    reemplaza ese requisito?
-15. **Bono por dominar una lección.** ¿Se da una sola vez por lección, o cada vez que el
-    estudiante la vuelve a dominar después de un repaso fallido?
+14. ~~**Tienda y nivel de jugador.**~~ Resuelta en la fase 7b: para el núcleo, el requisito se
+    compara con el nivel de jugador reescalado (1, 4, 7, 10 y 13).
+15. ~~**Bono por dominar una lección.**~~ Resuelta en la fase 7b: completo la primera vez y 20 %
+    al recuperarla después de un repaso fallido.
+16. **Saldo de puntos en el núcleo.** Los estudiantes del núcleo no ganan puntos para la tienda.
+    ¿Cómo los ganan: lo mismo que la experiencia de práctica, una parte de ella o por medallas?
 
 ---
 

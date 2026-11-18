@@ -19,6 +19,8 @@ intento. Los estados son texto con CHECK (como en school.py), no tipos ENUM de P
 - NucleoExtension: pausa de la zona de extensión por estudiante y lección.
 - NucleoSesion / NucleoProblemaSesion / NucleoIntento / NucleoEvento: la práctica.
 - NucleoExperiencia: experiencia acumulada, aparte del saldo de puntos.
+- NucleoMedalla: medallas del núcleo ganadas (fase 7b): por lección, por unidad y por hito del camino.
+  Se ganan una sola vez; el catálogo se calcula a partir del currículo (app/nucleo/motivacion.py).
 - NucleoDiagnostico: diagnóstico inicial (fase 7a). Usa una NucleoSesion de tipo "diagnostico" cuyo
   plan se arma problema a problema; sus problemas (zona "diagnostico") no cuentan para el dominio.
 """
@@ -370,6 +372,33 @@ class NucleoDiagnostico(Base):
                         name="ck_nucleo_diagnostico_origen"),
         Index("uq_nucleo_diagnostico_abierto", "estudiante_id", unique=True,
               postgresql_where=text("estado IN ('pendiente', 'en_curso')")),
+    )
+
+
+# ─── Medallas (fase 7b) ──────────────────────────────────────────────────────
+
+MEDALLA_TIPOS = ("leccion", "unidad", "camino")
+MEDALLA_GRADOS = ("", "bronce", "plata", "oro")
+
+
+class NucleoMedalla(Base):
+    """Medalla ganada. `clave`: la lección ("g1-u03-l01"), la unidad ("g1-u03") o el camino en un
+    grado ("naturales.suma@1"); `grado_medalla`: "" o bronce / plata / oro (solo hitos del camino)."""
+
+    __tablename__ = "nucleo_medalla"
+
+    id = Column(Integer, primary_key=True)
+    estudiante_id = Column(Integer, ForeignKey("estudiante.id"), nullable=False, index=True)
+    tipo = Column(String(10), nullable=False)
+    clave = Column(String(80), nullable=False)
+    grado_medalla = Column(String(10), nullable=False, default="", server_default="")
+    fecha = Column(DateTime, default=datetime.utcnow, nullable=False)
+    vista = Column(Boolean, nullable=False, default=False, server_default="false")   # ya se celebró
+
+    __table_args__ = (
+        UniqueConstraint("estudiante_id", "tipo", "clave", "grado_medalla", name="uq_nucleo_medalla"),
+        CheckConstraint(f"tipo IN {_en(MEDALLA_TIPOS)}", name="ck_nucleo_medalla_tipo"),
+        CheckConstraint(f"grado_medalla IN {_en(MEDALLA_GRADOS)}", name="ck_nucleo_medalla_grado"),
     )
 
 

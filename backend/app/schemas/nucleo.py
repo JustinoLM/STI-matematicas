@@ -162,6 +162,34 @@ class DiagnosticoAvanceOut(BaseModel):
     avance: float
 
 
+class MedallaNucleoOut(BaseModel):
+    tipo: str = Field(description='"leccion", "unidad" o "camino"')
+    clave: str
+    grado_medalla: str = Field(description='"" o bronce / plata / oro (hitos del camino)')
+    titulo: str
+    descripcion: str
+    meta: int
+    logradas: int
+    obtenida: bool
+    fecha: Optional[FechaHora] = None
+
+
+class CelebracionOut(BaseModel):
+    """Se muestra entre problemas y al final de la sesión (fase 7b)."""
+    tipo: str = Field(description='"leccion_dominada", "leccion_recuperada", "medalla" o "nivel"')
+    leccion_id: Optional[str] = None
+    titulo: Optional[str] = None
+    experiencia: Optional[int] = None
+    medalla: Optional[MedallaNucleoOut] = None
+    nivel: Optional[int] = None
+
+
+class NivelOut(BaseModel):
+    nivel: int
+    experiencia_en_nivel: int
+    experiencia_para_subir: int
+
+
 class RespuestaOut(BaseModel):
     correcto: Optional[bool] = Field(description="None en el diagnóstico: no se dice si acertó")
     huecos: dict[str, bool]
@@ -172,6 +200,8 @@ class RespuestaOut(BaseModel):
     evento_dominio: Optional[str] = None
     sesion_completada: bool
     diagnostico: Optional[DiagnosticoAvanceOut] = None
+    celebraciones: list[CelebracionOut] = Field(default_factory=list)
+    nivel: Optional[NivelOut] = None
 
 
 class PistaIn(BaseModel):

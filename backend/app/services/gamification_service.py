@@ -302,6 +302,18 @@ class GamificationService:
         
         return responses
     
+    async def _niveles_para_tienda(self, estudiante_id: int, requisito: int) -> tuple[int, int]:
+        """(nivel del estudiante, nivel que exige el artículo) en la escala que le corresponde."""
+        from app.nucleo.motivacion import nivel_tienda
+        from app.nucleo.servicios.motivacion import ServicioMotivacion
+
+        motivacion = ServicioMotivacion(self.gamification_repo.db)
+        if await motivacion.practica_en_nucleo(estudiante_id):
+            p = await motivacion.parametros()
+            return (await motivacion.nivel(estudiante_id)).nivel, nivel_tienda(requisito, p)
+        perfil = await self.adaptive_repo.get_perfil(estudiante_id)
+        return (perfil.nivel_actual if perfil else 1), requisito
+
     async def comprar_item(
         self,
         estudiante_id: int,
@@ -337,13 +349,13 @@ class GamificationService:
                 detail="Ya posees este item"
             )
         
-        # Verificar nivel requerido
-        perfil = await self.adaptive_repo.get_perfil(estudiante_id)
-        
-        if perfil.nivel_actual < item.nivel_minimo_requerido:
+        # Verificar nivel requerido. Quien practica en el núcleo usa su nivel de jugador, con el
+        # requisito reescalado (fase 7b, pregunta abierta 14); en decimales sigue el nivel adaptativo.
+        nivel_tiene, nivel_requiere = await self._niveles_para_tienda(estudiante_id, item.nivel_minimo_requerido)
+        if nivel_tiene < nivel_requiere:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requieres nivel {item.nivel_minimo_requerido} para comprar este item (tienes nivel {perfil.nivel_actual})"
+                detail=f"Requieres nivel {nivel_requiere} para comprar este item (tienes nivel {nivel_tiene})"
             )
         
         # Verificar saldo
